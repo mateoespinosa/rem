@@ -1,5 +1,5 @@
 # REM: Rule Extraction Methods for Neural Networks
-Code base for the experimentation and methods for [REM: Rule Extraction Methods, A Breast Cancer Case Study](TODO: ADD LINK HERE)
+Code base for the experimentation and methods for [REM: Rule Extraction Methods, A Breast Cancer Case Study](TODO: ADD LINK HERE). This repository will include reproduction steps for the experiments presented in the papers as well as packaged functions to use the described rule extraction algorithm in any custom Sequential Keras model.
 
 ## Setup
 For you to be able to run recreate the experiments and use the rule extraction algorithm, you will need the following requirements:
@@ -7,18 +7,29 @@ For you to be able to run recreate the experiments and use the rule extraction a
 - pip 19.0 or later
 - R 4.* needs to be installed and accessible
 
-Once you have installed R, you will also need to have the following packaged installed in R:
-- 
+Once you have installed R, you will also need to have the following packages installed in R:
+- `Cubist`
+- `reshape2`
+- `plyr`
+- `Rcpp`
+- `stringr`
+- `stringi`
+- `magrittr`
+- `partykit`
+- `Formula`
+- `libcoin`
+- `mutnorm`
+- `inum`
 
-If you have all of these, then you can install this code as a package using pip as follows:
+If you have all of these, then you can install our code as a Python package using pip as follows:
 ```python
 python setup.py install --user
 ```
-This will install all required dependencies for you as well as the entire project. Please note that this may take some time if you are missing some basic dependencies in your environment.
+This will install all required the dependencies for you as well as the entire project. Please note that this may take some time if you are missing some of the heavy dependencies we require (e.g TensorFlow).
 
-If you want to test that it works, try running:
+If you want to test that it works, try running the provided script `run_experiment.py` as follows:
 ```bash
-python src/run_experiment.py --help
+python run_experiment.py --help
 ```
 and you should see a clear help message without any errors and/or warnings.
 
@@ -70,7 +81,7 @@ optional arguments:
   -d, --debug           starts debug mode in our program.
 ```
 
-One can run by manually inputing the dataset information as command-line arguments or by providing a YAML as this example:
+One can run the tool by manually inputing the dataset information as command-line arguments or by providing a YAML config as the following example:
 ```yaml
 # The directory of our training data
 dataset_file: "../DNN-RE-data-new/MB-1004-GE-2Hist/data.csv"
@@ -91,14 +102,15 @@ rule_extractor: "DeepRED_C5"
 # directory as the one containing the dataset..
 output_dir: "experiment_results"
 ```
-In this example, we are indicating where are we storing our `MB-1004-GE-2Hist` dataset and what hyper-parameters we want to use for our neural network.
+
+In this example, we are indicating the path where we are we storing our `MB-1004-GE-2Hist` dataset and what hyper-parameters we want to use for our neural network.
 
 You can then use this to run the experiment as follows:
 ```python
-
+python run_experiment.py --config experiment_config.yaml
 ```
 
-Please note that if a configuration file is provided and command line arguments are also provided, then the ones given in the command line will always take precedence over their counterparts in the config file. The intent of this behavior is to speed up different iterations in experiments.
+Please note that if a configuration file is provided and command-line arguments are also provided, then the ones given in the command-line will always take precedence over their counterparts in the config file. The intent of this behavior is to speed up different iterations in experiments.
 
 ### Experiment Folder structure
 Once an experiment is instantiated, we will generate a file structure containing all the results of the experiment as follows:
@@ -135,13 +147,15 @@ Once an experiment is instantiated, we will generate a file structure containing
 
     ​   `best_initialisation.h5` - best neural network initialisation i.e. the one that generated the smallest ruleset
 ```
+At the end of the experiment, you should expect to find this file structure in the provided results output directory.
 
 If no output directory is provided, then we will use the same directory as the one containing our dataset.
 
 
 ## Using Custom Models
 
-One can use the REM-D algorithm as described in the paper with any custom Keras sequential model (note that sequentiality is a requirement for now). To do this, you can import the following method once you have installed this package as instructed in the setup:
+You can use the REM-D algorithm as described in the paper with any custom Keras sequential model (note that sequentiality is a requirement for now). To do this, you can import the following method once you have installed this package as instructed in the setup:
+
 ```python
 from dnn_rem import rem_d
 # Read data from some source
