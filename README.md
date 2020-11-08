@@ -1,5 +1,9 @@
 # REM: Rule Extraction Methods for Neural Networks
-Code base for the experimentation and methods for [REM: Rule Extraction Methods, A Breast Cancer Case Study](TODO: ADD LINK HERE). This repository will include reproduction steps for the experiments presented in the papers as well as packaged functions to use the described rule extraction algorithm in any custom Sequential Keras model.
+Code base for the experimentation and methods for REM: Rule Extraction Methods, A Breast Cancer Case Study. This repository will include reproduction steps for the experiments presented in the papers as well as packaged functions to use the described rule extraction algorithm in any custom Sequential Keras model.
+
+## Credits
+
+TODO: link to paper and authors
 
 ## Setup
 For you to be able to run recreate the experiments and use the rule extraction algorithm, you will need the following requirements:
@@ -167,4 +171,7 @@ ruleset = rem_d.extract_rules(keras_model, X_train)
 # And try and make predictions using this ruleset
 X_test = ...
 y_pred = ruleset.predict(X_test)
+
+# You can see the learned ruleset by printing it
+print(rulset)
 ```
