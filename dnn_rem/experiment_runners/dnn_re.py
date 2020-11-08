@@ -3,7 +3,6 @@ Runner of our DNN rule extraction algorithm. Collects statistics to be
 reported to caller.
 """
 
-from sklearn.preprocessing import MinMaxScaler
 from tensorflow.keras.models import load_model
 from tensorflow.keras.utils import to_categorical
 import logging
@@ -43,12 +42,7 @@ def run(
         memory consumption (in MB)
     """
 
-    # Make sure the data is scaled up
-    scaler = MinMaxScaler()
-    X_train = scaler.fit_transform(X_train)
-    X_test = scaler.transform(X_test)
-
-    # Now time to load up our model
+    # Time to load up our model
     model = load_model(model_file_path)
     _, _, nn_accuracy = model.evaluate(
         X_test,

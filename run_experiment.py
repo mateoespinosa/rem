@@ -213,6 +213,9 @@ def main():
 
     # use that to open up our dataset
     X, y = load_data(manager.DATASET_INFO, manager.DATA_FP)
+    # And do any required preprocessing
+    if manager.DATASET_INFO.preprocessing:
+        X, y = manager.DATASET_INFO.preprocessing(X, y)
 
     # Generate our neural network, train it, and then extract the ruleset that
     # approximates it from it

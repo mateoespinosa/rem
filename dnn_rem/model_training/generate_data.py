@@ -7,13 +7,11 @@ Used mostly for experimentation.
 """
 
 from collections import OrderedDict
-from sklearn.preprocessing import MinMaxScaler
 from tqdm import tqdm
 import logging
 import numpy as np
 import os
 import pandas as pd
-from sklearn.preprocessing import MinMaxScaler
 
 from . import find_best_nn_initialisation
 from .build_and_train_model import build_and_train_model
@@ -113,11 +111,6 @@ def run(
                 )
                 X_train, y_train = X[train_index], y[train_index]
                 X_test, y_test = X[test_index], y[test_index]
-
-                # Let's normalize our given inputs before training
-                scaler = MinMaxScaler()
-                X_train = scaler.fit_transform(X_train[:, :])
-                X_test = scaler.transform(X_test[:, :])
 
                 np.save(
                     manager.N_FOLD_CV_SPLIT_X_train_data_FP(fold),
