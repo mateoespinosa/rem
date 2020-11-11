@@ -1,10 +1,10 @@
 """
 Configurations of the different supported datasets for training.
 """
-
 from collections import namedtuple
 from sklearn.preprocessing import MinMaxScaler
 import logging
+import numpy as np
 
 from dnn_rem.rules.rule import OutputClass
 
@@ -19,6 +19,7 @@ AVAILABLE_DATASETS = [
     'Artif-2',
     'MB-GE-ER',
     'BreastCancer',
+    'Iris',
     'LetterRecognition',
     'MNIST',
     'TCGA-PANCAN',
@@ -75,6 +76,26 @@ def unit_scale_preprocess(X, y):
     return scaler.fit_transform(X), y
 
 
+def replace_categorical_outputs(X, y, output_classes):
+    """
+    Simple scaling preprocessing function to replace categorical values in the
+    given vector y with their numerical encodings.
+
+    :param np.array X: 2D matrix of data points to be used for training.
+    :param np.array y: 1D matrix of labels for the given data points.
+    :param List[OutputClass]: list of possible output categorical classes in
+        vector y.
+    :returns Tuple[np.array, np.array]: The new processed (X, y) data
+    """
+    out_map = {
+        c.name: c.encoding
+        for c in output_classes
+    }
+    for i, val in enumerate(y):
+        y[i] = out_map[val]
+    return X, y.astype(np.int32)
+
+
 ################################################################################
 ## Exposed Methods
 ################################################################################
@@ -97,7 +118,7 @@ def get_data_configuration(dataset_name):
         )
         return DatasetMetaData(
             n_inputs=5,
-            n_outputs=2,
+            n_outputs=len(output_classes),
             name=dataset_name,
             output_classes=output_classes,
             preprocessing=None,
@@ -110,7 +131,7 @@ def get_data_configuration(dataset_name):
         )
         return DatasetMetaData(
             n_inputs=5,
-            n_outputs=2,
+            n_outputs=len(output_classes),
             name=dataset_name,
             output_classes=output_classes,
             preprocessing=None,
@@ -123,7 +144,7 @@ def get_data_configuration(dataset_name):
         )
         return DatasetMetaData(
             n_inputs=1000,
-            n_outputs=2,
+            n_outputs=len(output_classes),
             name=dataset_name,
             output_classes=output_classes,
             preprocessing=None,
@@ -136,11 +157,27 @@ def get_data_configuration(dataset_name):
         )
         return DatasetMetaData(
             n_inputs=30,
-            n_outputs=2,
+            n_outputs=len(output_classes),
             name=dataset_name,
             output_classes=output_classes,
             preprocessing=None,
             target_col='diagnosis',
+        )
+    if dataset_name == 'iris':
+        output_classes = (
+            OutputClass(name='Setosa', encoding=0),
+            OutputClass(name='Versicolor', encoding=1),
+            OutputClass(name='Virginica', encoding=2),
+        )
+        return DatasetMetaData(
+            n_inputs=4,
+            n_outputs=len(output_classes),
+            name=dataset_name,
+            output_classes=output_classes,
+            preprocessing=(
+                lambda X, y: replace_categorical_outputs(X, y, output_classes)
+            ),
+            target_col='variety',
         )
     if dataset_name == 'letterrecognition':
         output_classes = (
@@ -149,7 +186,7 @@ def get_data_configuration(dataset_name):
         )
         return DatasetMetaData(
             n_inputs=16,
-            n_outputs=2,
+            n_outputs=len(output_classes),
             name=dataset_name,
             output_classes=output_classes,
             preprocessing=None,
@@ -162,7 +199,7 @@ def get_data_configuration(dataset_name):
         )
         return DatasetMetaData(
             n_inputs=784,
-            n_outputs=2,
+            n_outputs=len(output_classes),
             name=dataset_name,
             output_classes=output_classes,
             preprocessing=None,
@@ -178,7 +215,7 @@ def get_data_configuration(dataset_name):
         )
         return DatasetMetaData(
             n_inputs=20502,
-            n_outputs=5,
+            n_outputs=len(output_classes),
             name=dataset_name,
             output_classes=output_classes,
             preprocessing=None,
@@ -191,7 +228,7 @@ def get_data_configuration(dataset_name):
         )
         return DatasetMetaData(
             n_inputs=1000,
-            n_outputs=2,
+            n_outputs=len(output_classes),
             name=dataset_name,
             output_classes=output_classes,
             preprocessing=None,
@@ -205,7 +242,7 @@ def get_data_configuration(dataset_name):
         )
         return DatasetMetaData(
             n_inputs=350,
-            n_outputs=2,
+            n_outputs=len(output_classes),
             name=dataset_name,
             output_classes=output_classes,
             preprocessing=None,
@@ -219,7 +256,7 @@ def get_data_configuration(dataset_name):
         )
         return DatasetMetaData(
             n_inputs=350,
-            n_outputs=2,
+            n_outputs=len(output_classes),
             name=dataset_name,
             output_classes=output_classes,
             preprocessing=None,
@@ -233,7 +270,7 @@ def get_data_configuration(dataset_name):
         )
         return DatasetMetaData(
             n_inputs=13,
-            n_outputs=2,
+            n_outputs=len(output_classes),
             name=dataset_name,
             output_classes=output_classes,
             preprocessing=None,
@@ -247,7 +284,7 @@ def get_data_configuration(dataset_name):
         )
         return DatasetMetaData(
             n_inputs=1350,
-            n_outputs=2,
+            n_outputs=len(output_classes),
             name=dataset_name,
             output_classes=output_classes,
             preprocessing=None,
@@ -261,7 +298,7 @@ def get_data_configuration(dataset_name):
         )
         return DatasetMetaData(
             n_inputs=1013,
-            n_outputs=2,
+            n_outputs=len(output_classes),
             name=dataset_name,
             output_classes=output_classes,
             preprocessing=None,
@@ -275,7 +312,7 @@ def get_data_configuration(dataset_name):
         )
         return DatasetMetaData(
             n_inputs=1000,
-            n_outputs=2,
+            n_outputs=len(output_classes),
             name=dataset_name,
             output_classes=output_classes,
             preprocessing=None,
@@ -289,7 +326,7 @@ def get_data_configuration(dataset_name):
         )
         return DatasetMetaData(
             n_inputs=1001,
-            n_outputs=2,
+            n_outputs=len(output_classes),
             name=dataset_name,
             output_classes=output_classes,
             preprocessing=None,
@@ -303,7 +340,7 @@ def get_data_configuration(dataset_name):
         )
         return DatasetMetaData(
             n_inputs=1004,
-            n_outputs=2,
+            n_outputs=len(output_classes),
             name=dataset_name,
             output_classes=output_classes,
             preprocessing=unit_scale_preprocess,
@@ -321,7 +358,7 @@ def get_data_configuration(dataset_name):
         )
         return DatasetMetaData(
             n_inputs=368,
-            n_outputs=6,
+            n_outputs=len(output_classes),
             name=dataset_name,
             output_classes=output_classes,
             preprocessing=None,
@@ -339,7 +376,7 @@ def get_data_configuration(dataset_name):
         )
         return DatasetMetaData(
             n_inputs=368,
-            n_outputs=6,
+            n_outputs=len(output_classes),
             name=dataset_name,
             output_classes=output_classes,
             preprocessing=None,
@@ -353,7 +390,7 @@ def get_data_configuration(dataset_name):
         )
         return DatasetMetaData(
             n_inputs=368,
-            n_outputs=2,
+            n_outputs=len(output_classes),
             name=dataset_name,
             output_classes=output_classes,
             preprocessing=None,
@@ -371,7 +408,7 @@ def get_data_configuration(dataset_name):
         )
         return DatasetMetaData(
             n_inputs=1000,
-            n_outputs=6,
+            n_outputs=len(output_classes),
             name=dataset_name,
             output_classes=output_classes,
             preprocessing=None,
@@ -385,7 +422,7 @@ def get_data_configuration(dataset_name):
         )
         return DatasetMetaData(
             n_inputs=368,
-            n_outputs=2,
+            n_outputs=len(output_classes),
             name=dataset_name,
             output_classes=output_classes,
             preprocessing=None,
@@ -399,7 +436,7 @@ def get_data_configuration(dataset_name):
         )
         return DatasetMetaData(
             n_inputs=368,
-            n_outputs=2,
+            n_outputs=len(output_classes),
             name=dataset_name,
             output_classes=output_classes,
             preprocessing=None,
