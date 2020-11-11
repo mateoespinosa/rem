@@ -67,6 +67,8 @@ class ExperimentManager(object):
         self.INITIALISATION_TRIALS = config["initialisation_trials"]
         self.N_FOLDS = config["n_folds"]
         self.HYPERPARAMS = config["hyperparameters"]
+        # What percent of our data will be used as test data
+        self.PERCENT_TEST_DATA = config.get("percent_test_data", 0.2)
 
         # Where all our results will be dumped. If not provided as part of the
         # experiment's config, then we will use the same parent directory as the

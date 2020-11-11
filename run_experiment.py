@@ -12,7 +12,7 @@ from dnn_rem.model_training import generate_data
 from dnn_rem.model_training.split_data import load_data
 from dnn_rem.experiment_runners.cross_validation import cross_validate_re
 from dnn_rem.experiment_runners import dnn_re
-from dnn_rem.experiment_runners.file_manager import ExperimentManager
+from dnn_rem.experiment_runners.manager import ExperimentManager
 
 
 ################################################################################
