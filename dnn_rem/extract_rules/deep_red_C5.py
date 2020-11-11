@@ -45,21 +45,41 @@ class ModelCache(object):
         """
         Store sampled activations for each layer in CSV files
         """
-        # Sample network at each layer
-        for layer_index in range(len(self.model.layers)):
-            partial_model = keras.Model(
-                inputs=self.model.inputs,
-                outputs=self.model.layers[layer_index].output,
-            )
+        # Run the network once with the whole data, and pick up intermediate
+        # activations
 
-            # e.g. h_1_0, h_1_1, ...
+        feature_extractor = keras.Model(
+            inputs=self.model.inputs,
+            outputs=[layer.output for layer in self.model.layers]
+        )
+        # Run this model which will output all intermediate activations
+        all_features = feature_extractor.predict(train_data)
+
+        # And now label each intermediate activation using our
+        # h_{layer}_{activation} notation
+        for layer_index, (layer, activation) in enumerate(zip(
+            self.model.layers,
+            all_features,
+        )):
+            # e.g. h_1_0, h_1_1, ..
+            out_shape = layer.output_shape
+            if isinstance(out_shape, list):
+                if len(out_shape) == 1:
+                    # Then we will allow degenerate singleton inputs
+                    [out_shape] = out_shape
+                else:
+                    # Else this is not a sequential model!!
+                    raise ValueError(
+                        f"We encountered some branding in input model with "
+                        f"layer at index {layer_index}"
+                    )
             neuron_labels = [
                 f'h_{layer_index}_{i}'
-                for i in range(self.model.layers[layer_index].output_shape[-1])
+                for i in range(out_shape[-1])
             ]
 
             self._activation_map[layer_index] = pd.DataFrame(
-                data=partial_model.predict(train_data),
+                data=activation,
                 columns=neuron_labels,
             )
 
@@ -68,7 +88,6 @@ class ModelCache(object):
                     f'{self._activations_path}{layer_index}.csv',
                     index=False,
                 )
-
         logging.debug('Computed layerwise activations.')
 
     def get_layer_activations(self, layer_index):
@@ -120,7 +139,7 @@ def extract_rules(model, train_data, verbosity=logging.INFO):
         disable=(verbosity == logging.WARNING),
     ) as pbar:
         for output_class in range(num_classes):
-            layer_rulesets = [Ruleset() for _ in range(len(model.layers))]
+            layer_rulesets = [Ruleset() for _ in model.layers]
 
             # Initial output layer rule
             output_layer = len(model.layers) - 1
@@ -141,7 +160,6 @@ def extract_rules(model, train_data, verbosity=logging.INFO):
                     hidden_layer + 1
                 ].get_terms_with_conf_from_rule_premises()
                 terms = term_confidences.keys()
-
                 for i, term in enumerate(terms, start=1):
                     pbar.set_description(
                         f'Extracting rules for term {i}/{len(terms)} of '
@@ -185,9 +203,8 @@ def extract_rules(model, train_data, verbosity=logging.INFO):
                     total_rule=output_rule,
                     intermediate_rules=layer_rulesets[hidden_layer],
                 )
-
             dnf_rules.add(output_rule)
 
         pbar.set_description("Done extracting rules from neural network")
 
-    return Ruleset(dnf_rules)
+    return Ruleset(rules=dnf_rules)

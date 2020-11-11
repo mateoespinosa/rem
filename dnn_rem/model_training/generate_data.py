@@ -47,7 +47,7 @@ def run(
             X=X,
             y=y,
             manager=manager,
-            test_size=0.2,
+            test_size=manager.PERCENT_TEST_DATA,
         )
         split_data_fn.stratified_k_fold(
             X=X,

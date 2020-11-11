@@ -15,32 +15,36 @@ def model_fn(
     activation="tanh",
     optimizer=None
 ):
-    # Input layer
-    dense_layers = [
-        tf.keras.layers.Dense(
+    # Input layer.
+    # NOTE: it is very important to have an explicit Input layer for now rather
+    # than using a Sequential model. Otherwise, we will not be able to pick
+    # it up correctly during rule generation.
+    input_layer = tf.keras.layers.Input(shape=(input_features,))
+
+    # And build our intermediate dense layers
+    net = input_layer
+    for i, units in enumerate(layer_units):
+        net = tf.keras.layers.Dense(
             units,
-            input_shape=(input_features,) if i == 0 else (None,),
             activation=activation,
             name=f"dense_{i}",
-        ) for i, units in enumerate(layer_units)
-    ]
-    model = tf.keras.Sequential(dense_layers + [
-        # Output Layer
-        tf.keras.layers.Dense(
-            num_outputs,
-            # It is crucial that the last activation of this layer is set
-            # to sigmoid even though this makes it less stable when training
-            # (rather than using from_logits=False in the loss).
-            # The reason why this is needed is because when we iterate over our
-            # algorithm, we assume the last layer has a valid probability
-            # distribution
-            activation="sigmoid",
-            input_shape=(input_features,) if not layer_units else (None,),
-            name="output_dense",
-        ),
-    ])
+        )(net)
+
+    # And our output layer map
+    net = tf.keras.layers.Dense(
+        num_outputs,
+        # It is crucial that the last activation of this layer is set
+        # to sigmoid even though this makes it less stable when training
+        # (rather than using from_logits=False in the loss).
+        # The reason why this is needed is because when we iterate over our
+        # algorithm, we assume the last layer has a valid probability
+        # distribution
+        activation="sigmoid",
+        name="output_dense",
+    )(net)
 
     # Compile Model
+    model = tf.keras.models.Model(inputs=input_layer, outputs=net)
     optimizer = optimizer or tf.keras.optimizers.Adam(learning_rate=0.001)
     model.compile(
         loss=tf.keras.losses.CategoricalCrossentropy(),

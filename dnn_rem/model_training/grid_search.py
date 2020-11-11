@@ -15,7 +15,6 @@ def load_best_params(best_params_file):
         indicator_ind = best_params_line.find(indicator)
         best_params_serialized = \
             best_params_line[indicator_ind + len(indicator):]
-        print(best_params_serialized)
         return json.loads(best_params_serialized)
 
 

@@ -37,7 +37,14 @@ class Ruleset(object):
         :returns np.array: 1D vector with as many entries as data points in X
                            containing our predicted results.
         """
+        X = np.atleast_2d(X)
         y = np.array([])
+
+        if len(X.shape) != 2:
+            raise ValueError(
+                "Expected provided data to be 2D but got "
+                "shape {X.shape} instead."
+            )
 
         for instance in X:
             # Map of Neuron objects to values from input data
