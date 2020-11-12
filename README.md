@@ -100,8 +100,8 @@ hyperparameters:
     layer_units: [128, 64]
 # How many trials we will attempt for finding our best initialisation
 initialisation_trials: 5
-# The rule extractor we will use (if not given, we assume DeepRED_C5 is used)
-rule_extractor: "DeepRED_C5"
+# The rule extractor we will use (if not given, we assume REM-D is used)
+rule_extractor: "REM-D"
 # Where are we dumping our results. If not given, then it will be the same
 # directory as the one containing the dataset..
 output_dir: "experiment_results"
@@ -110,9 +110,50 @@ output_dir: "experiment_results"
 In this example, we are indicating the path where we are we storing our `MB-1004-GE-2Hist` dataset and what hyper-parameters we want to use for our neural network.
 
 You can then use this to run the experiment as follows:
-```python
+```bash
 python run_experiment.py --config experiment_config.yaml
 ```
+
+If run successfully, then you should see an output similar to this one:
+```bash
+python run_experiment.py --config experiment_config.yaml
+[WARNING] Splitting data.
+[INFO] Finding best initialisation
+Test accuracy for initialisation 1/5 is 0.9233038425445557 and AUC is 0.9656112194061279
+Test accuracy for initialisation 2/5 is 0.8318583965301514 and AUC is 0.8604171276092529
+Test accuracy for initialisation 3/5 is 0.8879055976867676 and AUC is 0.9349987506866455
+Test accuracy for initialisation 4/5 is 0.8495575189590454 and AUC is 0.8980691432952881
+Test accuracy for initialisation 5/5 is 0.9026548862457275 and AUC is 0.9716457724571228
+Testing initialisation 5/5: 100%|████████████████████████████████████████| 5/5 [17:49<00:00, 213.86s/it]
+Test accuracy for fold 1/5 is 0.9321534037590027 and AUC is 0.9734295606613159
+Test accuracy for fold 2/5 is 0.9233038425445557 and AUC is 0.9648411273956299
+Test accuracy for fold 3/5 is 0.7168141603469849 and AUC is 0.7427711486816406
+Test accuracy for fold 4/5 is 0.8967551589012146 and AUC is 0.9504833817481995
+Test accuracy for fold 5/5 is 0.7100591659545898 and AUC is 0.7786142230033875
+Training fold model 5/5: 100%|████████████████████████████████████████████| 5/5 [00:39<00:00,  7.88s/it]
+Done extracting rules from neural network: 100%|██████████████████████████| 6/6 [04:59<00:00, 49.85s/it]
+Done extracting rules from neural network: 100%|██████████████████████████| 6/6 [03:01<00:00, 30.24s/it]
+Done extracting rules from neural network: 100%|██████████████████████████| 6/6 [03:41<00:00, 37.00s/it]
+Done extracting rules from neural network: 100%|██████████████████████████| 6/6 [00:01<00:00,  3.71it/s]
+Done extracting rules from neural network: 100%|██████████████████████████| 6/6 [02:04<00:00, 20.79s/it]
++------+--------------------+--------------------+-----------------------+------------------------+
+| Fold |    NN Accuracy     |   REM-D Accuracy   | Extraction Time (sec) | Extraction Memory (MB) |
++------+--------------------+--------------------+-----------------------+------------------------+
+|  0   | 0.9321534037590028 | 0.9321533923303835 |   354.7890410423279   |      54.76953125       |
+|  1   | 0.9233038425445556 | 0.8997050147492626 |   354.7890410423279   |      54.76953125       |
+|  2   | 0.7168141603469849 | 0.6371681415929203 |   354.7890410423279   |      54.76953125       |
+|  3   | 0.8967551589012146 | 0.9085545722713865 |   354.7890410423279   |      54.76953125       |
+|  4   | 0.7100591659545898 | 0.6745562130177515 |   354.7890410423279   |      54.76953125       |
++------+--------------------+--------------------+-----------------------+------------------------+
+```
+
+The default cross-validation experiment will do the following:
+  1. Split our dataset into training/test datasets and further split our training data into the number of requested folds.
+  2. Find the best initialisation for the weights of our neural network architecture.
+  3. Train one neural network for each fold of data.
+  4. Extract rules for each neural network we trained.
+  5. Compare the performance of the neural network and the extracted ruleset in our test data.
+  6. Dump all the results, statistics, and details of the experiment in the provided directory following the file hierarchy described below.
 
 Please note that if a configuration file is provided and command-line arguments are also provided, then the ones given in the command-line will always take precedence over their counterparts in the config file. The intent of this behavior is to speed up different iterations in experiments.
 
@@ -126,7 +167,7 @@ Once an experiment is instantiated, we will generate a file structure containing
 
     ​       `rule_extraction/`
 
-    ​           `<rule_ex_mode>/` - e.g. pedagogical, decomp
+    ​           `<rule_ex_mode>/` - e.g. pedagogical, rem-d
 
     ​               `results.csv` - results for rule extraction using that mode
 
