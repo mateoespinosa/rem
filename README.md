@@ -5,6 +5,9 @@ Code base for the experimentation and methods for REM: Rule Extraction Methods, 
 
 TODO: link to paper and authors
 
+A lot of the code and structure of the project is strongly based on the work in this repository: https://github.com/sumaiyah/DNN-RE.
+
+
 ## Setup
 For you to be able to run recreate the experiments and use the rule extraction algorithm, you will need the following requirements:
 - Python 3.5 – 3.8
