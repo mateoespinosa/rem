@@ -10,8 +10,8 @@ import shutil
 import tempfile
 
 from . import dataset_configs
-from dnn_rem.extract_rules.deep_red_C5 import extract_rules as DeepRED_C5
-from dnn_rem.extract_rules.pedagogical import extract_rules as Pedagogical
+from dnn_rem.extract_rules.rem_d import extract_rules as rem_d
+from dnn_rem.extract_rules.pedagogical import extract_rules as pedagogical
 
 
 # Algorithm used for Rule Extraction
@@ -60,7 +60,7 @@ class ExperimentManager(object):
         )
 
         self.RULE_EXTRACTOR = self.get_rule_extractor(
-            config.get("rule_extractor", "DeepRED_C5")
+            config.get("rule_extractor", "rem_d")
         )
         self.DATA_FP = config["dataset_file"]
         # How many trials we will attempt for finding our best initialisation
@@ -340,20 +340,20 @@ class ExperimentManager(object):
     @staticmethod
     def get_rule_extractor(extractor_name):
         name = extractor_name.lower()
-        if name == "deepred_c5":
+        if name == "rem-d":
             return RuleExMode(
-                mode='DeepRED_C5',
-                run=DeepRED_C5,
+                mode='REM-D',
+                run=rem_d,
             )
 
         if name == "pedagogical":
             return RuleExMode(
-                mode='Pedagogical',
-                run=Pedagogical,
+                mode='pedagogical',
+                run=pedagogical,
             )
 
         raise ValueError(
             f'Given rule extractor "{extractor_name}" is not a valid rule '
-            f'extracting algorithm. Valid modes are "DeepRED_C5" or '
-            f'"Pedagogical".'
+            f'extracting algorithm. Valid modes are "REM-D" or '
+            f'"pedagogical".'
         )

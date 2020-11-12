@@ -186,8 +186,8 @@ def extract_rules(model, train_data, verbosity=logging.INFO):
                         prior_rule_confidence=prior_rule_confidence,
                     )
                     if not new_rules:
-                        logging.error(
-                            f"Found an empty set of rules for "
+                        pbar.write(
+                            f"[ERROR] Found an empty set of rules for "
                             f"class {output_class} and layer {hidden_layer}"
                         )
                     layer_rulesets[hidden_layer].add_rules(new_rules)

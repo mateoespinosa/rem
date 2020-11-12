@@ -1,10 +1,10 @@
+from prettytable import PrettyTable
 import logging
 import numpy as np
 import os
 import pandas as pd
 import pickle
 import tensorflow as tf
-
 
 from dnn_rem.evaluate_rules.evaluate import evaluate
 from dnn_rem.model_training.split_data import load_split_indices
@@ -16,6 +16,18 @@ def cross_validate_re(
     y,
     manager,
 ):
+    # We will generate a pretty table for the end result so that it can
+    # be pretty-printed at the end of the experiment and visually reported to
+    # the user
+    table = PrettyTable()
+    table.field_names = [
+        "Fold",
+        "NN Accuracy",
+        f"{manager.RULE_EXTRACTOR.mode} Accuracy",
+        "Extraction Time (sec)",
+        "Extraction Memory (MB)",
+    ]
+
     # Extract rules from model from each fold
     for fold in range(manager.N_FOLDS):
         # Path to extracted rules from that fold
@@ -83,7 +95,6 @@ def cross_validate_re(
         results_df.loc[fold, 're_memory (MB)'] = re_memory
         results_df.to_csv(manager.N_FOLD_RESULTS_FP, index=False)
         logging.debug('done')
-
 
     # Compute cross-validated results
     for fold in range(manager.N_FOLDS):
@@ -156,10 +167,26 @@ def cross_validate_re(
         )
 
         results_df.to_csv(manager.N_FOLD_RESULTS_FP, index=False)
-        logging.info(
-            f"Rule extraction for fold {fold} took a total of {re_time}s and "
-            f"{re_memory} MB to obtain testing accuracy {re_results['acc']} "
-            f"compared to the accuracy of the neural network "
-            f"{results_df.loc[fold, 'nn_accuracy']}."
+        logging.debug(
+            f"Rule extraction for fold {fold} took a total of {re_time} sec "
+            f"and {re_memory} MB to obtain testing accuracy "
+            f"{re_results['acc']} compared to the accuracy of the neural "
+            f"network {results_df.loc[fold, 'nn_accuracy']}."
         )
+
+        # And fill up our pretty table
+        table.add_row([
+            fold,
+            results_df.loc[fold, 'nn_accuracy'],
+            re_results['acc'],
+            re_time,
+            re_memory
+        ])
+
+    # And display our results as a pretty table for the user to inspect quickly
+    if logging.getLogger().getEffectiveLevel() not in [
+        logging.WARNING,
+        logging.ERROR,
+    ]:
+        print(table)
 
