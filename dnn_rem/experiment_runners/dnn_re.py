@@ -6,7 +6,7 @@ reported to caller.
 from tensorflow.keras.models import load_model
 from tensorflow.keras.utils import to_categorical
 import logging
-import memory_profiler
+import tracemalloc
 import time
 
 
@@ -53,16 +53,18 @@ def run(
     )
 
     # Rule Extraction
-    start_time, start_memory = time.time(), memory_profiler.memory_usage()[0]
+    start_time = time.time()
+    tracemalloc.start()
     rules = manager.RULE_EXTRACTOR.run(
         model=model,
         train_data=X_train,
         verbosity=verbosity,
     )
-    end_time, end_memory = time.time(), memory_profiler.memory_usage()[0]
-
     # Rule extraction time and memory usage
-    total_time = end_time - start_time
-    memory = end_memory - start_memory
+    total_time = time.time() - start_time
+    memory, peak = tracemalloc.get_traced_memory()
+    # Tracemalloc reports memory in Kibibytes, so let's change it to MB
+    memory = memory * (1024 / 1000000)
+    tracemalloc.stop()
 
     return nn_accuracy, rules, total_time, memory

@@ -70,6 +70,9 @@ class ExperimentManager(object):
         # What percent of our data will be used as test data
         self.PERCENT_TEST_DATA = config.get("percent_test_data", 0.2)
 
+        # The number of decimals used to report floating point numbers
+        self.ROUNDING_DECIMALS = config.get("rounding_decimals", 4)
+
         # Where all our results will be dumped. If not provided as part of the
         # experiment's config, then we will use the same parent directory as the
         # datafile we are using
@@ -151,10 +154,6 @@ class ExperimentManager(object):
         self.NN_INIT_GRID_RESULTS_FP = os.path.join(
             nn_init_dir,
             'grid_search_results.txt'
-        )
-        self.NN_INIT_SPLIT_INDICES_FP = os.path.join(
-            nn_init_dir,
-            'data_split_indices.txt'
         )
         self.NN_INIT_RE_RESULTS_FP = os.path.join(
             nn_init_dir,

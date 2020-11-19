@@ -27,6 +27,8 @@ def cross_validate_re(
         "Extraction Time (sec)",
         "Extraction Memory (MB)",
     ]
+    memory_used = []
+    runtimes = []
 
     # Extract rules from model from each fold
     for fold in range(manager.N_FOLDS):
@@ -94,6 +96,8 @@ def cross_validate_re(
         results_df.loc[fold, 're_time (sec)'] = re_time
         results_df.loc[fold, 're_memory (MB)'] = re_memory
         results_df.to_csv(manager.N_FOLD_RESULTS_FP, index=False)
+        runtimes.append(re_time)
+        memory_used.append(re_memory)
         logging.debug('done')
 
     # Compute cross-validated results
@@ -168,19 +172,23 @@ def cross_validate_re(
 
         results_df.to_csv(manager.N_FOLD_RESULTS_FP, index=False)
         logging.debug(
-            f"Rule extraction for fold {fold} took a total of {re_time} sec "
-            f"and {re_memory} MB to obtain testing accuracy "
-            f"{re_results['acc']} compared to the accuracy of the neural "
-            f"network {results_df.loc[fold, 'nn_accuracy']}."
+            f"Rule extraction for fold {fold} took a total of "
+            f"{runtimes[fold]} sec "
+            f"and {memory_used[fold]} MB to obtain "
+            f"testing accuracy {re_results['acc']} compared to the accuracy "
+            f"of the neural network {results_df.loc[fold, 'nn_accuracy']}."
         )
 
         # And fill up our pretty table
         table.add_row([
             fold,
-            results_df.loc[fold, 'nn_accuracy'],
-            re_results['acc'],
-            re_time,
-            re_memory
+            round(
+                results_df.loc[fold, 'nn_accuracy'],
+                manager.ROUNDING_DECIMALS
+            ),
+            round(re_results['acc'], manager.ROUNDING_DECIMALS),
+            round(runtimes[fold],  manager.ROUNDING_DECIMALS),
+            round(memory_used[fold], manager.ROUNDING_DECIMALS),
         ])
 
     # And display our results as a pretty table for the user to inspect quickly

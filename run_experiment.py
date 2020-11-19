@@ -226,7 +226,7 @@ def main():
         split_data=True,
         use_grid_search=args.grid_search,
         find_best_initialisation=(manager.INITIALISATION_TRIALS > 1),
-        generate_fold_data=(manager.N_FOLDS > 1),
+        generate_fold_data=True,
     )
 
     # Perform n fold cross validated rule extraction on the dataset

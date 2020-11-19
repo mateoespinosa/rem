@@ -21,7 +21,6 @@ setuptools.setup(
     python_requires='>=3.6, <3.9',
     install_requires=[
         "Keras-Preprocessing==1.1.2",
-        "memory-profiler==0.58.0",
         "numpy<1.19.0",
         "pandas==0.25.3",
         "prettytable==1.0.1",

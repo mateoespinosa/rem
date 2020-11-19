@@ -191,7 +191,7 @@ def extract_rules(model, train_data, verbosity=logging.INFO):
                             f"class {output_class} and layer {hidden_layer}"
                         )
                     layer_rulesets[hidden_layer].add_rules(new_rules)
-                pbar.update(1)
+                    pbar.update(1/len(terms))
 
             # Merge layer-wise rules
             output_rule = initial_rule

@@ -42,13 +42,7 @@ def run(
     """
     # 1. Split data into train and test. Only do this once
     if split_data:
-        logging.warning('Splitting data.')
-        split_data_fn.train_test_split(
-            X=X,
-            y=y,
-            manager=manager,
-            test_size=manager.PERCENT_TEST_DATA,
-        )
+        logging.debug('Splitting data.')
         split_data_fn.stratified_k_fold(
             X=X,
             y=y,
