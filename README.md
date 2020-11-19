@@ -10,9 +10,9 @@ A lot of the code and structure of the project is strongly based on the work in 
 
 ## Setup
 For you to be able to run recreate the experiments and use the rule extraction algorithm, you will need the following requirements:
-- Python 3.5 – 3.8
-- pip 19.0 or later
-- R 4.* needs to be installed and accessible
+- `python` 3.5 – 3.8
+- `pip` 19.0 or later
+- `R` 4.* needs to be installed and accessible in your machine. We use `rpy2` to wrap and run `R`'s C5.0 algorithm.
 
 Once you have installed R, you will also need to have the following packages installed in R:
 - `Cubist`
@@ -32,7 +32,10 @@ If you have all of these, then you can install our code as a Python package usin
 ```python
 python setup.py install --user
 ```
+
 This will install all required the dependencies for you as well as the entire project. Please note that this may take some time if you are missing some of the heavy dependencies we require (e.g TensorFlow).
+
+**Important Note**: depending on your `python` distribution and environment (specially if you are using `pyenv` or a virtual environment), you may have to add `--prefix=` (nothing after the equality) to get this installation to work for you.
 
 If you want to test that it works, try running the provided script `run_experiment.py` as follows:
 ```bash
@@ -41,9 +44,9 @@ python run_experiment.py --help
 and you should see a clear help message without any errors and/or warnings.
 
 ## Running Experiments
-For our experiments we will use the data located in https://github.com/sumaiyah/DNN-RE-data. You can run recreate several experiments using the provided executable `run_experiment.py` which offers the following options:
+For our experiments we will use the data located in https://github.com/sumaiyah/DNN-RE-data. You can run recreate several of our cross-validation experiments using the provided executable `run_experiment.py` which offers the following options:
 ```bash
-$python run_experiment.py --help 
+$python run_experiment.py --help
 usage: run_experiment.py [-h] [--config file.yaml] [--folds N]
                          [--initialisation_trials N] [--dataset_name name]
                          [--dataset_file data.cvs] [--rule_extractor name]
@@ -142,11 +145,11 @@ Done extracting rules from neural network: 100%|██████████�
 +------+--------------------+--------------------+-----------------------+------------------------+
 | Fold |    NN Accuracy     |   REM-D Accuracy   | Extraction Time (sec) | Extraction Memory (MB) |
 +------+--------------------+--------------------+-----------------------+------------------------+
-|  0   | 0.9321534037590028 | 0.9321533923303835 |   354.7890410423279   |      54.76953125       |
-|  1   | 0.9233038425445556 | 0.8997050147492626 |   354.7890410423279   |      54.76953125       |
-|  2   | 0.7168141603469849 | 0.6371681415929203 |   354.7890410423279   |      54.76953125       |
-|  3   | 0.8967551589012146 | 0.9085545722713865 |   354.7890410423279   |      54.76953125       |
-|  4   | 0.7100591659545898 | 0.6745562130177515 |   354.7890410423279   |      54.76953125       |
+|  0   | 0.9322 | 0.9322 |   167.0129   |      77.4141       |
+|  1   | 0.9233 | 0.8997 |   174.9554   |      31.7227       |
+|  2   | 0.7168 | 0.6372 |   568.0429   |      32.0117       |
+|  3   | 0.8968 | 0.9086 |   176.3883   |      62.5468       |
+|  4   | 0.7101 | 0.6746 |   307.1780   |      49.75         |
 +------+--------------------+--------------------+-----------------------+------------------------+
 ```
 
@@ -187,9 +190,9 @@ Once an experiment is instantiated, we will generate a file structure containing
 
     `neural_network_initialisation/` - contains data from finding the best neural network initialisation
 
-    ​   `re_results.csv` - rule extraction results from each of the initialisations 
+    ​   `re_results.csv` - rule extraction results from each of the initialisations
 
-    ​   `grid_search_results.txt` - results from neural network hyperparameter grid search
+    ​   `grid_search_results.txt` - results from neural network hyper-parameter grid search
 
     ​   `data_split_indices.txt` - indices of data split for train and test data
 
