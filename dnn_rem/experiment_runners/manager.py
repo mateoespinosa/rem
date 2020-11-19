@@ -155,6 +155,10 @@ class ExperimentManager(object):
             nn_init_dir,
             'grid_search_results.txt'
         )
+        self.NN_INIT_SPLIT_INDICES_FP = os.path.join(
+            nn_init_dir,
+            'data_split_indices.txt'
+        )
         self.NN_INIT_RE_RESULTS_FP = os.path.join(
             nn_init_dir,
             're_results.csv'

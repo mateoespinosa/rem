@@ -26,7 +26,6 @@ def run(
     X,
     y,
     manager,
-    split_data=False,
     use_grid_search=False,
     find_best_initialisation=False,
     generate_fold_data=False,
@@ -41,14 +40,13 @@ def run(
 
     """
     # 1. Split data into train and test. Only do this once
-    if split_data:
-        logging.debug('Splitting data.')
-        split_data_fn.stratified_k_fold(
-            X=X,
-            y=y,
-            manager=manager,
-            n_folds=manager.N_FOLDS,
-        )
+    logging.debug('Splitting data.')
+    split_data_fn.stratified_k_fold(
+        X=X,
+        y=y,
+        manager=manager,
+        n_folds=manager.N_FOLDS,
+    )
 
     # 2. Grid search over neural network hyper params to find optimal neural
     #    network hyper-parameters
@@ -78,12 +76,16 @@ def run(
             if hyper_param in manager.HYPERPARAMS:
                 manager.HYPERPARAMS[hyper_param] = value
 
-    # TODO change this to read best grid search hyper-parameters from disk
-
-    # 3. Initialize 5 neural networks using 1 train test split
+    # 3. Initialize some neural networks using 1 train test split
     # Pick initialization that yields the smallest ruleset
     if find_best_initialisation:
         logging.info("Finding best initialisation")
+        split_data_fn.train_test_split(
+            X=X,
+            y=y,
+            manager=manager,
+            test_size=manager.PERCENT_TEST_DATA,
+        )
         find_best_nn_initialisation.run(X=X, y=y, manager=manager)
 
     # 4. Build neural network for each fold using best initialization found

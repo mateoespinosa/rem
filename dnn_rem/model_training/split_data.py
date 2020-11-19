@@ -120,6 +120,42 @@ def stratified_k_fold(X, y, n_folds, manager):
     logging.debug(f'Split data into {n_folds} folds.')
 
 
+def train_test_split(X, y, manager, test_size=0.2):
+    """
+
+    Args:
+        X: input features
+        y: target
+        test_size: percentage of the data used for testing
+
+    Returns:
+
+    Single train test split of the data used for initilising the neural network
+    """
+
+    # Initialise split indices file
+    os.makedirs(
+        pathlib.Path(manager.NN_INIT_SPLIT_INDICES_FP).parent,
+        exist_ok=True,
+    )
+    open(manager.NN_INIT_SPLIT_INDICES_FP, 'w').close()
+
+    # Split data
+    rs = ShuffleSplit(n_splits=2, test_size=test_size, random_state=42)
+
+    for train_index, test_index in rs.split(X):
+        save_split_indices(
+            train_index=train_index,
+            test_index=test_index,
+            file_path=manager.NN_INIT_SPLIT_INDICES_FP,
+        )
+
+        # Only want 1 split
+        break
+
+    logging.debug('Split data into train/test split for initialisation.')
+
+
 def load_data(dataset_info, data_path):
     """
 

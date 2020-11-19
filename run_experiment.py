@@ -223,7 +223,6 @@ def main():
         X=X,
         y=y,
         manager=manager,
-        split_data=True,
         use_grid_search=args.grid_search,
         find_best_initialisation=(manager.INITIALISATION_TRIALS > 1),
         generate_fold_data=True,
