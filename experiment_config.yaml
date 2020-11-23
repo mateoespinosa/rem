@@ -1,18 +1,41 @@
-# The directory of our training data
+# The directory of our training data. Can be a path relative to the caller or
+# an absolute path.
 dataset_file: "../DNN-RE-data-new/MB-1004-GE-2Hist/data.csv"
-# The name of our dataset
+
+# The name of our dataset. Must be one of the data sets supported by our
+# experiment runners.
 dataset_name: 'MB-1004-GE-2Hist'
-# Number of split folds for our training
+
+# Number of split folds for our training. If not provided, then it will default
+# to a single fold.
 n_folds: 5
+
 # Our neural network training hyper-parameters
 hyperparameters:
+    # The batch size we will use for training.
     batch_size: 16
+    # Number of epochs to run our model for
     epochs: 50
+    # Now many hidden layers we will use and how many activations in each
     layer_units: [128, 64]
-# How many trials we will attempt for finding our best initialisation
+    # The activation use in between hidden layers. Can be any valid Keras
+    # activation function. If not provided, it defaults to "tanh"
+    activation: "tanh"
+    # The last activation used in our model. Used to define the type of
+    # categorical loss we will use. If not provided, it defaults to "sigmoid".
+    last_activation: "sigmoid"
+    # The type of loss we will use. Must be one of
+    # ["sofxmax_xentr", "sigmoid_xentr"]. If not provided, we will use the
+    # given last layer's activation to obtain the corresponding loss.
+    loss_function: "softmax_xentr"
+
+# How many trials we will attempt for finding our best initialisation. If not
+# provided, then we will use a random initialisation at train time.
 initialisation_trials: 5
-# The rule extractor we will use (if not given, we assume REM-D is used)
+
+# The rule extractor we will use. If not provided, it defaults to REM-D.
 rule_extractor: "REM-D"
-# Where are we dumping our results. If not given, then it will be the same
+
+# Where are we dumping our results. If not provided, it will default to the same
 # directory as the one containing the dataset.
 output_dir: "experiment_results"

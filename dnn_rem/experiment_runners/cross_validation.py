@@ -8,6 +8,8 @@ import tensorflow as tf
 
 from dnn_rem.evaluate_rules.evaluate import evaluate
 from dnn_rem.model_training.split_data import load_split_indices
+from dnn_rem.model_training.build_and_train_model import load_model
+
 from . import dnn_re
 
 
@@ -23,6 +25,7 @@ def cross_validate_re(
     table.field_names = [
         "Fold",
         "NN Accuracy",
+        'NN AUC',
         f"{manager.RULE_EXTRACTOR.mode} Accuracy",
         "Extraction Time (sec)",
         "Extraction Memory (MB)",
@@ -43,7 +46,7 @@ def cross_validate_re(
 
         # Path to neural network model for this fold
         model_file_path = manager.n_fold_model_fp(fold)
-        _, _, nn_accuracy = tf.keras.models.load_model(
+        _, nn_auc, nn_accuracy, majority_class = load_model(
             model_file_path
         ).evaluate(
             X[test_index],
@@ -93,6 +96,8 @@ def cross_validate_re(
         results_df = pd.read_csv(manager.N_FOLD_RESULTS_FP)
         results_df.loc[fold, 'fold'] = fold
         results_df.loc[fold, 'nn_accuracy'] = nn_accuracy
+        results_df.loc[fold, 'nn_auc'] = nn_auc
+        results_df.loc[fold, 'majority_class'] = majority_class
         results_df.loc[fold, 're_time (sec)'] = re_time
         results_df.loc[fold, 're_memory (MB)'] = re_memory
         results_df.to_csv(manager.N_FOLD_RESULTS_FP, index=False)
@@ -101,6 +106,7 @@ def cross_validate_re(
         logging.debug('done')
 
     # Compute cross-validated results
+    averages = np.array([0.0] * (len(table.field_names) - 1))
     for fold in range(manager.N_FOLDS):
         # Get train and test data folds
         train_index, test_index = load_split_indices(
@@ -129,7 +135,7 @@ def cross_validate_re(
             'true_labels': y_test,
         }
         # label - Neural network data labels. Use NN to predict X_test
-        nn_model = tf.keras.models.load_model(model_file_path)
+        nn_model = load_model(model_file_path)
         nn_predictions = np.argmax(nn_model.predict(X_test), axis=1)
         label_data['nn_labels'] = nn_predictions
         # label - Rule extraction labels
@@ -180,21 +186,32 @@ def cross_validate_re(
         )
 
         # And fill up our pretty table
-        table.add_row([
-            fold,
+        new_row = [
             round(
                 results_df.loc[fold, 'nn_accuracy'],
+                manager.ROUNDING_DECIMALS
+            ),
+            round(
+                results_df.loc[fold, 'nn_auc'],
                 manager.ROUNDING_DECIMALS
             ),
             round(re_results['acc'], manager.ROUNDING_DECIMALS),
             round(runtimes[fold],  manager.ROUNDING_DECIMALS),
             round(memory_used[fold], manager.ROUNDING_DECIMALS),
-        ])
+        ]
+        table.add_row([fold] + new_row)
 
+        # And accumulate this last row unto our average
+        averages += np.array(new_row) / manager.N_FOLDS
+
+    # Finally, let's include an average column:
+    table.add_row(
+        ["avg"] +
+        list(map(lambda x: round(x,  manager.ROUNDING_DECIMALS), averages))
+    )
     # And display our results as a pretty table for the user to inspect quickly
     if logging.getLogger().getEffectiveLevel() not in [
         logging.WARNING,
         logging.ERROR,
     ]:
         print(table)
-

@@ -4,6 +4,7 @@ import argparse
 import logging
 import os
 import sys
+import time
 import warnings
 import yaml
 
@@ -217,6 +218,7 @@ def main():
     if manager.DATASET_INFO.preprocessing:
         X, y = manager.DATASET_INFO.preprocessing(X, y)
 
+    start_time = time.time()
     # Generate our neural network, train it, and then extract the ruleset that
     # approximates it from it
     generate_data.run(
@@ -233,6 +235,16 @@ def main():
         X=X,
         y=y,
         manager=manager,
+    )
+    end_time = time.time()
+
+    # And let's the user know we are done with the current experiment
+    print(
+        "~" * 20,
+        "Experiment successfully terminated after",
+        round(end_time - start_time, 3),
+        "seconds",
+        "~" * 20,
     )
 
     # And that's all folks

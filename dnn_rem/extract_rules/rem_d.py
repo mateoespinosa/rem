@@ -5,6 +5,7 @@ Main implementation of the DNN rule extraction algorithm.
 from tqdm import tqdm  # Loading bar for rule generation
 import logging
 import pandas as pd
+import scipy.special as activation_fns
 import tensorflow.keras.models as keras
 
 from dnn_rem.rules.rule import Rule
@@ -30,8 +31,9 @@ class ModelCache(object):
         keras_model,
         train_data,
         activations_path=None,
+        last_activation=None,
     ):
-        self.model = keras_model
+        self._model = keras_model
         # We will dump intermediate activations into this path if and only
         # if it is provided
         self._activations_path = activations_path
@@ -39,9 +41,18 @@ class ModelCache(object):
         # Keeps in memory a map between layer ID and the activations it
         # generated when we processed the given training data
         self._activation_map = {}
-        self._compute_layerwise_activations(train_data)
+        self._compute_layerwise_activations(
+            train_data=train_data,
+            last_activation=last_activation,
+        )
 
-    def _compute_layerwise_activations(self, train_data):
+    def __len__(self):
+        """
+        Returns the number of layers in this cache.
+        """
+        return len(self._model.layers)
+
+    def _compute_layerwise_activations(self, train_data, last_activation=None):
         """
         Store sampled activations for each layer in CSV files
         """
@@ -49,8 +60,8 @@ class ModelCache(object):
         # activations
 
         feature_extractor = keras.Model(
-            inputs=self.model.inputs,
-            outputs=[layer.output for layer in self.model.layers]
+            inputs=self._model.inputs,
+            outputs=[layer.output for layer in self._model.layers]
         )
         # Run this model which will output all intermediate activations
         all_features = feature_extractor.predict(train_data)
@@ -58,7 +69,7 @@ class ModelCache(object):
         # And now label each intermediate activation using our
         # h_{layer}_{activation} notation
         for layer_index, (layer, activation) in enumerate(zip(
-            self.model.layers,
+            self._model.layers,
             all_features,
         )):
             # e.g. h_1_0, h_1_1, ..
@@ -77,6 +88,22 @@ class ModelCache(object):
                 f'h_{layer_index}_{i}'
                 for i in range(out_shape[-1])
             ]
+
+            # For the last layer, let's make sure it is turned into a
+            # probability distribution in case the operation was merged into
+            # the loss function. This is needed when the last activation (
+            # e.g., softmax) is merged into the loss function (
+            # e.g., softmax_cross_entropy).
+            if last_activation and (layer_index == (len(self) - 1)):
+                if last_activation == "softmax":
+                    activation = activation_fns.softmax(activation)
+                elif last_activation == "sigmoid":
+                    # Else time to use sigmoid function here instead
+                    activation = activation_fns.expit(activation)
+                else:
+                    raise ValueError(
+                        f"We do not support last activation {last_activation}"
+                    )
 
             self._activation_map[layer_index] = pd.DataFrame(
                 data=activation,
@@ -110,23 +137,37 @@ class ModelCache(object):
 ################################################################################
 
 
-def extract_rules(model, train_data, verbosity=logging.INFO):
+def extract_rules(
+    model,
+    train_data,
+    verbosity=logging.INFO,
+    last_activation=None,
+):
     """
     Extracts a set of rules which imitates given the provided model using the
     algorithm described in the paper.
 
     :param tf.keras.Model model: The model we want to imitate using our ruleset.
     :param np.array train_data: 2D data matrix containing all the training
-                                   points used to train the provided keras
-                                   model.
+        points used to train the provided keras model.
     :param logging.verbosity verbosity: The verbosity in which we want to run
-                                        this algorithm.
+        this algorithm.
+    :param str last_activation: an explicit function name to apply to the
+        activations of the last layer of the given model before rule extraction.
+        This is needed in case the network's last activation function got merged
+        into the network's loss. If None, then no activation is done. Otherwise,
+        it must be either "sigmoid" or "softmax".
+
     :returns Ruleset: the set of rules extracted from the given model.
     """
 
     # First we will instantiate a cache of our given keras model to obtain all
     # intermediate activations
-    cache_model = ModelCache(keras_model=model, train_data=train_data)
+    cache_model = ModelCache(
+        keras_model=model,
+        train_data=train_data,
+        last_activation=last_activation,
+    )
 
     # Now time to actually extract our set of rules
     dnf_rules = set()
@@ -146,7 +187,13 @@ def extract_rules(model, train_data, verbosity=logging.INFO):
             initial_rule = Rule.initial_rule(
                 output_layer=output_layer,
                 output_class=output_class,
-                threshold=(1 / num_classes),
+                # If we use sigmoid cross-entropy loss, then this threshold
+                # becomes 0.5 and does not depend on the number of classes.
+                # Also if activation function is not provided, we will default
+                # to using 0.5 thresholds.
+                threshold=(
+                    (1 / num_classes) if (last_activation == "softmax") else 0.5
+                ),
             )
             layer_rulesets[output_layer].add_rules({initial_rule})
 

@@ -59,19 +59,22 @@ class ExperimentManager(object):
             dataset_name=config["dataset_name"],
         )
 
-        self.RULE_EXTRACTOR = self.get_rule_extractor(
-            config.get("rule_extractor", "rem_d")
-        )
         self.DATA_FP = config["dataset_file"]
         # How many trials we will attempt for finding our best initialisation
         self.INITIALISATION_TRIALS = config["initialisation_trials"]
         self.N_FOLDS = config["n_folds"]
         self.HYPERPARAMS = config["hyperparameters"]
+
         # What percent of our data will be used as test data
         self.PERCENT_TEST_DATA = config.get("percent_test_data", 0.2)
 
         # The number of decimals used to report floating point numbers
         self.ROUNDING_DECIMALS = config.get("rounding_decimals", 4)
+
+        # And build our rule extractor
+        self.RULE_EXTRACTOR = self.get_rule_extractor(
+            config.get("rule_extractor", "rem_d")
+        )
 
         # Where all our results will be dumped. If not provided as part of the
         # experiment's config, then we will use the same parent directory as the
@@ -339,14 +342,28 @@ class ExperimentManager(object):
                     f"field."
                 )
 
-
-    @staticmethod
-    def get_rule_extractor(extractor_name):
+    def get_rule_extractor(self, extractor_name):
         name = extractor_name.lower()
         if name == "rem-d":
+            loss_function = self.HYPERPARAMS.get(
+                "loss_function",
+                "sigmoid_xentr",
+            )
+            last_activation = self.HYPERPARAMS.get("last_activation", "sigmoid")
+            # We set the last activation to None here if it is going to be
+            # be included in the network itself. Otherwise, we request our
+            # rule extractor to explicitly perform the activation on the last
+            # layer as this was merged into the loss function
+            last_activation = (
+                last_activation if last_activation in loss_function else None
+            )
             return RuleExMode(
                 mode='REM-D',
-                run=rem_d,
+                run=lambda *args, **kwargs: rem_d(
+                    *args,
+                    **kwargs,
+                    last_activation=last_activation,
+                )
             )
 
         if name == "pedagogical":

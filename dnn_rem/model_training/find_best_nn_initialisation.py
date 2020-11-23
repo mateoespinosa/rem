@@ -16,7 +16,7 @@ from tqdm import tqdm
 
 from dnn_rem.evaluate_rules.evaluate import evaluate
 from . import split_data
-from .build_and_train_model import build_and_train_model
+from .build_and_train_model import build_and_train_model, load_model
 from dnn_rem.experiment_runners import dnn_re
 
 
@@ -55,7 +55,7 @@ def run(X, y, manager):
             )
 
             # Build and train nn put it in temp/
-            nn_accuracy, nn_auc = build_and_train_model(
+            nn_accuracy, nn_auc, maj_class_acc = build_and_train_model(
                 X_train=X_train,
                 y_train=y_train,
                 X_test=X_test,
@@ -70,8 +70,9 @@ def run(X, y, manager):
             ]:
                 pbar.write(
                     f"Test accuracy for initialisation {i + 1}/"
-                    f"{manager.INITIALISATION_TRIALS} is {nn_accuracy} and "
-                    f"AUC is {nn_auc}"
+                    f"{manager.INITIALISATION_TRIALS} is {nn_accuracy}, "
+                    f"AUC is {nn_auc}, and majority class accuracy "
+                    f"is {maj_class_acc}."
                 )
 
             # Extract rules
@@ -98,7 +99,7 @@ def run(X, y, manager):
                 'true_labels': y_test,
             }
             # label - Neural network data labels. Use NN to predict X_test
-            nn_model = tf.keras.models.load_model(model_file_path)
+            nn_model = load_model(model_file_path)
             nn_predictions = np.argmax(nn_model.predict(X_test), axis=1)
             label_data['nn_labels'] = nn_predictions
             # label - Rule extraction labels
@@ -150,7 +151,7 @@ def run(X, y, manager):
                 best_init_index = i
 
                 # Save initilisation as best_initialisation.h5
-                tf.keras.models.load_model(
+                load_model(
                     os.path.join(manager.TEMP_DIR, 'initialisation.h5')
                 ).save(manager.BEST_NN_INIT_FP)
 

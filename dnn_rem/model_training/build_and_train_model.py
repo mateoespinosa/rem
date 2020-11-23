@@ -1,6 +1,7 @@
 """
 Build neural network models given number of nodes in each hidden layer
 """
+
 import logging
 import numpy as np
 import os
@@ -8,13 +9,70 @@ import sklearn
 import tensorflow as tf
 
 
+################################################################################
+## Metric Functions
+################################################################################
+
+class LogitAUC(tf.keras.metrics.AUC):
+    """
+    Custom AUC metric that operates in logit activations (i.e. does not
+    require them to be positive and will pass a softmax through them before
+    computing the AUC)
+    """
+    def __init__(self, *args, **kwargs):
+        super(LogitAUC, self).__init__(*args, **kwargs)
+
+    def update_state(self, y_true, y_pred, sample_weight=None):
+        # Simply call the parent function with the softmax-transformed inputs
+        super(LogitAUC, self).update_state(
+            y_true=y_true,
+            y_pred=tf.keras.activations.softmax(y_pred),
+            sample_weight=sample_weight,
+        )
+
+
+def majority_classifier_acc(y_true, y_pred):
+    """
+    Helper metric function for computing the accuracy that a majority class
+    predictor would obtain with the provided labels.
+    """
+    distr = tf.math.reduce_sum(y_true, axis=0)
+    return tf.math.reduce_max(distr) / tf.math.reduce_sum(y_true)
+
+################################################################################
+## Model Definition
+################################################################################
+
+
 def model_fn(
     input_features,
     layer_units,
     num_outputs,
     activation="tanh",
-    optimizer=None
+    optimizer=None,
+    last_activation="sigmoid",
+    loss_function="sigmoid_xentr",
 ):
+    """
+    Model function to construct our TF model for learning our given task.
+
+    :param int input_features: the number of features our network consumes.
+    :param List[int] layer_units: The number of units in each hidden layer.
+    :param int num_outputs: The number of outputs in our network.
+    :param [str | function] activation: Valid keras activation function name or
+        actual function to use as activation between hidden layers.
+    :param [str | tf.keras.Optimizer] optimizer: Optimizer to be used for
+        training.
+    :param str last_activation: valid keras activation to be used
+        as our last layer's activation. For now, we only support "softmax" or
+        "sigmoid".
+    :param str loss_function: valid keras loss function to be used
+        after our last layer. This will define the used loss. For
+        now, we only support "softmax_xentr" or "sigmoid_xentr".
+
+    :returns tf.keras.Model: Compiled model for training and evaluation.
+    """
+
     # Input layer.
     # NOTE: it is very important to have an explicit Input layer for now rather
     # than using a Sequential model. Otherwise, we will not be able to pick
@@ -33,28 +91,70 @@ def model_fn(
     # And our output layer map
     net = tf.keras.layers.Dense(
         num_outputs,
-        # It is crucial that the last activation of this layer is set
-        # to sigmoid even though this makes it less stable when training
-        # (rather than using from_logits=False in the loss).
-        # The reason why this is needed is because when we iterate over our
-        # algorithm, we assume the last layer has a valid probability
-        # distribution
-        activation="sigmoid",
         name="output_dense",
+        # If the last activation is a part of the loss, then we will go ahead
+        # and merge them for numerical stability. Else, let's explicitly mark
+        # it here.
+        activation=(
+            None if (last_activation in loss_function) else last_activation
+        ),
     )(net)
 
     # Compile Model
     model = tf.keras.models.Model(inputs=input_layer, outputs=net)
     optimizer = optimizer or tf.keras.optimizers.Adam(learning_rate=0.001)
+    if loss_function == "softmax_xentr":
+        loss = tf.keras.losses.CategoricalCrossentropy(
+            from_logits=(last_activation in loss_function),
+        )
+    elif loss_function == "sigmoid_xentr":
+        loss = tf.keras.losses.BinaryCrossentropy(
+            from_logits=(last_activation in loss_function),
+        )
+    else:
+        raise ValueError(
+            f"Unsupported loss {loss_function}. We currently only support "
+            "softmax_xentr and softmax_xentr"
+        )
+
     model.compile(
-        loss=tf.keras.losses.CategoricalCrossentropy(),
+        loss=loss,
         optimizer=optimizer,
         metrics=[
-            tf.keras.metrics.AUC(),
+            (
+                LogitAUC(name='AUC') if (last_activation in loss_function)
+                else tf.keras.metrics.AUC()
+            ),
             'accuracy',
+            majority_classifier_acc,
         ]
     )
     return model
+
+################################################################################
+## Helper functions
+################################################################################
+
+
+def load_model(path):
+    """
+    Wrapper around tf.keras.models.load_model that includes all custom layers
+    and metrics we are including in our model when serializing.
+
+    :param str path: The path of the model checkpoint we want to load.
+    :returns tf.keras.Model: Model object corresponding to loaded checkpoint.
+    """
+    return tf.keras.models.load_model(
+        path,
+        custom_objects={
+            "LogitAUC": LogitAUC,
+            "majority_classifier_acc": majority_classifier_acc,
+        },
+    )
+
+################################################################################
+## Model Train Loop
+################################################################################
 
 
 def build_and_train_model(
@@ -67,19 +167,28 @@ def build_and_train_model(
     with_best_initilisation=False,
 ):
     """
+    Builds and train our model with the given train data. Evaluates the model
+    using the given test data and it serializes the model's checkpoint to
+    the provided path.
 
-    Args:
-        X_train:
-        y_train:
-        X_test:
-        y_test:
-        model_file_path: path to store trained nn model
-        with_best_initilisation: if true, use initialisation saved as
-            best_initialisation.h5
+    Returns metrics collected at test time.
 
-    Returns:
-        model_accuracy: accuracy of nn model
-        nn_predictions: predictions made by nn used for rule extraction
+    :param np.array X_train: 2D array of training data points.
+    :param np.array y_train: 1D array with as many points as X_train containing
+        the training labels for each point.
+    :param np.array X_test: 2D array of testing data points.
+    :param np.array y_test: 1D array with as many points as X_test containing
+        the testing labels for each point.
+    :param ExperimentManager manager: Experiment manager for handling file
+        generation during our run.
+    :param str model_file_path: A valid path to use for dumping our trained
+        model's checkpoint.
+    :param bool with_best_initilisation: if True, then we will attempt to
+        initialise our model using the best initialisation as dictated by
+        the Experiment manager. Otherwise we will use a random initialisation.
+
+    :returns Tuple[int, int, int]: A tuple containing the test accuracy, test
+        AUC, and majority classifier test accuracy for the given test data.
     """
     hyperparams = manager.HYPERPARAMS
 
@@ -102,7 +211,7 @@ def build_and_train_model(
             f'Training neural network with best initialisation from path: '
             f'{manager.BEST_NN_INIT_FP}'
         )
-        model = tf.keras.models.load_model(manager.BEST_NN_INIT_FP)
+        model = load_model(manager.BEST_NN_INIT_FP)
     else:
         # Build and initialise new model
         logging.debug('Training neural network with new random initialisation')
@@ -110,6 +219,8 @@ def build_and_train_model(
             input_features=X_train.shape[-1],
             layer_units=hyperparams["layer_units"],
             num_outputs=manager.DATASET_INFO.n_outputs,
+            last_activation=hyperparams.get("last_activation", "softmax"),
+            activation=hyperparams.get("activation", "tanh"),
         )
         model.save(os.path.join(manager.TEMP_DIR, 'initialisation.h5'))
 
@@ -132,7 +243,7 @@ def build_and_train_model(
     )
 
     # Evaluate Accuracy of the Model
-    _, nn_auc, nn_accuracy = model.evaluate(
+    _, nn_auc, nn_accuracy, maj_class_acc = model.evaluate(
         X_test,
         y_test,
         verbose=(
@@ -143,4 +254,4 @@ def build_and_train_model(
     # Save Trained Model
     model.save(model_file_path)
 
-    return nn_accuracy, nn_auc
+    return nn_accuracy, nn_auc, maj_class_acc

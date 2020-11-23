@@ -128,7 +128,7 @@ def run(
                 # Model to be stored in
                 # <dataset name>\cross_validation\<n>_folds\trained_models\
                 model_file_path = manager.n_fold_model_fp(fold)
-                acc, auc = build_and_train_model(
+                acc, auc, maj_class_acc = build_and_train_model(
                     X_train=X_train,
                     y_train=y_train,
                     X_test=X_test,
@@ -143,5 +143,6 @@ def run(
                 ]:
                     pbar.write(
                         f'Test accuracy for fold {fold + 1}/{manager.N_FOLDS} '
-                        f'is {acc} and AUC is {auc}'
+                        f'is {acc}, AUC is {auc}, and majority class accuracy '
+                        f'is {maj_class_acc}.'
                     )

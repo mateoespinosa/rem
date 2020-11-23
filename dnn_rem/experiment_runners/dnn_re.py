@@ -3,11 +3,12 @@ Runner of our DNN rule extraction algorithm. Collects statistics to be
 reported to caller.
 """
 
-from tensorflow.keras.models import load_model
 from tensorflow.keras.utils import to_categorical
 import logging
-import tracemalloc
 import time
+import tracemalloc
+
+from dnn_rem.model_training.build_and_train_model import load_model
 
 
 def run(
@@ -44,7 +45,7 @@ def run(
 
     # Time to load up our model
     model = load_model(model_file_path)
-    _, _, nn_accuracy = model.evaluate(
+    _, _, nn_accuracy, _ = model.evaluate(
         X_test,
         to_categorical(y_test),
         verbose=(
