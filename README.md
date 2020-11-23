@@ -25,7 +25,7 @@ Once you have installed R, you will also need to have the following packages ins
 - `partykit`
 - `Formula`
 - `libcoin`
-- `mutnorm`
+- `mvtnorm`
 - `inum`
 
 If you have all of these, then you can install our code as a Python package using pip as follows:
