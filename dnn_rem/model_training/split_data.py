@@ -9,11 +9,11 @@ import pandas as pd
 import pathlib
 
 
-def save_split_indices(train_index, test_index, file_path):
+def save_split_indices(train_indices, test_indices, file_path):
     """
     Args:
-        train_index: List of train indices of data
-        test_index: List of test indices of data
+        train_indices: List of train indices of data
+        test_indices: List of test indices of data
         file_path: File to save split indices
 
     Write list of indices to split_indices.txt
@@ -28,22 +28,28 @@ def save_split_indices(train_index, test_index, file_path):
     """
     with open(file_path, 'a') as file:
         file.write(
-            'train ' + ' '.join([str(index) for index in train_index]) + '\n'
+            'train ' + ' '.join([str(index) for index in train_indices]) + '\n'
         )
         file.write(
-            'test ' + ' '.join([str(index) for index in test_index]) + '\n'
+            'test ' + ' '.join([str(index) for index in test_indices]) + '\n'
         )
 
 
-def load_split_indices(file_path, fold_index=0):
+def apply_split_indices(
+    X,
+    y,
+    file_path,
+    preprocess=None,
+    fold_index=0,
+):
     """
     Args:
         file_path: path to split indices file
         fold_index: index of the fold whose train and test indices you want
 
     Returns:
-        train_index: list of integer indices for train data
-        test_index: list of integer indices for test data
+        train_indices: list of integer indices for train data
+        test_indices: list of integer indices for test data
 
     File of the form
     train 0 1 0 2 ...
@@ -58,16 +64,26 @@ def load_split_indices(file_path, fold_index=0):
             f'Error: not enough information in fold indices file '
             f'{len(lines)} < {(2 * fold_index)}'
         )
-        train_index = lines[(fold_index * 2)].split(' ')[1:]
-        test_index = lines[(fold_index * 2) + 1].split(' ')[1:]
+        train_indices = lines[(fold_index * 2)].split(' ')[1:]
+        test_indices = lines[(fold_index * 2) + 1].split(' ')[1:]
 
     # Convert string indices to ints
-    return list(map(int, train_index)), list(map(int, test_index))
+    train_indices = list(map(int, train_indices))
+    test_indices = list(map(int, test_indices))
+    X_train, y_train = X[train_indices], y[train_indices]
+    X_test, y_test = X[test_indices], y[test_indices]
+
+    # And do any required preprocessing we may need to do to the
+    # data now that it has been partitioned (to avoid information
+    # leakage in data-dependent preprocessing passes)
+    if preprocess:
+        X_train, y_train = preprocess(X_train, y_train)
+        X_test, y_test = preprocess(X_test, y_test)
+    return X_train, y_train, X_test, y_test
 
 
 def stratified_k_fold(X, y, n_folds, manager):
     """
-
     Args:
         X: input features
         y: target
@@ -75,6 +91,7 @@ def stratified_k_fold(X, y, n_folds, manager):
 
     Split data into folds and saves indices in to data_split_indices.txt
     """
+
     # Make directory for
     # Create directory: cross_validation/<n>_folds/
     os.makedirs(manager.N_FOLD_CV_DP, exist_ok=True)
@@ -96,24 +113,28 @@ def stratified_k_fold(X, y, n_folds, manager):
         partition = ShuffleSplit(
             n_splits=1,
             test_size=manager.PERCENT_TEST_DATA,
-            random_state=42
+            random_state=42,
         )
-        train_index, test_index = next(partition.split(X, y))
+        train_indices, test_indices = next(partition.split(X, y))
         save_split_indices(
-            train_index=train_index,
-            test_index=test_index,
+            train_indices=train_indices,
+            test_indices=test_indices,
             file_path=manager.N_FOLD_CV_SPLIT_INDICIES_FP,
         )
         return
 
     # Split data
-    skf = StratifiedKFold(n_splits=n_folds, shuffle=True, random_state=12345)
+    skf = StratifiedKFold(
+        n_splits=n_folds,
+        shuffle=True,
+        random_state=42,
+    )
 
     # Save indices
-    for train_index, test_index in skf.split(X, y):
+    for train_indices, test_indices in skf.split(X, y):
         save_split_indices(
-            train_index=train_index,
-            test_index=test_index,
+            train_indices=train_indices,
+            test_indices=test_indices,
             file_path=manager.N_FOLD_CV_SPLIT_INDICIES_FP,
         )
 
@@ -141,12 +162,16 @@ def train_test_split(X, y, manager, test_size=0.2):
     open(manager.NN_INIT_SPLIT_INDICES_FP, 'w').close()
 
     # Split data
-    rs = ShuffleSplit(n_splits=2, test_size=test_size, random_state=42)
+    rs = ShuffleSplit(
+        n_splits=2,
+        test_size=test_size,
+        random_state=42,
+    )
 
-    for train_index, test_index in rs.split(X):
+    for train_indices, test_indices in rs.split(X):
         save_split_indices(
-            train_index=train_index,
-            test_index=test_index,
+            train_indices=train_indices,
+            test_indices=test_indices,
             file_path=manager.NN_INIT_SPLIT_INDICES_FP,
         )
 

@@ -157,21 +157,18 @@ def load_model(path):
 ################################################################################
 
 
-def build_and_train_model(
+def run_train_loop(
     X_train,
     y_train,
     X_test,
     y_test,
     manager,
-    model_file_path,
     with_best_initilisation=False,
 ):
     """
     Builds and train our model with the given train data. Evaluates the model
-    using the given test data and it serializes the model's checkpoint to
-    the provided path.
-
-    Returns metrics collected at test time.
+    using the given test data and returns the trained model together with some
+    metrics collected at test time.
 
     :param np.array X_train: 2D array of training data points.
     :param np.array y_train: 1D array with as many points as X_train containing
@@ -181,14 +178,13 @@ def build_and_train_model(
         the testing labels for each point.
     :param ExperimentManager manager: Experiment manager for handling file
         generation during our run.
-    :param str model_file_path: A valid path to use for dumping our trained
-        model's checkpoint.
     :param bool with_best_initilisation: if True, then we will attempt to
         initialise our model using the best initialisation as dictated by
         the Experiment manager. Otherwise we will use a random initialisation.
 
-    :returns Tuple[int, int, int]: A tuple containing the test accuracy, test
-        AUC, and majority classifier test accuracy for the given test data.
+    :returns Tuple[Keras.Model, int, int, int]: A tuple containing the
+        trained Keras model, test accuracy, test AUC, and majority classifier
+        test accuracy for the given test data.
     """
     hyperparams = manager.HYPERPARAMS
 
@@ -222,7 +218,6 @@ def build_and_train_model(
             last_activation=hyperparams.get("last_activation", "softmax"),
             activation=hyperparams.get("activation", "tanh"),
         )
-        model.save(os.path.join(manager.TEMP_DIR, 'initialisation.h5'))
 
     # If on debug mode, then let's look at the architecture of the model we
     # are about to train
@@ -251,7 +246,4 @@ def build_and_train_model(
         ),
     )
 
-    # Save Trained Model
-    model.save(model_file_path)
-
-    return nn_accuracy, nn_auc, maj_class_acc
+    return model, nn_accuracy, nn_auc, maj_class_acc

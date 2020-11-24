@@ -1,10 +1,14 @@
 #!/usr/bin/env python3
+"""
+Executable script for running different experiments with our rule extraction
+methods. Calls the backend code in dnn_rem and displays/serializes it as tables
+for analysis.
+"""
 
 import argparse
 import logging
 import os
 import sys
-import time
 import warnings
 import yaml
 
@@ -12,7 +16,6 @@ import yaml
 from dnn_rem.model_training import generate_data
 from dnn_rem.model_training.split_data import load_data
 from dnn_rem.experiment_runners.cross_validation import cross_validate_re
-from dnn_rem.experiment_runners import dnn_re
 from dnn_rem.experiment_runners.manager import ExperimentManager
 
 
@@ -104,17 +107,6 @@ def build_parser():
 
     )
     parser.add_argument(
-        '--tmp_dir',
-        default=None,
-        help=(
-            "temporary directory to use for scratch work. If not provided, "
-            "then we will instantiate our own temporary directory to be "
-            "removed at the end of the program's execution."
-        ),
-        metavar="path",
-
-    )
-    parser.add_argument(
         "-d",
         "--debug",
         action="store_true",
@@ -201,51 +193,28 @@ def main():
         config["initialisation_trials"] = args.initialisation_trials
     if args.output_dir is not None:
         config["output_dir"] = args.output_dir
-    if args.tmp_dir is not None:
-        config["tmp_dir"] = args.tmp_dir
 
     # Time to initialize our experiment manager
-    manager = ExperimentManager(config)
-    if args.tmp_dir is None:
-        # Then report which directory we will be using during debug
-        logging.debug(
-            f"Using {manager.TEMP_DIR} as our temporary directory..."
+    with ExperimentManager(config) as manager:
+        # use that to open up our dataset
+        X, y = load_data(manager.DATASET_INFO, manager.DATA_FP)
+        # Generate our neural network, train it, and then extract the ruleset
+        # that approximates it from it
+        generate_data.run(
+            X=X,
+            y=y,
+            manager=manager,
+            use_grid_search=args.grid_search,
+            find_best_initialisation=(manager.INITIALISATION_TRIALS > 1),
+            generate_fold_data=True,
         )
 
-    # use that to open up our dataset
-    X, y = load_data(manager.DATASET_INFO, manager.DATA_FP)
-    # And do any required preprocessing
-    if manager.DATASET_INFO.preprocessing:
-        X, y = manager.DATASET_INFO.preprocessing(X, y)
-
-    start_time = time.time()
-    # Generate our neural network, train it, and then extract the ruleset that
-    # approximates it from it
-    generate_data.run(
-        X=X,
-        y=y,
-        manager=manager,
-        use_grid_search=args.grid_search,
-        find_best_initialisation=(manager.INITIALISATION_TRIALS > 1),
-        generate_fold_data=True,
-    )
-
-    # Perform n fold cross validated rule extraction on the dataset
-    cross_validate_re(
-        X=X,
-        y=y,
-        manager=manager,
-    )
-    end_time = time.time()
-
-    # And let's the user know we are done with the current experiment
-    print(
-        "~" * 20,
-        "Experiment successfully terminated after",
-        round(end_time - start_time, 3),
-        "seconds",
-        "~" * 20,
-    )
+        # Perform n fold cross validated rule extraction on the dataset
+        cross_validate_re(
+            X=X,
+            y=y,
+            manager=manager,
+        )
 
     # And that's all folks
     return 0

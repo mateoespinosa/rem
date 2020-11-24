@@ -16,18 +16,20 @@ from tqdm import tqdm
 
 from dnn_rem.evaluate_rules.evaluate import evaluate
 from . import split_data
-from .build_and_train_model import build_and_train_model, load_model
-from dnn_rem.experiment_runners import dnn_re
+from .build_and_train_model import run_train_loop, load_model
 
 
 def run(X, y, manager):
-    train_index, test_index = split_data.load_split_indices(
+    # Split data. Note that we WILL NOT use our test data at all for this given
+    # that that would imply data leakage into our training loop. Ideally this
+    # should be done with a validation set rather than with the training set
+    # itself.
+    X_train, y_train, _, _ = split_data.apply_split_indices(
+        X=X,
+        y=y,
         file_path=manager.NN_INIT_SPLIT_INDICES_FP,
+        preprocess=manager.DATASET_INFO.preprocessing,
     )
-
-    # Split data
-    X_train, y_train = X[train_index], y[train_index]
-    X_test, y_test = X[test_index], y[test_index]
 
     # Save information about nn initialisation
     if not os.path.exists(manager.NN_INIT_RE_RESULTS_FP):
@@ -36,14 +38,13 @@ def run(X, y, manager):
             index=False,
         )
 
-    # Path to trained neural network
-    model_file_path = os.path.join(manager.TEMP_DIR, 'model.h5')
-
     # Smallest ruleset i.e. total number of rules
     smallest_ruleset_size = np.float('inf')
     smallest_ruleset_acc = 0
     best_init_index = 0
 
+    # We will store all results in a table for later analysis
+    results_df = pd.DataFrame(data=[], columns=['fold'])
     with tqdm(
         range(manager.INITIALISATION_TRIALS),
         desc="Finding best initialization"
@@ -54,14 +55,18 @@ def run(X, y, manager):
                 f'{manager.INITIALISATION_TRIALS}'
             )
 
+            ####################################################################
+            ## NEURAL NETWORK TRAIN + EVALUATION
+            ####################################################################
+
             # Build and train nn put it in temp/
-            nn_accuracy, nn_auc, maj_class_acc = build_and_train_model(
+            model, nn_accuracy, nn_auc, maj_class_acc = run_train_loop(
                 X_train=X_train,
                 y_train=y_train,
-                X_test=X_test,
-                y_test=y_test,
+                # Validate on our training data itself
+                X_test=X_train,
+                y_test=y_train,
                 manager=manager,
-                model_file_path=model_file_path,
                 with_best_initilisation=False,
             )
             if logging.getLogger().getEffectiveLevel() not in [
@@ -70,19 +75,20 @@ def run(X, y, manager):
             ]:
                 pbar.write(
                     f"Test accuracy for initialisation {i + 1}/"
-                    f"{manager.INITIALISATION_TRIALS} is {nn_accuracy}, "
-                    f"AUC is {nn_auc}, and majority class accuracy "
-                    f"is {maj_class_acc}."
+                    f"{manager.INITIALISATION_TRIALS} is "
+                    f"{round(nn_accuracy, 3)}, "
+                    f"AUC is {round(nn_auc, 3)}, and majority class accuracy "
+                    f"is {round(maj_class_acc, 3)}."
                 )
 
-            # Extract rules
-            _, rules, re_time, _ = dnn_re.run(
-                X_train=X_train,
-                y_train=y_train,
-                X_test=X_test,
-                y_test=y_test,
-                manager=manager,
-                model_file_path=model_file_path,
+            ####################################################################
+            ## RULE EXTRACTION + EVALUATION
+            ####################################################################
+
+            rules, re_time, _ = manager.resource_compute(
+                function=manager.RULE_EXTRACTOR.run,
+                model=model,
+                train_data=X_train,
                 # Lower our verbosity level for the purpose of not having the
                 # bar being printed twice
                 verbosity=(
@@ -92,36 +98,47 @@ def run(X, y, manager):
                 ),
             )
 
-            # Save labels to labels.csv:
-            # label - True data labels
-            label_data = {
-                'id': test_index,
-                'true_labels': y_test,
-            }
-            # label - Neural network data labels. Use NN to predict X_test
-            nn_model = load_model(model_file_path)
-            nn_predictions = np.argmax(nn_model.predict(X_test), axis=1)
-            label_data['nn_labels'] = nn_predictions
-            # label - Rule extraction labels
-            rule_predictions = rules.predict(X_test)
-            label_data[
-                f'rule_{manager.RULE_EXTRACTOR.mode}_labels'
-            ] = rule_predictions
-            pd.DataFrame(data=label_data).to_csv(manager.LABEL_FP, index=False)
+            re_results = evaluate(
+                rules=rules,
+                # Validate on our training data itself
+                X_test=X_train,
+                y_test=y_train,
+                high_fidelity_predictions=np.argmax(
+                    model.predict(X_train),
+                    axis=1
+                ),
+            )
+
+            ####################################################################
+            ## BEST MODEL SELECTION
+            ####################################################################
+
+            # If this initialisation extracts a smaller ruleset - save it
+            ruleset_size = sum(re_results['n_rules_per_class'])
+            if (ruleset_size < smallest_ruleset_size) or (
+                (ruleset_size == smallest_ruleset_size) and
+                (re_results['acc'] > smallest_ruleset_acc)
+            ):
+                smallest_ruleset_size = ruleset_size
+                smallest_ruleset_acc = re_results['acc']
+                best_init_index = i
+
+                # Save initilisation as best_initialisation.h5
+                model.save(manager.BEST_NN_INIT_FP)
+
+            ####################################################################
+            ## RESULT SUMMARY
+            ####################################################################
 
             # Save rule extraction time and memory usage
-            results_df = pd.read_csv(manager.NN_INIT_RE_RESULTS_FP)
             results_df.loc[i, 'run'] = i
             results_df.loc[i, 're_time (sec)'] = re_time
-
-            re_results = evaluate(rules=rules, manager=manager)
             results_df.loc[i, 'nn_acc'] = nn_accuracy
             results_df.loc[i, 're_acc'] = re_results['acc']
             results_df.loc[i, 're_fid'] = re_results['fid']
             results_df.loc[i, 'rules_num'] = sum(
                 re_results['n_rules_per_class']
             )
-
             results_df["run"] = results_df["run"].astype(int)
             results_df["nn_acc"] = results_df["nn_acc"].round(3)
             results_df["re_acc"] = results_df["re_acc"].round(3)
@@ -138,24 +155,10 @@ def run(X, y, manager):
                 "rules_num"
             ]]
 
-            results_df.to_csv(manager.NN_INIT_RE_RESULTS_FP, index=False)
-
-            # If this initialisation extracts a smaller ruleset - save it
-            ruleset_size = sum(re_results['n_rules_per_class'])
-            if (ruleset_size < smallest_ruleset_size) or (
-                (ruleset_size == smallest_ruleset_size) and
-                (re_results['acc'] > smallest_ruleset_acc)
-            ):
-                smallest_ruleset_size = ruleset_size
-                smallest_ruleset_acc = re_results['acc']
-                best_init_index = i
-
-                # Save initilisation as best_initialisation.h5
-                load_model(
-                    os.path.join(manager.TEMP_DIR, 'initialisation.h5')
-                ).save(manager.BEST_NN_INIT_FP)
-
+        # Serialize table of results
+        results_df.to_csv(manager.NN_INIT_RE_RESULTS_FP, index=False)
         pbar.set_description("Done finding best initialisation")
+
     logging.debug(
         f'Found neural network with the best initialisation '
         f'at index {best_init_index} and saved in path '

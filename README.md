@@ -50,7 +50,7 @@ $python run_experiment.py --help
 usage: run_experiment.py [-h] [--config file.yaml] [--folds N]
                          [--initialisation_trials N] [--dataset_name name]
                          [--dataset_file data.cvs] [--rule_extractor name]
-                         [--grid_search] [--output_dir path] [--tmp_dir path]
+                         [--grid_search] [--output_dir path]
                          [-d]
 
 Process some integers.
@@ -84,10 +84,6 @@ optional arguments:
                         directory where we will dump our experiment's results.
                         If not given, then we will use the same directory as
                         our dataset.
-  --tmp_dir path        temporary directory to use for scratch work. If not
-                        provided, then we will instantiate our own temporary
-                        directory to be removed at the end of the program's
-                        execution.
   -d, --debug           starts debug mode in our program.
 ```
 

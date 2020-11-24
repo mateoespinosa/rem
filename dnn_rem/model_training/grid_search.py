@@ -6,6 +6,7 @@ import logging
 import tensorflow as tf
 
 from .build_and_train_model import model_fn
+from . import split_data
 
 
 def load_best_params(best_params_file):
@@ -31,6 +32,15 @@ def grid_search(X, y, manager):
 
     Perform a 5-folded grid search over the neural network hyper-parameters
     """
+
+    # Make sure we DO NOT look into our test data when doing this grid search:
+    X_train, y_train, _, _ = split_data.apply_split_indices(
+        X=X,
+        y=y,
+        file_path=manager.NN_INIT_SPLIT_INDICES_FP,
+        preprocess=manager.DATASET_INFO.preprocessing,
+    )
+
     batch_size = [16, 32, 64, 128]
     epochs = [50, 100, 150, 200]
     layer_1 = [128, 64, 32, 16]
@@ -55,7 +65,7 @@ def grid_search(X, y, manager):
             int(logging.getLogger().getEffectiveLevel() == logging.DEBUG)
         ),
     )
-    grid_result = grid.fit(X, tf.keras.utils.to_categorical(y))
+    grid_result = grid.fit(X_train, tf.keras.utils.to_categorical(y_train))
 
     # Write best results to file
     with open(manager.NN_INIT_GRID_RESULTS_FP, 'w') as file:

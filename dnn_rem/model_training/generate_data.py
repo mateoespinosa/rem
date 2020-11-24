@@ -14,11 +14,11 @@ import os
 import pandas as pd
 
 from . import find_best_nn_initialisation
-from .build_and_train_model import build_and_train_model
+from .build_and_train_model import run_train_loop
 from .grid_search import (
     grid_search as grid_search_fn, load_best_params
 )
-from .split_data import load_split_indices
+from .split_data import apply_split_indices
 from . import split_data as split_data_fn
 
 
@@ -101,12 +101,13 @@ def run(
                 )
 
                 # Split data using precomputed split indices
-                train_index, test_index = load_split_indices(
-                    manager.N_FOLD_CV_SPLIT_INDICIES_FP,
+                X_train, y_train, X_test, y_test = apply_split_indices(
+                    X=X,
+                    y=y,
+                    file_path=manager.N_FOLD_CV_SPLIT_INDICIES_FP,
                     fold_index=fold,
+                    preprocess=manager.DATASET_INFO.preprocessing,
                 )
-                X_train, y_train = X[train_index], y[train_index]
-                X_test, y_test = X[test_index], y[test_index]
 
                 np.save(
                     manager.N_FOLD_CV_SPLIT_X_train_data_FP(fold),
@@ -125,18 +126,19 @@ def run(
                     y_test,
                 )
 
-                # Model to be stored in
-                # <dataset name>\cross_validation\<n>_folds\trained_models\
-                model_file_path = manager.n_fold_model_fp(fold)
-                acc, auc, maj_class_acc = build_and_train_model(
+                # Actually build and train the model
+                model, acc, auc, maj_class_acc = run_train_loop(
                     X_train=X_train,
                     y_train=y_train,
                     X_test=X_test,
                     y_test=y_test,
                     manager=manager,
-                    model_file_path=model_file_path,
                     with_best_initilisation=find_best_initialisation,
                 )
+
+                # And serialize model in
+                # <dataset name>\cross_validation\<n>_folds\trained_models\
+                model.save(manager.n_fold_model_fp(fold))
                 if logging.getLogger().getEffectiveLevel() not in [
                     logging.WARNING,
                     logging.ERROR

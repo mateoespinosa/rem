@@ -8,6 +8,8 @@ import os
 import pathlib
 import shutil
 import tempfile
+import time
+import tracemalloc
 
 from . import dataset_configs
 from dnn_rem.extract_rules.rem_d import extract_rules as rem_d
@@ -49,6 +51,9 @@ class ExperimentManager(object):
     """
 
     def __init__(self, config):
+
+        # Some hidden state for management purposes only
+        self._start_time = time.time()
 
         # Validate our provided config
         self.validate_config_object(config)
@@ -171,15 +176,6 @@ class ExperimentManager(object):
             'best_initialisation.h5'
         )
 
-        # Store temporary files during program execution. If an explicit
-        # temporary directory is not provided, then we will make our own
-        self.TEMP_DIR = config.get(
-            'tmp_dir',
-            tempfile.mkdtemp()
-        )
-        os.makedirs(self.TEMP_DIR, exist_ok=True)
-        self.LABEL_FP = os.path.join(self.TEMP_DIR, 'labels.csv')
-
         n_fold_rules_dir = os.path.join(
             self.N_FOLD_CV_DP,
             'rule_extraction/MOD_DecisionTree',
@@ -284,6 +280,7 @@ class ExperimentManager(object):
         Enter code. Nothing to do here specifically as all the setup is
         done in our initializer
         """
+        self._start_time = time.time()
         return self
 
     def __exit__(self, exc_type, exc_value, exc_traceback):
@@ -291,10 +288,47 @@ class ExperimentManager(object):
         Safe exit code from our experiment execution. Make sure
         we remove our temporary folders as soon as we are out.
         """
-        print("~~~~~~~ EXPERIMENT CONCLUDED ~~~~~~~")
-        self.stream.close()
-        if os.path.exists(self.TEMP_DIR) and os.path.isdir(self.TEMP_DIR):
-            shutil.rmtree(self.TEMP_DIR)
+        print(
+            "~" * 20,
+            "Experiment successfully terminated after",
+            round(time.time() - self._start_time, 3),
+            "seconds",
+            "~" * 20,
+        )
+
+    def resource_compute(self, function, *args, **kwargs):
+        """
+        Evaluates function(*args, **kwargs) and returns the time and memory
+        consumption of that evaluation.
+
+        :param fun function: An arbitrary function to run with arguments
+            *args and **kwargs.
+        :param List[Any] args: Positional arguments for the provided function.
+        :param Dictionary[str, Any] kwargs: Key-worded arguments to the provided
+            function.
+
+        :returns Tuple[Any, float, float]: Tuple (call_results, time, memory)
+            where `results` are the results of calling
+            function(*args, **kwargs), time is the time it took for executing
+            that function in seconds, and memory is the total memory consumption
+            for that function in MB.
+
+        """
+
+        # Start our clock and memory handlers
+        start_time = time.time()
+        tracemalloc.start()
+
+        # Run the function
+        result = function(*args, **kwargs)
+
+        # And compute memory usage
+        memory, peak = tracemalloc.get_traced_memory()
+        # Tracemalloc reports memory in Kibibytes, so let's change it to MB
+        memory = memory * (1024 / 1000000)
+        tracemalloc.stop()
+
+        return result, (time.time() - start_time), memory
 
     @staticmethod
     def validate_config_object(config):
@@ -303,7 +337,7 @@ class ExperimentManager(object):
         Makes sure all required fields are provided and that they have
         sensible values. If this is not the case, then a ValueError will be
         thrown.
-
+f
         If this grows too much, I strongly suggest moving to (a) either move
         to protobuf or (b) use external packages to perform schema validation.
 
