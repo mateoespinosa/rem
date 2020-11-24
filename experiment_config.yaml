@@ -30,8 +30,9 @@ hyperparameters:
     loss_function: "softmax_xentr"
 
 # How many trials we will attempt for finding our best initialisation. If not
-# provided, then we will use a random initialisation at train time.
-initialisation_trials: 5
+# provided or less than or equal to 1, then we will use a random initialisation
+# at train time.
+initialisation_trials: 1
 
 # The rule extractor we will use. If not provided, it defaults to REM-D.
 rule_extractor: "REM-D"

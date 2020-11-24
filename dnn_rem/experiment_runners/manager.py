@@ -4,10 +4,13 @@ rule generation algorithm.
 """
 
 from collections import namedtuple
+import numpy as np
 import os
 import pathlib
+import random
 import shutil
 import tempfile
+import tensorflow as tf
 import time
 import tracemalloc
 
@@ -53,7 +56,8 @@ class ExperimentManager(object):
     def __init__(self, config):
 
         # Some hidden state for management purposes only
-        self._start_time = time.time()
+        self._start_time = time.time()  # For timing purposes
+        self._previous_seed = os.environ.get('PYTHONHASHSEED')
 
         # Validate our provided config
         self.validate_config_object(config)
@@ -80,6 +84,9 @@ class ExperimentManager(object):
         self.RULE_EXTRACTOR = self.get_rule_extractor(
             config.get("rule_extractor", "rem_d")
         )
+
+        # A random seed to use for deterministic training
+        self.RANDOM_SEED = config.get("random_seed", time.time())
 
         # Where all our results will be dumped. If not provided as part of the
         # experiment's config, then we will use the same parent directory as the
@@ -277,17 +284,29 @@ class ExperimentManager(object):
 
     def __enter__(self):
         """
-        Enter code. Nothing to do here specifically as all the setup is
-        done in our initializer
+        Enter code. Setup any initial state that will be required for the
+        experiment to run as we want it to.
         """
         self._start_time = time.time()
+        # Save the previous seed in case we need to reset it
+        self._previous_seed = os.environ.get('PYTHONHASHSEED')
+        if self.RANDOM_SEED:
+            os.environ['PYTHONHASHSEED'] = str(self.RANDOM_SEED)
+            tf.random.set_seed(self.RANDOM_SEED)
+            np.random.seed(self.RANDOM_SEED)
+            random.seed(self.RANDOM_SEED)
         return self
 
     def __exit__(self, exc_type, exc_value, exc_traceback):
         """
         Safe exit code from our experiment execution. Make sure
-        we remove our temporary folders as soon as we are out.
+        we remove our temporary folders and/or state we changed as soon as we
+        are out.
         """
+        if  self.RANDOM_SEED and self._previous_seed:
+            # Then reset our environment
+            os.environ['PYTHONHASHSEED'] = self._previous_seed
+
         print(
             "~" * 20,
             "Experiment successfully terminated after",

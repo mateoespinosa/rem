@@ -113,7 +113,7 @@ def stratified_k_fold(X, y, n_folds, manager):
         partition = ShuffleSplit(
             n_splits=1,
             test_size=manager.PERCENT_TEST_DATA,
-            random_state=42,
+            random_state=manager.RANDOM_SEED,
         )
         train_indices, test_indices = next(partition.split(X, y))
         save_split_indices(
@@ -127,7 +127,7 @@ def stratified_k_fold(X, y, n_folds, manager):
     skf = StratifiedKFold(
         n_splits=n_folds,
         shuffle=True,
-        random_state=42,
+        random_state=manager.RANDOM_SEED,
     )
 
     # Save indices
@@ -165,7 +165,7 @@ def train_test_split(X, y, manager, test_size=0.2):
     rs = ShuffleSplit(
         n_splits=2,
         test_size=test_size,
-        random_state=42,
+        random_state=manager.RANDOM_SEED,
     )
 
     for train_indices, test_indices in rs.split(X):

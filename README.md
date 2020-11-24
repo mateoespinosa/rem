@@ -50,7 +50,7 @@ $python run_experiment.py --help
 usage: run_experiment.py [-h] [--config file.yaml] [--folds N]
                          [--initialisation_trials N] [--dataset_name name]
                          [--dataset_file data.cvs] [--rule_extractor name]
-                         [--grid_search] [--output_dir path]
+                         [--grid_search] [--output_dir path] [--randomize]
                          [-d]
 
 Process some integers.
@@ -84,6 +84,10 @@ optional arguments:
                         directory where we will dump our experiment's results.
                         If not given, then we will use the same directory as
                         our dataset.
+  --randomize, -r       If set, then the random seeds used in our execution
+                        will not be fixed and the experiment will be
+                        randomized. By default, otherwise, all experiments are
+                        run with the same seed for reproducibility.
   -d, --debug           starts debug mode in our program.
 ```
 

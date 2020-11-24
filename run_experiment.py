@@ -9,6 +9,7 @@ import argparse
 import logging
 import os
 import sys
+import time
 import warnings
 import yaml
 
@@ -107,6 +108,19 @@ def build_parser():
 
     )
     parser.add_argument(
+        '--randomize',
+        '-r',
+        default=False,
+        action="store_true",
+        help=(
+            "If set, then the random seeds used in our execution will not "
+            "be fixed and the experiment will be randomized. By default, "
+            "otherwise, all experiments are run with the same seed for "
+            "reproducibility."
+        ),
+
+    )
+    parser.add_argument(
         "-d",
         "--debug",
         action="store_true",
@@ -193,6 +207,12 @@ def main():
         config["initialisation_trials"] = args.initialisation_trials
     if args.output_dir is not None:
         config["output_dir"] = args.output_dir
+    if args.randomize:
+        # Then set the seed to be the current time
+        config["random_seed"] = time.time()
+    else:
+        # Else let's fix it to a the answer to the universe
+        config["random_seed"] = 42
 
     # Time to initialize our experiment manager
     with ExperimentManager(config) as manager:
