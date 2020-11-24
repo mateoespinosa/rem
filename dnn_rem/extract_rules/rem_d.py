@@ -234,7 +234,7 @@ def extract_rules(
                     )
                     if not new_rules:
                         pbar.write(
-                            f"[ERROR] Found an empty set of rules for "
+                            f"[WARNING] Found an empty set of rules for "
                             f"class {output_class} and layer {hidden_layer}"
                         )
                     layer_rulesets[hidden_layer].add_rules(new_rules)

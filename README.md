@@ -145,35 +145,30 @@ python run_experiment.py --config experiment_config.yaml
 
 If run successfully, then you should see an output similar to this one:
 ```bash
-python run_experiment.py --config experiment_config.yaml
-[WARNING] Splitting data.
-[INFO] Finding best initialisation
-Test accuracy for initialisation 1/5 is 0.9233038425445557 and AUC is 0.9656112194061279
-Test accuracy for initialisation 2/5 is 0.8318583965301514 and AUC is 0.8604171276092529
-Test accuracy for initialisation 3/5 is 0.8879055976867676 and AUC is 0.9349987506866455
-Test accuracy for initialisation 4/5 is 0.8495575189590454 and AUC is 0.8980691432952881
-Test accuracy for initialisation 5/5 is 0.9026548862457275 and AUC is 0.9716457724571228
-Testing initialisation 5/5: 100%|████████████████████████████████████████| 5/5 [17:49<00:00, 213.86s/it]
-Test accuracy for fold 1/5 is 0.9321534037590027 and AUC is 0.9734295606613159
-Test accuracy for fold 2/5 is 0.9233038425445557 and AUC is 0.9648411273956299
-Test accuracy for fold 3/5 is 0.7168141603469849 and AUC is 0.7427711486816406
-Test accuracy for fold 4/5 is 0.8967551589012146 and AUC is 0.9504833817481995
-Test accuracy for fold 5/5 is 0.7100591659545898 and AUC is 0.7786142230033875
-Training fold model 5/5: 100%|████████████████████████████████████████████| 5/5 [00:39<00:00,  7.88s/it]
-Done extracting rules from neural network: 100%|██████████████████████████| 6/6 [04:59<00:00, 49.85s/it]
-Done extracting rules from neural network: 100%|██████████████████████████| 6/6 [03:01<00:00, 30.24s/it]
-Done extracting rules from neural network: 100%|██████████████████████████| 6/6 [03:41<00:00, 37.00s/it]
-Done extracting rules from neural network: 100%|██████████████████████████| 6/6 [00:01<00:00,  3.71it/s]
-Done extracting rules from neural network: 100%|██████████████████████████| 6/6 [02:04<00:00, 20.79s/it]
-+------+-------------+----------------+-----------------------+------------------------+
-| Fold | NN Accuracy | REM-D Accuracy | Extraction Time (sec) | Extraction Memory (MB) |
-+------+-------------+----------------+-----------------------+------------------------+
-|  0   |   0.9322    |     0.9322     |       167.0129        |        77.4141         |
-|  1   |   0.9233    |     0.8997     |       174.9554        |        31.7227         |
-|  2   |   0.7168    |     0.6372     |       568.0429        |        32.0117         |
-|  3   |   0.8968    |     0.9086     |       176.3883        |        62.5468         |
-|  4   |   0.7101    |     0.6746     |       307.1780        |        49.75           |
-+------+-------------+----------------+-----------------------+------------------------+
+$ python run_experiment.py --config experiment_config.yaml
+Test accuracy for fold 1/5 is 0.8554572463035583, AUC is 0.9124920964241028, and majority class accuracy is 0.9176136255264282.
+Test accuracy for fold 2/5 is 0.8171091675758362, AUC is 0.9006099700927734, and majority class accuracy is 0.9098384976387024.
+Test accuracy for fold 3/5 is 0.9026548862457275, AUC is 0.9402720332145691, and majority class accuracy is 0.910885214805603.
+Test accuracy for fold 4/5 is 0.9410029649734497, AUC is 0.96855229139328, and majority class accuracy is 0.9069976210594177.
+Test accuracy for fold 5/5 is 0.9260355234146118, AUC is 0.9699852466583252, and majority class accuracy is 0.9154040813446045.
+
+Training fold model 5/5: 100%|█████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████| 5/5 [00:38<00:00,  7.71s/it]
+Done extracting rules from neural network: 100%|█████████████████████████████████████████████████████████████████████████████████████████████████████████| 6.0/6 [02:56<00:00, 29.45s/it]
+Done extracting rules from neural network: 100%|██████████████████████████████████████████████████████████████████████████████████████████▉| 5.999999999999998/6 [07:14<00:00, 72.45s/it]
+Done extracting rules from neural network: 100%|███████████████████████████████████████████████████████████████████████████████████████████| 6.000000000000001/6 [04:17<00:00, 42.85s/it]
+Done extracting rules from neural network: 100%|███████████████████████████████████████████████████████████████████████████████████████████| 6.000000000000001/6 [03:13<00:00, 32.20s/it]
+Done extracting rules from neural network: 100%|██████████████████████████████████████████████████████████████████████████████████████████▉| 5.999999999999999/6 [03:31<00:00, 35.32s/it]
++------+-------------+--------+----------------+-----------------------+------------------------+
+| Fold | NN Accuracy | NN AUC | REM-D Accuracy | Extraction Time (sec) | Extraction Memory (MB) |
++------+-------------+--------+----------------+-----------------------+------------------------+
+|  0   |    0.8171   | 0.8755 |     0.9027     |        176.8958       |       6506.4182        |
+|  1   |    0.8024   | 0.852  |     0.8555     |        434.8211       |        689.8995        |
+|  2   |    0.8968   | 0.9419 |     0.9086     |        257.264        |        438.4666        |
+|  3   |    0.8791   | 0.9269 |     0.8997     |        193.3199       |        465.877         |
+|  4   |    0.941    | 0.9702 |     0.8791     |        212.0598       |        477.1604        |
+| avg  |    0.8673   | 0.9133 |     0.8891     |        254.8721       |       1715.5643        |
++------+-------------+--------+----------------+-----------------------+------------------------+
+~~~~~~~~~~~~~~~~~~~~ Experiment successfully terminated after 1319.837 seconds ~~~~~~~~~~~~~~~~~~~~
 
 ```
 
