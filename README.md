@@ -146,11 +146,11 @@ python run_experiment.py --config experiment_config.yaml
 If run successfully, then you should see an output similar to this one:
 ```bash
 $ python run_experiment.py --config experiment_config.yaml
-Test accuracy for fold 1/5 is 0.8554572463035583, AUC is 0.9124920964241028, and majority class accuracy is 0.9176136255264282.
-Test accuracy for fold 2/5 is 0.8171091675758362, AUC is 0.9006099700927734, and majority class accuracy is 0.9098384976387024.
-Test accuracy for fold 3/5 is 0.9026548862457275, AUC is 0.9402720332145691, and majority class accuracy is 0.910885214805603.
-Test accuracy for fold 4/5 is 0.9410029649734497, AUC is 0.96855229139328, and majority class accuracy is 0.9069976210594177.
-Test accuracy for fold 5/5 is 0.9260355234146118, AUC is 0.9699852466583252, and majority class accuracy is 0.9154040813446045.
+Test accuracy for fold 1/5 is 0.855, AUC is 0.912, and majority class accuracy is 0.918.
+Test accuracy for fold 2/5 is 0.817, AUC is 0.901, and majority class accuracy is 0.91.
+Test accuracy for fold 3/5 is 0.903, AUC is 0.94, and majority class accuracy is 0.911.
+Test accuracy for fold 4/5 is 0.941, AUC is 0.969, and majority class accuracy is 0.907.
+Test accuracy for fold 5/5 is 0.926, AUC is 0.97, and majority class accuracy is 0.915.
 
 Training fold model 5/5: 100%|█████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████| 5/5 [00:38<00:00,  7.71s/it]
 Done extracting rules from neural network: 100%|█████████████████████████████████████████████████████████████████████████████████████████████████████████| 6.0/6 [02:56<00:00, 29.45s/it]
