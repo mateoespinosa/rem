@@ -45,8 +45,9 @@ def cross_validate_re(
         X_train, y_train, X_test, y_test = apply_split_indices(
             X=X,
             y=y,
-            file_path=manager.NN_INIT_SPLIT_INDICES_FP,
+            file_path=manager.N_FOLD_CV_SPLIT_INDICIES_FP,
             preprocess=manager.DATASET_INFO.preprocessing,
+            fold_index=fold,
         )
 
         # Path to neural network model for this fold

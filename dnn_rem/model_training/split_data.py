@@ -77,8 +77,12 @@ def apply_split_indices(
     # data now that it has been partitioned (to avoid information
     # leakage in data-dependent preprocessing passes)
     if preprocess:
-        X_train, y_train = preprocess(X_train, y_train)
-        X_test, y_test = preprocess(X_test, y_test)
+        X_train, y_train, X_test, y_test = preprocess(
+            X_train=X_train,
+            y_train=y_train,
+            X_test=X_test,
+            y_test=y_test,
+        )
     return X_train, y_train, X_test, y_test
 
 

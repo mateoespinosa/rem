@@ -63,37 +63,72 @@ DatasetMetaData = namedtuple(
 ## Helper Methods
 ################################################################################
 
-def unit_scale_preprocess(X, y):
+def unit_scale_preprocess(X_train, y_train, X_test=None, y_test=None):
     """
     Simple scaling preprocessing function to scale the X matrix so that all of
     it's features are in [0, 1]
 
-    :param np.array X: 2D matrix of data points to be used for training.
-    :param np.array y: 1D matrix of labels for the given data points.
-    :returns Tuple[np.array, np.array]: The new processed (X, y) data
+    :param np.array X_train: 2D matrix of data points to be used for training.
+    :param np.array y_train: 1D matrix of labels for the given training data
+        points.
+    :param np.array X_test: optional 2D matrix of data points to be used for
+        testing.
+    :param np.array y_test: optional 1D matrix of labels for the given testing
+        data points.
+    :returns Tuple[np.array, np.array]: The new processed (X_train, y_train)
+        data if not test data was provided. Otherwise it returns the processed
+        (X_train, y_train, X_test, y_test)
     """
     scaler = MinMaxScaler()
-    return scaler.fit_transform(X), y
+    X_train = scaler.fit_transform(X_train)
+    if X_test is not None:
+        X_test = scaler.transform(X_test)
+        return X_train, y_train, X_test, y_test
+    return X_train, y_train
 
 
-def replace_categorical_outputs(X, y, output_classes):
+def replace_categorical_outputs(
+    X_train,
+    y_train,
+    output_classes,
+    X_test=None,
+    y_test=None,
+):
     """
     Simple scaling preprocessing function to replace categorical values in the
-    given vector y with their numerical encodings.
+    given vector y_train with their numerical encodings.
 
-    :param np.array X: 2D matrix of data points to be used for training.
-    :param np.array y: 1D matrix of labels for the given data points.
+    :param np.array X_train: 2D matrix of data points to be used for training.
+    :param np.array y_train: 1D matrix of labels for the given training data
+        points.
     :param List[OutputClass]: list of possible output categorical classes in
-        vector y.
-    :returns Tuple[np.array, np.array]: The new processed (X, y) data
+        vector y_train.
+    :param np.array X_test: optional 2D matrix of data points to be used for
+        testing.
+    :param np.array y_test: optional 1D matrix of labels for the given testing
+        data points.
+    :returns Tuple[np.array, np.array]: The new processed (X_train, y_train)
+        data if not test data was provided. Otherwise it returns the processed
+        (X_train, y_train, X_test, y_test)
     """
     out_map = {
         c.name: c.encoding
         for c in output_classes
     }
-    for i, val in enumerate(y):
-        y[i] = out_map[val]
-    return X, y.astype(np.int32)
+    for i, val in enumerate(y_train):
+        y_train[i] = out_map[val]
+    if y_test is not None:
+        for i, val in enumerate(y_test):
+            y_test[i] = out_map[val]
+    if X_test is not None:
+        return (
+            X_train,
+            y_train.astype(np.int32),
+            X_test,
+            y_test.astype(np.int32),
+        )
+
+    return X_train, y_train.astype(np.int32)
 
 
 ################################################################################
@@ -169,14 +204,21 @@ def get_data_configuration(dataset_name):
             OutputClass(name='Versicolor', encoding=1),
             OutputClass(name='Virginica', encoding=2),
         )
+        # Helper method for preprocessing our data
+        def preprocess_fun(X_train, y_train, X_test=None, y_test=None):
+            return replace_categorical_outputs(
+                X_train=X_train,
+                y_train=y_train,
+                X_test=X_test,
+                y_test=y_test,
+                output_classes=output_classes,
+            )
         return DatasetMetaData(
             n_inputs=4,
             n_outputs=len(output_classes),
             name=dataset_name,
             output_classes=output_classes,
-            preprocessing=(
-                lambda X, y: replace_categorical_outputs(X, y, output_classes)
-            ),
+            preprocessing=preprocess_fun,
             target_col='variety',
         )
     if dataset_name == 'letterrecognition':

@@ -146,5 +146,5 @@ def run(
                     pbar.write(
                         f'Test accuracy for fold {fold + 1}/{manager.N_FOLDS} '
                         f'is {round(acc, 3)}, AUC is {round(auc, 3)}, and '
-                        f'majority class accuracy is {round(maj_class_acc, 3)}.'
+                        f'majority class accuracy is {round(maj_class_acc, 3)}'
                     )
