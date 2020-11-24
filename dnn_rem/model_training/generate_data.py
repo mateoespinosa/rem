@@ -47,6 +47,12 @@ def run(
         manager=manager,
         n_folds=manager.N_FOLDS,
     )
+    split_data_fn.train_test_split(
+        X=X,
+        y=y,
+        manager=manager,
+        test_size=manager.PERCENT_TEST_DATA,
+    )
 
     # 2. Grid search over neural network hyper params to find optimal neural
     #    network hyper-parameters
@@ -80,12 +86,6 @@ def run(
     # Pick initialization that yields the smallest ruleset
     if find_best_initialisation:
         logging.info("Finding best initialisation")
-        split_data_fn.train_test_split(
-            X=X,
-            y=y,
-            manager=manager,
-            test_size=manager.PERCENT_TEST_DATA,
-        )
         find_best_nn_initialisation.run(X=X, y=y, manager=manager)
 
     # 4. Build neural network for each fold using best initialization found
