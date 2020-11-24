@@ -146,29 +146,30 @@ python run_experiment.py --config experiment_config.yaml
 If run successfully, then you should see an output similar to this one:
 ```bash
 $ python run_experiment.py --config experiment_config.yaml
-Test accuracy for fold 1/5 is 0.855, AUC is 0.912, and majority class accuracy is 0.918.
-Test accuracy for fold 2/5 is 0.817, AUC is 0.901, and majority class accuracy is 0.91.
-Test accuracy for fold 3/5 is 0.903, AUC is 0.94, and majority class accuracy is 0.911.
-Test accuracy for fold 4/5 is 0.941, AUC is 0.969, and majority class accuracy is 0.907.
-Test accuracy for fold 5/5 is 0.926, AUC is 0.97, and majority class accuracy is 0.915.
-
-Training fold model 5/5: 100%|█████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████| 5/5 [00:38<00:00,  7.71s/it]
-Done extracting rules from neural network: 100%|█████████████████████████████████████████████████████████████████████████████████████████████████████████| 6.0/6 [02:56<00:00, 29.45s/it]
-Done extracting rules from neural network: 100%|██████████████████████████████████████████████████████████████████████████████████████████▉| 5.999999999999998/6 [07:14<00:00, 72.45s/it]
-Done extracting rules from neural network: 100%|███████████████████████████████████████████████████████████████████████████████████████████| 6.000000000000001/6 [04:17<00:00, 42.85s/it]
-Done extracting rules from neural network: 100%|███████████████████████████████████████████████████████████████████████████████████████████| 6.000000000000001/6 [03:13<00:00, 32.20s/it]
-Done extracting rules from neural network: 100%|██████████████████████████████████████████████████████████████████████████████████████████▉| 5.999999999999999/6 [03:31<00:00, 35.32s/it]
+Test accuracy for fold 1/5 is 0.829, AUC is 0.899, and majority class accuracy is 0.918
+Test accuracy for fold 2/5 is 0.814, AUC is 0.898, and majority class accuracy is 0.91
+Test accuracy for fold 3/5 is 0.9, AUC is 0.946, and majority class accuracy is 0.911
+Test accuracy for fold 4/5 is 0.923, AUC is 0.96, and majority class accuracy is 0.907
+Test accuracy for fold 5/5 is 0.938, AUC is 0.97, and majority class accuracy is 0.915
+Training fold model 5/5: 100%|█████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████| 5/5 [00:40<00:00,  8.15s/it]
+Done extracting rules from neural network: 100%|█████████████████████████████████████████████████████████████████████████████████████████▉| 5.9999999999999964/6 [07:22<00:00, 73.80s/it]
+Done extracting rules from neural network: 100%|█████████████████████████████████████████████████████████████████████████████████████████▉| 5.999999999999999/6 [10:47<00:00, 107.94s/it]
+Done extracting rules from neural network: 100%|█████████████████████████████████████████████████████████████████████████████████████████████████████████| 6.0/6 [04:52<00:00, 48.75s/it]
+Done extracting rules from neural network: 100%|██████████████████████████████████████████████████████████████████████████████████████████| 6.0000000000000036/6 [04:42<00:00, 47.02s/it]
+[WARNING] Found an empty set of rules for class 0 and layer 0
+[WARNING] Found an empty set of rules for class 0 and layer 0
+Done extracting rules from neural network: 100%|██████████████████████████████████████████████████████████████████████████████████████████▉| 5.999999999999998/6 [03:40<00:00, 36.68s/it]
 +------+-------------+--------+----------------+-----------------------+------------------------+
 | Fold | NN Accuracy | NN AUC | REM-D Accuracy | Extraction Time (sec) | Extraction Memory (MB) |
 +------+-------------+--------+----------------+-----------------------+------------------------+
-|  0   |    0.8171   | 0.8755 |     0.9027     |        176.8958       |       6506.4182        |
-|  1   |    0.8024   | 0.852  |     0.8555     |        434.8211       |        689.8995        |
-|  2   |    0.8968   | 0.9419 |     0.9086     |        257.264        |        438.4666        |
-|  3   |    0.8791   | 0.9269 |     0.8997     |        193.3199       |        465.877         |
-|  4   |    0.941    | 0.9702 |     0.8791     |        212.0598       |        477.1604        |
-| avg  |    0.8673   | 0.9133 |     0.8891     |        254.8721       |       1715.5643        |
+|  0   |    0.8289   | 0.8988 |     0.8643     |        443.0316       |       6620.0238        |
+|  1   |    0.8142   | 0.8985 |     0.9086     |        647.8289       |        878.0534        |
+|  2   |    0.8997   | 0.9462 |     0.9145     |        292.6609       |        511.998         |
+|  3   |    0.9233   | 0.9598 |     0.8761     |        282.276        |        521.943         |
+|  4   |    0.9379   | 0.9698 |     0.9142     |        220.2799       |        449.2298        |
+| avg  |    0.8808   | 0.9346 |     0.8955     |        377.2155       |       1796.2496        |
 +------+-------------+--------+----------------+-----------------------+------------------------+
-~~~~~~~~~~~~~~~~~~~~ Experiment successfully terminated after 1319.837 seconds ~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~ Experiment successfully terminated after 1935.102 seconds ~~~~~~~~~~~~~~~~~~~~
 
 ```
 
