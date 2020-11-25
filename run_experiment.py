@@ -15,7 +15,6 @@ import yaml
 
 
 from dnn_rem.model_training import generate_data
-from dnn_rem.model_training.split_data import load_data
 from dnn_rem.experiment_runners.cross_validation import cross_validate_re
 from dnn_rem.experiment_runners.manager import ExperimentManager
 
@@ -42,8 +41,8 @@ def build_parser():
         metavar="file.yaml",
     )
     parser.add_argument(
-        '--folds',
-        '-f',
+        '--n_folds',
+        '-n',
         default=None,
         help='how many folds to use for our data partitioning.',
         metavar='N',
@@ -121,6 +120,19 @@ def build_parser():
 
     )
     parser.add_argument(
+        '--force_rerun',
+        '-f',
+        default=False,
+        action="store_true",
+        help=(
+            "If set and we are given as output directory the directory of a "
+            "previous run, then we will overwrite any previous work and redo "
+            "all computations. Otherwise, we will attempt to use as much as we "
+            "can from the previous run."
+        ),
+
+    )
+    parser.add_argument(
         "-d",
         "--debug",
         action="store_true",
@@ -166,7 +178,7 @@ def main():
             config = yaml.safe_load(file)
     else:
         config = {}
-        if args.folds is None:
+        if args.n_folds is None:
             # Then default it to 1
             # Here and below: the reason why we do not default it in the
             # argparser itself is because we want to have the option to
@@ -174,7 +186,7 @@ def main():
             # want to overwrite certain attributes of it and the case where no
             # config file was provided so we expect all arguments coming from
             # the command line.
-            args.folds = 1
+            args.n_folds = 1
         if args.rule_extractor is None:
             # Default it to use our rule generation algorithm
             args.rule_extractor = "DeepRED_C5"
@@ -195,8 +207,8 @@ def main():
 
     # And we overwrite any arguments that were provided outside of our
     # config file:
-    if args.folds is not None:
-        config["n_folds"] = args.folds
+    if args.n_folds is not None:
+        config["n_folds"] = args.n_folds
     if args.dataset_name is not None:
         config["dataset_name"] = args.dataset_name
     if args.rule_extractor is not None:
@@ -215,26 +227,16 @@ def main():
         config["random_seed"] = 42
 
     # Time to initialize our experiment manager
-    with ExperimentManager(config) as manager:
-        # use that to open up our dataset
-        X, y = load_data(manager.DATASET_INFO, manager.DATA_FP)
+    with ExperimentManager(config, args.force_rerun) as manager:
         # Generate our neural network, train it, and then extract the ruleset
         # that approximates it from it
         generate_data.run(
-            X=X,
-            y=y,
             manager=manager,
             use_grid_search=args.grid_search,
-            find_best_initialisation=(manager.INITIALISATION_TRIALS > 1),
-            generate_fold_data=True,
         )
 
         # Perform n fold cross validated rule extraction on the dataset
-        cross_validate_re(
-            X=X,
-            y=y,
-            manager=manager,
-        )
+        cross_validate_re(manager=manager)
 
     # And that's all folks
     return 0

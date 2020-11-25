@@ -47,11 +47,11 @@ and you should see a clear help message without any errors and/or warnings.
 For our experiments we will use the data located in https://github.com/sumaiyah/DNN-RE-data. You can run recreate several of our cross-validation experiments using the provided executable `run_experiment.py` which offers the following options:
 ```bash
 $python run_experiment.py --help
-usage: run_experiment.py [-h] [--config file.yaml] [--folds N]
+usage: run_experiment.py [-h] [--config file.yaml] [--n_folds N]
                          [--initialisation_trials N] [--dataset_name name]
                          [--dataset_file data.cvs] [--rule_extractor name]
                          [--grid_search] [--output_dir path] [--randomize]
-                         [-d]
+                         [--force_rerun] [-d]
 
 Process some integers.
 
@@ -60,7 +60,7 @@ optional arguments:
   --config file.yaml, -c file.yaml
                         initial configuration YAML file for our experiment's
                         setup.
-  --folds N, -f N       how many folds to use for our data partitioning.
+  --n_folds N, -n N     how many folds to use for our data partitioning.
   --initialisation_trials N, -i N
                         how many initialisations for our model's initial
                         parameters do we want to try before running our
@@ -88,6 +88,11 @@ optional arguments:
                         will not be fixed and the experiment will be
                         randomized. By default, otherwise, all experiments are
                         run with the same seed for reproducibility.
+  --force_rerun, -f     If set and we are given as output directory the
+                        directory of a previous run, then we will overwrite
+                        any previous work and redo all computations.
+                        Otherwise, we will attempt to use as much as we can
+                        from the previous run.
   -d, --debug           starts debug mode in our program.
 ```
 
@@ -146,31 +151,30 @@ python run_experiment.py --config experiment_config.yaml
 If run successfully, then you should see an output similar to this one:
 ```bash
 $ python run_experiment.py --config experiment_config.yaml
-Test accuracy for fold 1/5 is 0.829, AUC is 0.899, and majority class accuracy is 0.918
-Test accuracy for fold 2/5 is 0.814, AUC is 0.898, and majority class accuracy is 0.91
-Test accuracy for fold 3/5 is 0.9, AUC is 0.946, and majority class accuracy is 0.911
-Test accuracy for fold 4/5 is 0.923, AUC is 0.96, and majority class accuracy is 0.907
-Test accuracy for fold 5/5 is 0.938, AUC is 0.97, and majority class accuracy is 0.915
-Training fold model 5/5: 100%|█████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████| 5/5 [00:40<00:00,  8.15s/it]
-Done extracting rules from neural network: 100%|█████████████████████████████████████████████████████████████████████████████████████████▉| 5.9999999999999964/6 [07:22<00:00, 73.80s/it]
-Done extracting rules from neural network: 100%|█████████████████████████████████████████████████████████████████████████████████████████▉| 5.999999999999999/6 [10:47<00:00, 107.94s/it]
-Done extracting rules from neural network: 100%|█████████████████████████████████████████████████████████████████████████████████████████████████████████| 6.0/6 [04:52<00:00, 48.75s/it]
-Done extracting rules from neural network: 100%|██████████████████████████████████████████████████████████████████████████████████████████| 6.0000000000000036/6 [04:42<00:00, 47.02s/it]
+Test accuracy for fold 1/5 is 0.829, AUC is 0.828, and majority class accuracy is 0.918
+Test accuracy for fold 2/5 is 0.814, AUC is 0.805, and majority class accuracy is 0.91
+Test accuracy for fold 3/5 is 0.9, AUC is 0.734, and majority class accuracy is 0.911
+Test accuracy for fold 4/5 is 0.923, AUC is 0.868, and majority class accuracy is 0.907
+Test accuracy for fold 5/5 is 0.938, AUC is 0.685, and majority class accuracy is 0.915
+Training fold model 5/5: 100%|█████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████| 5/5 [00:34<00:00,  6.97s/it]
+Done extracting rules from neural network: 100%|█████████████████████████████████████████████████████████████████████████████████████████▉| 5.9999999999999964/6 [06:23<00:00, 64.00s/it]
+Done extracting rules from neural network: 100%|█████████████████████████████████████████████████████████████████████████████████████████▉| 5.999999999999999/6 [10:00<00:00, 100.10s/it]
+Done extracting rules from neural network: 100%|█████████████████████████████████████████████████████████████████████████████████████████████████████████| 6.0/6 [04:17<00:00, 42.91s/it]
+Done extracting rules from neural network: 100%|██████████████████████████████████████████████████████████████████████████████████████████| 6.0000000000000036/6 [04:12<00:00, 42.13s/it]
 [WARNING] Found an empty set of rules for class 0 and layer 0
 [WARNING] Found an empty set of rules for class 0 and layer 0
-Done extracting rules from neural network: 100%|██████████████████████████████████████████████████████████████████████████████████████████▉| 5.999999999999998/6 [03:40<00:00, 36.68s/it]
+Done extracting rules from neural network: 100%|██████████████████████████████████████████████████████████████████████████████████████████▉| 5.999999999999998/6 [03:09<00:00, 31.55s/it]
 +------+-------------+--------+----------------+-----------------------+------------------------+
 | Fold | NN Accuracy | NN AUC | REM-D Accuracy | Extraction Time (sec) | Extraction Memory (MB) |
 +------+-------------+--------+----------------+-----------------------+------------------------+
-|  0   |    0.8289   | 0.8988 |     0.8643     |        443.0316       |       6620.0238        |
-|  1   |    0.8142   | 0.8985 |     0.9086     |        647.8289       |        878.0534        |
-|  2   |    0.8997   | 0.9462 |     0.9145     |        292.6609       |        511.998         |
-|  3   |    0.9233   | 0.9598 |     0.8761     |        282.276        |        521.943         |
-|  4   |    0.9379   | 0.9698 |     0.9142     |        220.2799       |        449.2298        |
-| avg  |    0.8808   | 0.9346 |     0.8955     |        377.2155       |       1796.2496        |
+|  0   |    0.8289   | 0.8283 |     0.8643     |        384.2171       |       6688.6728        |
+|  1   |    0.8142   | 0.8046 |     0.9086     |        600.7569       |        892.9505        |
+|  2   |    0.8997   | 0.7343 |     0.9145     |        257.5909       |        568.0148        |
+|  3   |    0.9233   | 0.8676 |     0.8761     |        252.9575       |        532.0765        |
+|  4   |    0.9379   | 0.6848 |     0.9142     |        189.4459       |        459.6419        |
+| avg  |    0.8808   | 0.7839 |     0.8955     |        336.9937       |       1828.2713        |
 +------+-------------+--------+----------------+-----------------------+------------------------+
-~~~~~~~~~~~~~~~~~~~~ Experiment successfully terminated after 1935.102 seconds ~~~~~~~~~~~~~~~~~~~~
-
+~~~~~~~~~~~~~~~~~~~~ Experiment successfully terminated after 1727.306 seconds ~~~~~~~~~~~~~~~~~~~~
 ```
 
 The default cross-validation experiment will do the following:
@@ -180,6 +184,8 @@ The default cross-validation experiment will do the following:
   4. Extract rules for each neural network we trained.
   5. Compare the performance of the neural network and the extracted ruleset in our test data.
   6. Dump all the results, statistics, and details of the experiment in the provided directory following the file hierarchy described below.
+
+If the output directory exists and contains data from a previous run, our runner will attempt to reuse it as much as possible to avoid recomputing things. If you do not want that behavior, please make sure to use different directories for different runs or call the script with the `-f` flag in it.
 
 Please note that if a configuration file is provided and command-line arguments are also provided, then the ones given in the command-line will always take precedence over their counterparts in the config file. The intent of this behavior is to speed up different iterations in experiments.
 

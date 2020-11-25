@@ -8,10 +8,10 @@ import os
 import sklearn
 import tensorflow as tf
 
-
 ################################################################################
 ## Metric Functions
 ################################################################################
+
 
 class LogitAUC(tf.keras.metrics.AUC):
     """
@@ -24,9 +24,11 @@ class LogitAUC(tf.keras.metrics.AUC):
 
     def update_state(self, y_true, y_pred, sample_weight=None):
         # Simply call the parent function with the softmax-transformed inputs
+        y_true = tf.argmax(y_true, axis=-1)
+        y_pred = tf.argmax(y_pred, axis=-1)
         super(LogitAUC, self).update_state(
             y_true=y_true,
-            y_pred=tf.keras.activations.softmax(y_pred),
+            y_pred=y_pred,
             sample_weight=sample_weight,
         )
 
@@ -52,6 +54,7 @@ def model_fn(
     optimizer=None,
     last_activation="sigmoid",
     loss_function="sigmoid_xentr",
+    learning_rate=0.001,
 ):
     """
     Model function to construct our TF model for learning our given task.
@@ -88,6 +91,23 @@ def model_fn(
             name=f"dense_{i}",
         )(net)
 
+    if loss_function is None and last_activation:
+        if last_activation == "sigmoid":
+            loss_function = "sigmoid_xentr"
+        elif last_activation == "softmax":
+            loss_function = "softmax_xentr"
+    if last_activation is None:
+        if loss_function is not None:
+            raise ValueError(
+                "We were not provided with a loss function or last activation "
+                "function in our model."
+            )
+        elif "_" in loss_function:
+            last_activation = loss_function[:loss_function.find("_")]
+        else:
+            # Default to empty so that we can do substring search
+            last_activation = ""
+
     # And our output layer map
     net = tf.keras.layers.Dense(
         num_outputs,
@@ -102,7 +122,9 @@ def model_fn(
 
     # Compile Model
     model = tf.keras.models.Model(inputs=input_layer, outputs=net)
-    optimizer = optimizer or tf.keras.optimizers.Adam(learning_rate=0.001)
+    optimizer = optimizer or tf.keras.optimizers.Adam(
+        learning_rate=learning_rate
+    )
     if loss_function == "softmax_xentr":
         loss = tf.keras.losses.CategoricalCrossentropy(
             from_logits=(last_activation in loss_function),
@@ -122,8 +144,8 @@ def model_fn(
         optimizer=optimizer,
         metrics=[
             (
-                LogitAUC(name='AUC') if (last_activation in loss_function)
-                else tf.keras.metrics.AUC()
+                LogitAUC(name='auc') if (last_activation in loss_function)
+                else tf.keras.metrics.AUC(name='auc')
             ),
             'accuracy',
             majority_classifier_acc,
@@ -163,7 +185,6 @@ def run_train_loop(
     X_test,
     y_test,
     manager,
-    with_best_initilisation=False,
 ):
     """
     Builds and train our model with the given train data. Evaluates the model
@@ -178,9 +199,6 @@ def run_train_loop(
         the testing labels for each point.
     :param ExperimentManager manager: Experiment manager for handling file
         generation during our run.
-    :param bool with_best_initilisation: if True, then we will attempt to
-        initialise our model using the best initialisation as dictated by
-        the Experiment manager. Otherwise we will use a random initialisation.
 
     :returns Tuple[Keras.Model, int, int, int]: A tuple containing the
         trained Keras model, test accuracy, test AUC, and majority classifier
@@ -201,7 +219,7 @@ def run_train_loop(
     y_train = tf.keras.utils.to_categorical(y_train)
     y_test = tf.keras.utils.to_categorical(y_test)
 
-    if with_best_initilisation:
+    if os.path.exists(manager.BEST_NN_INIT_FP):
         # Use best saved initialisation found earlier
         logging.debug(
             f'Training neural network with best initialisation from path: '
@@ -217,6 +235,7 @@ def run_train_loop(
             num_outputs=manager.DATASET_INFO.n_outputs,
             last_activation=hyperparams.get("last_activation", "softmax"),
             activation=hyperparams.get("activation", "tanh"),
+            learning_rate=hyperparams.get("learning_rate", 0.001)
         )
 
     # If on debug mode, then let's look at the architecture of the model we

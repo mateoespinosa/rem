@@ -1,21 +1,15 @@
 from prettytable import PrettyTable
 import logging
 import numpy as np
-import os
 import pandas as pd
 import pickle
 import tensorflow as tf
 
 from dnn_rem.evaluate_rules.evaluate import evaluate
-from dnn_rem.model_training.split_data import apply_split_indices
 from dnn_rem.model_training.build_and_train_model import load_model
 
 
-def cross_validate_re(
-    X,
-    y,
-    manager,
-):
+def cross_validate_re(manager):
     # We will generate a pretty table for the end result so that it can
     # be pretty-printed at the end of the experiment and visually reported to
     # the user
@@ -38,17 +32,8 @@ def cross_validate_re(
         ## Neural Network Evaluation
         ########################################################################
 
-        # Path to extracted rules from that fold
-        extracted_rules_file_path = manager.n_fold_rules_fp(fold)
-
         # Get train and test data folds
-        X_train, y_train, X_test, y_test = apply_split_indices(
-            X=X,
-            y=y,
-            file_path=manager.N_FOLD_CV_SPLIT_INDICIES_FP,
-            preprocess=manager.DATASET_INFO.preprocessing,
-            fold_index=fold,
-        )
+        X_train, y_train, X_test, y_test = manager.get_fold_data(fold)
 
         # Path to neural network model for this fold
         model_file_path = manager.n_fold_model_fp(fold)
@@ -65,6 +50,9 @@ def cross_validate_re(
         ########################################################################
         ## Rule Extraction Evaluation
         ########################################################################
+
+        # Path to extracted rules from that fold
+        extracted_rules_file_path = manager.n_fold_rules_fp(fold)
 
         rules, re_time, re_memory = manager.resource_compute(
             function=manager.RULE_EXTRACTOR.run,

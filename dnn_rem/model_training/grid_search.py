@@ -1,15 +1,22 @@
-from sklearn.model_selection import GridSearchCV
+"""
+Runs a grid search over hyper-parameters of our model to try and find the
+best hyper-parameterization.
+"""
+
 from tensorflow.keras.wrappers.scikit_learn import KerasClassifier
 import itertools
 import json
 import logging
+import numpy as np
+import sklearn
 import tensorflow as tf
 
 from .build_and_train_model import model_fn
-from . import split_data
 
 
-def load_best_params(best_params_file):
+def deserialize_best_params(best_params_file):
+    # Helper function to deserialize the set of best parameters obtained by
+    # a previous grid search.
     indicator = " using "
     with open(best_params_file, 'r') as f:
         best_params_line = f.readline()
@@ -19,56 +26,10 @@ def load_best_params(best_params_file):
         return json.loads(best_params_serialized)
 
 
-def grid_search(X, y, manager):
-    """
-    Args:
-        X: input features
-        y: target
-
-    Returns:
-        batch_size: best batch size
-        epochs: best number of epochs
-        layer_units: best number of neurons for hidden layers
-
-    Perform a 5-folded grid search over the neural network hyper-parameters
-    """
-
-    # Make sure we DO NOT look into our test data when doing this grid search:
-    X_train, y_train, _, _ = split_data.apply_split_indices(
-        X=X,
-        y=y,
-        file_path=manager.NN_INIT_SPLIT_INDICES_FP,
-        preprocess=manager.DATASET_INFO.preprocessing,
-    )
-
-    batch_size = [16, 32, 64, 128]
-    epochs = [50, 100, 150, 200]
-    layer_1 = [128, 64, 32, 16]
-    layer_2 = [64, 32, 16, 8]
-
-    param_grid = dict(
-        input_features=[X.shape[-1]],
-        num_outputs=[manager.DATASET_INFO.n_outputs],
-        batch_size=batch_size,
-        epochs=epochs,
-        layer_units=list(itertools.product(layer_1, layer_2)),
-    )
-
-    model = KerasClassifier(build_fn=model_fn, verbose=0)
-
-    grid = GridSearchCV(
-        estimator=model,
-        param_grid=param_grid,
-        n_jobs=-1,
-        cv=5,
-        verbose=(
-            int(logging.getLogger().getEffectiveLevel() == logging.DEBUG)
-        ),
-    )
-    grid_result = grid.fit(X_train, tf.keras.utils.to_categorical(y_train))
-
-    # Write best results to file
-    with open(manager.NN_INIT_GRID_RESULTS_FP, 'w') as file:
+def serialize_best_params(grid_result, best_pearams_file):
+    # Helper function to serialize the set of best parameters we found in our
+    # grid search.
+    with open(best_params_file, 'w') as file:
         file.write(
             f"Best: {grid_result.best_score_} using "
             f"{json.dumps(grid_result.best_params_)}\n"
@@ -80,9 +41,122 @@ def grid_search(X, y, manager):
         for mean, stdev, param in zip(means, stds, params):
             file.write(f"{mean} ({stdev}) with: {json.dumps(param)}\n")
 
+    # And return the best parameters we found
+    return grid_result.best_params_
+
+
+class CustomMetricKerasClassifier(KerasClassifier):
+    """
+    Helper class to wrap a Keras model and turn it into a sklearn classifier
+    whose scoring function can be given by any metric in the Keras model.
+    """
+
+    def __init__(self, build_fn=None, metric_name='accuracy', **sk_params):
+        """
+        metric_name represents the name of a valid metric in the given model.
+        """
+
+        super(CustomMetricKerasClassifier, self).__init__(
+            build_fn=build_fn,
+            **sk_params
+        )
+        self.metric_name = metric_name
+
+    def get_params(self, **params):  # pylint: disable=unused-argument
+        """
+        Gets parameters for this estimator.
+        """
+        res = super(CustomMetricKerasClassifier, self).get_params(**params)
+        res.update({'metric_name': self.metric_name})
+        return res
+
+    def score(self, x, y, **kwargs):
+        """
+        Returns the requested metric on the given test data and labels.
+        """
+        y = np.searchsorted(self.classes_, y)
+        kwargs = self.filter_sk_params(
+            tf.python.keras.models.Sequential.evaluate,
+            kwargs
+        )
+        outputs = self.model.evaluate(x, y, **kwargs)
+        if not isinstance(outputs, list):
+            outputs = [outputs]
+
+        for name, output in zip(self.model.metrics_names, outputs):
+            if name == self.metric_name:
+                return output
+        raise ValueError(
+            'The model is not configured to compute metric with name '
+            f'{self.metric_name}. All available metrics are '
+            f'{self.model.metrics_names}.'
+        )
+
+
+def grid_search(X, y, num_outputs=2):
+    """
+    Performs a grid search over the hyper-parameters of our model using
+    training dataset X with labels y.
+    """
+    logging.warning(
+        'Performing grid search over hyper parameters from scratch. '
+        'This will take a while...'
+    )
+    batch_size = [16, 32, 64, 128]
+    epochs = [50, 100, 150]
+    learning_rate = [1e-3, 1e-4]
+    layer_1 = [128, 64, 32]
+    layer_2 = [128, 64, 32]
+    activation = ["tanh", "relu"]
+    last_activation = [None]
+    loss_function = ["softmax_xentr", "sigmoid_xentr"]
+
+    param_grid = dict(
+        input_features=[X.shape[-1]],
+        num_outputs=[num_outputs],
+        batch_size=batch_size,
+        epochs=epochs,
+        layer_units=list(itertools.product(layer_1, layer_2)),
+        activation=activation,
+        last_activation=last_activation,
+        loss_function=loss_function,
+        learning_rate=learning_rate,
+    )
+
+    model = CustomMetricKerasClassifier(
+        build_fn=model_fn,
+        # Given class imbalance, we will score our fits based on AUC rather
+        # than plain accuracy.
+        metric_name='auc',
+        verbose=0,
+    )
+
+    grid = sklearn.model_selection.GridSearchCV(
+        estimator=model,
+        param_grid=param_grid,
+        n_jobs=-1,
+        cv=3,
+        verbose=(
+            int(logging.getLogger().getEffectiveLevel() == logging.DEBUG)
+        ),
+    )
+    # We will weight our classes according to their distribution when fitting
+    # our model to compensate for the class imbalance in this graph
+    class_weights = dict(enumerate(
+        sklearn.utils.class_weight.compute_class_weight(
+            'balanced',
+            np.unique(y_train),
+            y_train
+        )
+    ))
+    grid_result = grid.fit(
+        X,
+        tf.keras.utils.to_categorical(y),
+        class_weight=class_weights,
+    )
+
     logging.debug('Grid Search for hyper parameters complete.')
     logging.debug(
         f"Best: {grid_result.best_score_} using {grid_result.best_params_}"
     )
-
     return grid_result.best_params_

@@ -15,21 +15,16 @@ import tensorflow as tf
 from tqdm import tqdm
 
 from dnn_rem.evaluate_rules.evaluate import evaluate
-from . import split_data
 from .build_and_train_model import run_train_loop, load_model
 
 
-def run(X, y, manager):
+def run(manager):
     # Split data. Note that we WILL NOT use our test data at all for this given
     # that that would imply data leakage into our training loop. Ideally this
     # should be done with a validation set rather than with the training set
     # itself.
-    X_train, y_train, _, _ = split_data.apply_split_indices(
-        X=X,
-        y=y,
-        file_path=manager.NN_INIT_SPLIT_INDICES_FP,
-        preprocess=manager.DATASET_INFO.preprocessing,
-    )
+    logging.info("Finding best initialisation")
+    X_train, y_train, _, _ = manager.get_train_split()
 
     # Save information about nn initialisation
     if not os.path.exists(manager.NN_INIT_RE_RESULTS_FP):
@@ -42,6 +37,7 @@ def run(X, y, manager):
     smallest_ruleset_size = np.float('inf')
     smallest_ruleset_acc = 0
     best_init_index = 0
+    best_model = None
 
     # We will store all results in a table for later analysis
     results_df = pd.DataFrame(data=[], columns=['fold'])
@@ -67,7 +63,6 @@ def run(X, y, manager):
                 X_test=X_train,
                 y_test=y_train,
                 manager=manager,
-                with_best_initilisation=False,
             )
             if logging.getLogger().getEffectiveLevel() not in [
                 logging.ERROR,
@@ -123,8 +118,8 @@ def run(X, y, manager):
                 smallest_ruleset_acc = re_results['acc']
                 best_init_index = i
 
-                # Save initilisation as best_initialisation.h5
-                model.save(manager.BEST_NN_INIT_FP)
+                # Keep our best model
+                best_model = model
 
             ####################################################################
             ## RESULT SUMMARY
@@ -161,6 +156,6 @@ def run(X, y, manager):
 
     logging.debug(
         f'Found neural network with the best initialisation '
-        f'at index {best_init_index} and saved in path '
-        f'{manager.BEST_NN_INIT_FP}'
+        f'at index {best_init_index}.'
     )
+    return best_model

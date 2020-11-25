@@ -4,8 +4,13 @@ rule generation algorithm.
 """
 
 from collections import namedtuple
+from sklearn.model_selection import ShuffleSplit
+from sklearn.model_selection import StratifiedKFold
+
+import logging
 import numpy as np
 import os
+import pandas as pd
 import pathlib
 import random
 import shutil
@@ -22,6 +27,71 @@ from dnn_rem.extract_rules.pedagogical import extract_rules as pedagogical
 # Algorithm used for Rule Extraction
 RuleExMode = namedtuple('RuleExMode', ['mode', 'run'])
 
+################################################################################
+## INPUT DATA HELPERS
+################################################################################
+
+def split_serializer(splits, file_path):
+    # Helper method to serialize data split indices into a file
+    with open(file_path, 'w') as f:
+        for (train_indices, test_indices) in splits:
+            f.write('train ' + ' '.join([str(i) for i in train_indices]) + '\n')
+            f.write('test ' + ' '.join([str(i) for i in test_indices]) + '\n')
+    return splits
+
+
+def split_deserializer(path):
+    # Helper method to deserialize data split indices from a given file.
+    result = []
+    with open(path, 'r') as file:
+        lines = file.readlines()
+        assert len(lines) % 2 == 0, (
+           f"Expected even number of lines in file {path} but got {len(lines)} "
+           "instead."
+        )
+        for i in range(len(lines) // 2):
+            result.append((
+                list(map(int, lines[(i * 2)].split(' ')[1:])),
+                list(map(int, lines[(i * 2) + 1].split(' ')[1:]))
+            ))
+    return result
+
+
+def stratified_k_fold_split(
+    X,
+    y,
+    n_folds=1,
+    test_size=0.2,
+    random_state=None,
+):
+    # Helper method to return a list with n_folds tuples (X_train, y_train)
+    # after partitioning the given X, y dataset using stratified splits.
+    result = []
+    if n_folds == 1:
+        # Degenerate case: let's just dump all our indices as our single fold
+        split_gen = ShuffleSplit(
+            n_splits=1,
+            test_size=test_size,
+            random_state=random_state,
+        )
+    else:
+        # Split data
+        split_gen = StratifiedKFold(
+            n_splits=n_folds,
+            shuffle=True,
+            random_state=random_state,
+        )
+
+    # Save indices
+    for train_indices, test_indices in split_gen.split(X, y):
+        result.append((train_indices, test_indices))
+
+    return result
+
+
+################################################################################
+## EXPERIMENT MANAGER MAIN CLASS
+################################################################################
 
 class ExperimentManager(object):
     """
@@ -53,7 +123,11 @@ class ExperimentManager(object):
                 best_initialisation.h5
     """
 
-    def __init__(self, config):
+    def __init__(self, config, force_rerun=False):
+
+        # Let's see if we allow for checkpointing or if we want to always do
+        # a rerun
+        self.force_rerun = force_rerun
 
         # Some hidden state for management purposes only
         self._start_time = time.time()  # For timing purposes
@@ -91,41 +165,20 @@ class ExperimentManager(object):
         # Where all our results will be dumped. If not provided as part of the
         # experiment's config, then we will use the same parent directory as the
         # datafile we are using
-        experiment_dir = config.get(
+        self.experiment_dir = config.get(
             "output_dir",
             pathlib.Path(self.DATA_FP).parent
         )
 
         # <dataset_name>/cross_validation/<n>_folds/
-        cross_val_dir = os.path.join(experiment_dir, 'cross_validation')
-        self.N_FOLD_CV_DP = f'{cross_val_dir}{self.N_FOLDS}_folds/'
-        self.N_FOLD_CV_SPLIT_INDICIES_FP = os.path.join(
+        cross_val_dir = os.path.join(self.experiment_dir, 'cross_validation')
+        self.N_FOLD_CV_DP = os.path.join(
+            cross_val_dir,
+            f'{self.N_FOLDS}_folds'
+        )
+        self.N_FOLD_CV_SPLIT_INDICES_FP = os.path.join(
             self.N_FOLD_CV_DP,
             'data_split_indices.txt'
-        )
-        self.N_FOLD_CV_SPLIT_X_train_data_FP = (
-            lambda fold: os.path.join(
-                self.N_FOLD_CV_DP,
-                f'fold_{fold}_X_train.npy',
-            )
-        )
-        self.N_FOLD_CV_SPLIT_y_train_data_FP = (
-            lambda fold: os.path.join(
-                self.N_FOLD_CV_DP,
-                f'fold_{fold}_y_train.npy',
-            )
-        )
-        self.N_FOLD_CV_SPLIT_X_test_data_FP = (
-            lambda fold: os.path.join(
-                self.N_FOLD_CV_DP,
-                f'fold_{fold}_X_test.npy',
-            )
-        )
-        self.N_FOLD_CV_SPLIT_y_test_data_FP = (
-            lambda fold: os.path.join(
-                self.N_FOLD_CV_DP,
-                f'fold_{fold}_y_test.npy',
-            )
         )
 
         # <dataset_name>/cross_validation/<n>_folds/rule_extraction/<rule_ex_mode>/rules_extracted/
@@ -163,7 +216,7 @@ class ExperimentManager(object):
 
         # <dataset_name>/neural_network_initialisation/
         nn_init_dir = os.path.join(
-            experiment_dir,
+            self.experiment_dir,
             'neural_network_initialisation'
         )
         self.NN_INIT_GRID_RESULTS_FP = os.path.join(
@@ -281,6 +334,10 @@ class ExperimentManager(object):
             N_FOLD_RULES_REMAINING_DP(reduction_percentage),
             "fold.rules",
         )
+
+        # And time for some data and directory initialization!
+        self._initialize_directories()
+        self._initialize_data()
 
     def __enter__(self):
         """
@@ -430,3 +487,211 @@ f
             f'extracting algorithm. Valid modes are "REM-D" or '
             f'"pedagogical".'
         )
+
+    def _initialize_directories(self):
+        """
+        Helper method to initialize all the directories we will need for our
+        experiment run.
+        """
+        # Create main output directory first
+        if os.path.exists(self.experiment_dir):
+            if self.force_rerun:
+                logging.warning(
+                    "Running in overwrite mode. This means that any previous "
+                    f"results in output directory {self.experiment_dir} may be "
+                    "overwritten by this run."
+                )
+            else:
+                logging.warning(
+                    f"Given experiment directory {self.experiment_dir} exists. "
+                    "This means that we may use any results from previous "
+                    "experiment runs to avoid retraining/computing in this "
+                    "run. If this directory contains any results from "
+                    "different experiments that are not compatible with this "
+                    "one, or if you want to rerun the entire experiment from "
+                    "scratch, please call this script with the --force_rerun "
+                    "flag."
+                )
+        os.makedirs(self.experiment_dir, exist_ok=True)
+        # Create directory: cross_validation/<n>_folds/
+        os.makedirs(self.N_FOLD_CV_DP, exist_ok=True)
+        # Create directory: <n>_folds/rule_extraction/<rulemode>/
+        os.makedirs(self.N_FOLD_RULE_EX_MODE_DP, exist_ok=True)
+        # Create directory: <n>_folds/rule_extraction/<rulemode>/rules_extracted
+        os.makedirs(self.N_FOLD_RULES_DP, exist_ok=True)
+        # Create directory: <n>_folds/trained_models
+        os.makedirs(self.N_FOLD_MODELS_DP, exist_ok=True)
+
+        # Initialise split indices file for folds
+        os.makedirs(
+            pathlib.Path(self.N_FOLD_CV_SPLIT_INDICES_FP).parent,
+            exist_ok=True,
+        )
+
+        # Initialise split indices for train/test split
+        os.makedirs(
+            pathlib.Path(self.NN_INIT_SPLIT_INDICES_FP).parent,
+            exist_ok=True,
+        )
+
+    def _initialize_data(self):
+        """
+        Helper method for us to initialize our data set loading for the
+        given experiment.
+        """
+
+        # Read our dataset. This will be the first thing we will do:
+        data = pd.read_csv(self.DATA_FP)
+        self.X = data.drop([self.DATASET_INFO.target_col], axis=1).values
+        self.y = data[self.DATASET_INFO.target_col].values
+
+
+        # Split our data into two groups of train and test data in general
+        self.data_split, _ = self.serializable_stage(
+            target_file=self.N_FOLD_CV_SPLIT_INDICES_FP,
+            execute_fn=lambda: stratified_k_fold_split(
+                X=self.X,
+                y=self.y,
+                random_state=self.RANDOM_SEED,
+                test_size=self.PERCENT_TEST_DATA,
+                n_folds=1,
+            ),
+            serializing_fn=split_serializer,
+            deserializing_fn=split_deserializer,
+        )
+
+        # And do the same but now for the folds that we will use for training
+        self.fold_split, _ = self.serializable_stage(
+            target_file=self.NN_INIT_SPLIT_INDICES_FP,
+            execute_fn=lambda: stratified_k_fold_split(
+                X=self.X,
+                y=self.y,
+                random_state=self.RANDOM_SEED,
+                test_size=self.PERCENT_TEST_DATA,
+                n_folds=self.N_FOLDS,
+            ),
+            serializing_fn=split_serializer,
+            deserializing_fn=split_deserializer,
+        )
+
+    def get_fold_data(self, fold):
+        """
+        Gets the train and test data for the requested fold.
+
+        :param uint fold: The fold id (zero indexed) whose dataset we want to
+            obtain.
+
+        :returns Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]: A tuple
+            (X_train, y_train, X_test, y_test) with the data corresponding to
+            this split.
+
+        :raises ValueError: when given fold is not a valid fold for the dataset
+            handled by this manager.
+        """
+        if fold >= len(self.fold_split):
+            raise ValueError(
+                f'We obtained a request for split of fold {fold} however we '
+                f'have only split the dataset into {len(self.fold_split)} '
+                f'folds.'
+            )
+        train_indices, test_indices = self.fold_split[fold]
+        X_train, y_train = self.X[train_indices], self.y[train_indices]
+        X_test, y_test = self.X[test_indices], self.y[test_indices]
+
+        # And do any required preprocessing we may need to do to the
+        # data now that it has been partitioned (to avoid information
+        # leakage in data-dependent preprocessing passes)
+        if self.DATASET_INFO.preprocessing:
+            X_train, y_train, X_test, y_test = self.DATASET_INFO.preprocessing(
+                X_train=X_train,
+                y_train=y_train,
+                X_test=X_test,
+                y_test=y_test,
+            )
+        return X_train, y_train, X_test, y_test
+
+    def get_train_split(self):
+        """
+        Gets the train and test data for entire dataset treated as a whole.
+
+        :returns Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]: A tuple
+            (X_train, y_train, X_test, y_test) with the data corresponding to
+            our experiment's dataset.
+        """
+        train_indices, test_indices = self.data_split[0]
+        X_train, y_train = self.X[train_indices], self.y[train_indices]
+        X_test, y_test = self.X[test_indices], self.y[test_indices]
+
+        # And do any required preprocessing we may need to do to the
+        # data now that it has been partitioned (to avoid information
+        # leakage in data-dependent preprocessing passes)
+        if self.DATASET_INFO.preprocessing:
+            X_train, y_train, X_test, y_test = self.DATASET_INFO.preprocessing(
+                X_train=X_train,
+                y_train=y_train,
+                X_test=X_test,
+                y_test=y_test,
+            )
+        return X_train, y_train, X_test, y_test
+
+    def serializable_stage(
+        self,
+        target_file,
+        execute_fn,
+        # Empty serialization function by default
+        serializing_fn=lambda result, path: result,
+        # Trivial deserializing function by default
+        deserializing_fn=lambda path: None,
+    ):
+        """
+        Method for blocking the execution of a call if that call has been done
+        before and its result has been serialized. Used for loading checkpoints
+        when not running in "force_rerun" mode and obtaining their results
+        if available.
+
+        This is intended to be called for stages that are SEQUENTIAL in nature.
+        In that spirit, if one method fails to hit and use the given checkpoint
+        file, then all subsequent calls to this method will fail to use the
+        cache as well.
+
+        If an error occurs while deserializing a given file, then we will
+        move to recomputing it using our execution function.
+
+        :param str target_file: The serialization target file we will try to
+            deserialize and load our data from using `deserializing_fn` or
+            we will serialize the result of `execute_fn` into if it does not
+            exit (or we are running using a forced rerun).
+        :param Fun() -> Any execute_fn: The function to be executed when we
+            did not positively found the checkpoint file. This function should
+            take no arguments.
+        :param Fun(Any, str) -> Any serializing_fn: Function taking the result
+            of running execute_fn() and a file name and serializes that result
+            into the given file. Returns the value we should return after
+            serialization as the result of this function.
+        :param Fun(str) -> Any deserializing_fn:  The deserializing function
+            to be used if given target file was found so that we can load up
+            our result.
+
+        :returns Tuple[Any, bool]: A tuple (result, hit) where is the output of
+            serializing_fn(execute_fn(), _) if we did not find `target_file` and
+            otherwise it is deserializing_fn(target_file). `hit` is True if we
+            managed to deserialize the target file and False otherwise.
+        """
+
+        if os.path.exists(target_file) and (not self.force_rerun):
+            # Then time to deserialize it and return it to the user
+            try:
+                return deserializing_fn(target_file), True
+            except:
+                # Then at this point we will simply recompute it as the
+                # deserialization did not work
+                pass
+
+        # Else we will run the whole thing from scratch and we WILL FORCE ALL
+        # FUTURE CALLS TO ALSO DO THE SAME THING
+        self.force_rerun = True
+        result = execute_fn()
+
+        # Serialize it and allow for further data processing (if any)
+        return serializing_fn(result, target_file), False
+
