@@ -31,6 +31,7 @@ RuleExMode = namedtuple('RuleExMode', ['mode', 'run'])
 ## INPUT DATA HELPERS
 ################################################################################
 
+
 def split_serializer(splits, file_path):
     # Helper method to serialize data split indices into a file
     with open(file_path, 'w') as f:
@@ -152,7 +153,7 @@ class ExperimentManager(object):
         self.PERCENT_TEST_DATA = config.get("percent_test_data", 0.2)
 
         # The number of decimals used to report floating point numbers
-        self.ROUNDING_DECIMALS = config.get("rounding_decimals", 4)
+        self.ROUNDING_DECIMALS = config.get("rounding_decimals", 3)
 
         # And build our rule extractor
         self.RULE_EXTRACTOR = self.get_rule_extractor(
@@ -172,6 +173,7 @@ class ExperimentManager(object):
 
         # <dataset_name>/cross_validation/<n>_folds/
         cross_val_dir = os.path.join(self.experiment_dir, 'cross_validation')
+        self.SUMMARY_FILE = os.path.join(cross_val_dir, "summary.txt")
         self.N_FOLD_CV_DP = os.path.join(
             cross_val_dir,
             f'{self.N_FOLDS}_folds'

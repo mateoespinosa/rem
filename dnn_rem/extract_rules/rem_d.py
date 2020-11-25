@@ -232,13 +232,15 @@ def extract_rules(
                         rule_conclusion_map=rule_conclusion_map,
                         prior_rule_confidence=prior_rule_confidence,
                     )
-                    if not new_rules:
-                        pbar.write(
-                            f"[WARNING] Found an empty set of rules for "
-                            f"class {output_class} and layer {hidden_layer}"
-                        )
+
                     layer_rulesets[hidden_layer].add_rules(new_rules)
                     pbar.update(1/len(terms))
+
+                if not len(layer_rulesets[hidden_layer]):
+                    pbar.write(
+                        f"[WARNING] Found an empty set of rules for "
+                        f"class {output_class} and layer {hidden_layer}"
+                    )
 
             # Merge layer-wise rules
             output_rule = initial_rule

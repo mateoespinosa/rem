@@ -2,8 +2,7 @@
 Methods used for evaluating the performance of a given set of rules.
 """
 
-import pandas as pd
-from sklearn.metrics import accuracy_score
+import sklearn
 
 from . import metrics
 
@@ -31,7 +30,7 @@ def evaluate(rules, X_test, y_test, high_fidelity_predictions):
     predicted_labels = rules.predict(X_test)
 
     # Compute Accuracy
-    acc = accuracy_score(predicted_labels, y_test)
+    acc = sklearn.metrics.accuracy_score(predicted_labels, y_test)
 
     # Compute Fidelity
     fid = metrics.fidelity(predicted_labels, high_fidelity_predictions)
@@ -39,12 +38,19 @@ def evaluate(rules, X_test, y_test, high_fidelity_predictions):
     # Compute Comprehensibility
     comprehensibility_results = metrics.comprehensibility(rules)
 
+    # Overlapping features
     n_overlapping_features = metrics.overlapping_features(rules)
 
+    # Compute the AUC using this model
+    fpr, tpr, thresholds = sklearn.metrics.roc_curve(y_test, predicted_labels)
+    auc = sklearn.metrics.auc(fpr, tpr)
+
+    # And wrap them all together
     results = dict(
         acc=acc,
         fid=fid,
         n_overlapping_features=n_overlapping_features,
+        auc=auc,
     )
     results.update(comprehensibility_results)
 

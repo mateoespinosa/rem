@@ -9,6 +9,21 @@ from dnn_rem.evaluate_rules.evaluate import evaluate
 from dnn_rem.model_training.build_and_train_model import load_model
 
 
+def _deserialize_rules(path):
+    # Helper method to deserialize our rules and the resource
+    # consumption it took.
+    with open(path, 'rb') as f:
+        return pickle.load(f)
+
+
+def _serialize_rules(result, path):
+    # Helper method to seserialize our rules and the resource
+    # consumption it took into a given file
+    with open(path, 'wb') as f:
+        pickle.dump(result, f)
+    return result
+
+
 def cross_validate_re(manager):
     # We will generate a pretty table for the end result so that it can
     # be pretty-printed at the end of the experiment and visually reported to
@@ -19,8 +34,11 @@ def cross_validate_re(manager):
         "NN Accuracy",
         'NN AUC',
         f"{manager.RULE_EXTRACTOR.mode} Accuracy",
+        f"{manager.RULE_EXTRACTOR.mode} AUC",
         "Extraction Time (sec)",
         "Extraction Memory (MB)",
+        "Rulset Size",
+        "Average Rule Length",
     ]
     averages = np.array([0.0] * (len(table.field_names) - 1))
     results_df = pd.DataFrame(data=[], columns=['fold'])
@@ -54,11 +72,23 @@ def cross_validate_re(manager):
         # Path to extracted rules from that fold
         extracted_rules_file_path = manager.n_fold_rules_fp(fold)
 
-        rules, re_time, re_memory = manager.resource_compute(
-            function=manager.RULE_EXTRACTOR.run,
-            model=nn_model,
-            train_data=X_train,
+        # Run our rule extraction only if it has not been done in the past
+        # through a sequential checkpoint
+        (rules, re_time, re_memory), _ = manager.serializable_stage(
+            target_file=extracted_rules_file_path,
+            execute_fn=lambda: manager.resource_compute(
+                function=manager.RULE_EXTRACTOR.run,
+                model=nn_model,
+                train_data=X_train,
+            ),
+            serializing_fn=_serialize_rules,
+            deserializing_fn=_deserialize_rules,
         )
+
+        # Serialize a human readable version of the rules always for inspection
+        with open(extracted_rules_file_path + ".txt", 'w') as f:
+            for rule in rules:
+                f.write(str(rule) + "\n")
 
         logging.debug(
             f'Evaluating rules extracted from '
@@ -79,19 +109,6 @@ def cross_validate_re(manager):
         ## Table writing and saving
         ########################################################################
 
-        # Save rules extracted
-        logging.debug(
-            f'Saving fold {fold + 1}/{manager.N_FOLDS} rules extracted...'
-        )
-        # Serialize both as a pickle object as well as human readable file.
-        # In the near future, we will be able to serialize this to an actual
-        # lightweight language to express these expressions
-        with open(extracted_rules_file_path, 'wb') as f:
-            pickle.dump(rules, f)
-        with open(extracted_rules_file_path + ".txt", 'w') as f:
-            for rule in rules:
-                f.write(str(rule) + "\n")
-
         # Same some of this information into our dataframe
         results_df.loc[fold, 'fold'] = fold
         results_df.loc[fold, 'nn_accuracy'] = nn_accuracy
@@ -101,6 +118,7 @@ def cross_validate_re(manager):
         results_df.loc[fold, 're_memory (MB)'] = re_memory
         results_df.loc[fold, 're_acc'] = re_results['acc']
         results_df.loc[fold, 're_fid'] = re_results['fid']
+        results_df.loc[fold, 're_auc'] = re_results['auc']
         results_df.loc[fold, 'output_classes'] = str(
             re_results['output_classes']
         )
@@ -129,17 +147,34 @@ def cross_validate_re(manager):
         )
 
         # Fill up our pretty table
+        avg_rule_length = np.array(re_results['av_n_terms_per_rule'])
+        avg_rule_length *= np.array(re_results['av_n_terms_per_rule'])
+        avg_rule_length = sum(avg_rule_length)
+        avg_rule_length /= len(re_results['output_classes'])
+        num_rules = sum(re_results['n_rules_per_class'])
         new_row = [
             round(nn_accuracy, manager.ROUNDING_DECIMALS),
             round(nn_auc, manager.ROUNDING_DECIMALS),
             round(re_results['acc'], manager.ROUNDING_DECIMALS),
+            round(re_results['auc'], manager.ROUNDING_DECIMALS),
             round(re_time,  manager.ROUNDING_DECIMALS),
             round(re_memory, manager.ROUNDING_DECIMALS),
+            num_rules,
+            round(avg_rule_length, manager.ROUNDING_DECIMALS),
         ]
         table.add_row([fold] + new_row)
 
         # And accumulate this last row unto our average
         averages += np.array(new_row) / manager.N_FOLDS
+
+        # Finally, log this int the progress bar if not on quiet mode to get
+        # some feedback
+        logging.info(
+            f'Rule set test accuracy for fold {fold + 1}/{manager.N_FOLDS} '
+            f'is {round(re_results["acc"], 3)}, AUC is '
+            f'{round(re_results["auc"], 3)}, and size of rule set is '
+            f'{num_rules}'
+        )
 
     # Now that we are done, let's serialize our dataframe for further analysis
     results_df.to_csv(manager.N_FOLD_RESULTS_FP, index=False)
@@ -156,3 +191,6 @@ def cross_validate_re(manager):
         logging.ERROR,
     ]:
         print(table)
+    # And always serialize our table results into a pretty-printed txt file
+    with open(manager.SUMMARY_FILE, 'w') as f:
+        f.write(table.get_string())
