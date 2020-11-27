@@ -28,6 +28,9 @@ hyperparameters:
     # ["sofxmax_xentr", "sigmoid_xentr"]. If not provided, we will use the
     # given last layer's activation to obtain the corresponding loss.
     loss_function: "softmax_xentr"
+    # The learning rate we will use for our Adam optimizer. If not provided,
+    # then it will be defaulted to 0.001
+    learning_rate: 0.001
 
 # How many trials we will attempt for finding our best initialisation. If not
 # provided or less than or equal to 1, then we will use a random initialisation
