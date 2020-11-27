@@ -9,6 +9,8 @@ class ConjunctiveClause(object):
     Immutable and Hashable.
 
     Each conjunctive clause of terms has its own confidence value
+
+    The rank_score refers to the hill-climbing score associated with each clause.  
     """
     __slots__ = [
         'terms',

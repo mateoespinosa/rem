@@ -90,6 +90,23 @@ class Rule(object):
         # Be careful with the always true clause (i.e. empty)
         return n_satisfied_clauses/total if total else 1
 
+    def evaluate_rule_by_majority_voting_with_explanation(self, data):
+        """
+        Given a list of input neurons and their values, return the combined
+        proportion of clauses that satisfy the rule and explanation for each
+        of them
+        """
+        total = len(self.premise)
+        n_satisfied_clauses = 0
+        explanation_clauses = []
+        for clause in self.premise:
+            if clause.evaluate(data):
+                explanation_clauses.append(clause)
+                n_satisfied_clauses += 1
+
+        # print('satisfied: %d, total: %d, ratio: %f' % (n_satisfied_clauses, total, n_satisfied_clauses/total))
+        return n_satisfied_clauses/total, explanation_clauses
+
     @classmethod
     def from_term_set(cls, premise, conclusion, confidence):
         """

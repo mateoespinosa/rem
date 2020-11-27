@@ -7,12 +7,9 @@ from ..rules.rule import Rule
 
 def eliminate_rules(rules, n):
     """
-
-    Args:
-        rules: The whole ruleset extracted (set of dnf rules for each class)
-        n: the percentage of rules that will be eliminated. n = 0.7 eliminates 70% of the rules.
-
-    Returns: ruleset after elimination
+    :param Iterable[Rule] rules:    The rules that will be subjected to elimination
+    :param int n:   The percentage of rules that will be eliminated. n = 0.7 eliminates 70% of the rules
+    Returns Iterable[Rule] rule:    The remaining rules after elimination
 
     """
 
