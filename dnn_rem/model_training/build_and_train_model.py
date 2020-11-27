@@ -23,9 +23,17 @@ class LogitAUC(tf.keras.metrics.AUC):
         super(LogitAUC, self).__init__(*args, **kwargs)
 
     def update_state(self, y_true, y_pred, sample_weight=None):
-        # Simply call the parent function with the softmax-transformed inputs
-        y_true = tf.argmax(y_true, axis=-1)
-        y_pred = tf.argmax(y_pred, axis=-1)
+        # Simply call the parent function with the argmax of the given tensor
+        y_true = tf.where(
+            tf.equal(tf.reduce_max(y_true, axis=-1, keepdims=True), y_true),
+            1,
+            0
+        )
+        y_pred = tf.where(
+            tf.equal(tf.reduce_max(y_pred, axis=-1, keepdims=True), y_pred),
+            1,
+            0
+        )
         super(LogitAUC, self).update_state(
             y_true=y_true,
             y_pred=y_pred,
@@ -144,8 +152,9 @@ def model_fn(
         optimizer=optimizer,
         metrics=[
             (
-                LogitAUC(name='auc') if (last_activation in loss_function)
-                else tf.keras.metrics.AUC(name='auc')
+                LogitAUC(name='auc', multi_label=True)
+                if (last_activation in loss_function)
+                else tf.keras.metrics.AUC(name='auc', multi_label=True)
             ),
             'accuracy',
             majority_classifier_acc,

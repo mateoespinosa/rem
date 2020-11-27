@@ -34,11 +34,12 @@ def run(manager, use_grid_search=False):
     # 1. Grid search over neural network hyper params to find optimal neural
     #    network hyper-parameters
     if use_grid_search:
+        X_train, y_train, _, _ = manager.get_train_split()
         grid_search_result, _ = manager.serializable_stage(
             target_file=manager.NN_INIT_GRID_RESULTS_FP,
             execute_fn=lambda: grid_search_fn(
-                X=manager.X_train,
-                y=manager.y_train,
+                X=X_train,
+                y=y_train,
                 num_outputs=manager.DATASET_INFO.n_outputs,
             ),
             serializing_fn=serialize_best_params,

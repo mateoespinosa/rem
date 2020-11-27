@@ -26,7 +26,7 @@ def deserialize_best_params(best_params_file):
         return json.loads(best_params_serialized)
 
 
-def serialize_best_params(grid_result, best_pearams_file):
+def serialize_best_params(grid_result, best_params_file):
     # Helper function to serialize the set of best parameters we found in our
     # grid search.
     with open(best_params_file, 'w') as file:
@@ -93,7 +93,7 @@ class CustomMetricKerasClassifier(KerasClassifier):
         )
 
 
-def grid_search(X, y, num_outputs=2):
+def grid_search(X, y, X_val=None, y_val=None, num_outputs=2):
     """
     Performs a grid search over the hyper-parameters of our model using
     training dataset X with labels y.
@@ -102,21 +102,22 @@ def grid_search(X, y, num_outputs=2):
         'Performing grid search over hyper parameters from scratch. '
         'This will take a while...'
     )
-    batch_size = [16, 32, 64, 128]
-    epochs = [50, 100, 150]
+    batch_size = [16, 32]#, 64, 128]
+    epochs = [50, 100]#, 150]
     learning_rate = [1e-3, 1e-4]
     layer_1 = [128, 64, 32]
-    layer_2 = [128, 64, 32]
-    activation = ["tanh", "relu"]
-    last_activation = [None]
-    loss_function = ["softmax_xentr", "sigmoid_xentr"]
+    layer_2 = [64, 32, 16]
+    layer_3 = [32, 16, 8]
+    activation = ["tanh", "elu"]
+    last_activation = ["softmax", "sigmoid"]
+    loss_function = [None]  #"softmax_xentr", "sigmoid_xentr"]
 
     param_grid = dict(
         input_features=[X.shape[-1]],
         num_outputs=[num_outputs],
         batch_size=batch_size,
         epochs=epochs,
-        layer_units=list(itertools.product(layer_1, layer_2)),
+        layer_units=list(itertools.product(layer_1, layer_2, layer_3)),
         activation=activation,
         last_activation=last_activation,
         loss_function=loss_function,
@@ -145,8 +146,8 @@ def grid_search(X, y, num_outputs=2):
     class_weights = dict(enumerate(
         sklearn.utils.class_weight.compute_class_weight(
             'balanced',
-            np.unique(y_train),
-            y_train
+            np.unique(y),
+            y
         )
     ))
     grid_result = grid.fit(
@@ -159,4 +160,4 @@ def grid_search(X, y, num_outputs=2):
     logging.debug(
         f"Best: {grid_result.best_score_} using {grid_result.best_params_}"
     )
-    return grid_result.best_params_
+    return grid_result
