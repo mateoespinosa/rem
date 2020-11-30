@@ -45,9 +45,9 @@ def merge(rules):
     # Convert this dictionary into a set of rules where each conclusion occurs
     # only once, i.e. all rules are in DNF
     DNF_rules = set()
-    for conclusion in rule_conclusion_to_premises_map.keys():
+    for conclusion, premise in rule_conclusion_to_premises_map.items():
         DNF_rules.add(Rule(
-            premise=rule_conclusion_to_premises_map[conclusion],
+            premise=premise,
             conclusion=conclusion
         ))
 

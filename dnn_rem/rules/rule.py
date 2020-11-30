@@ -3,6 +3,8 @@ Represent a rule with a premise in Disjunctive Normal Form (DNF) and conclusion
 of another term or class conclusion
 """
 
+from collections import defaultdict
+
 from .clause import ConjunctiveClause
 from .term import Term, Neuron
 from . import DELETE_UNSATISFIABLE_CLAUSES_FLAG
@@ -49,9 +51,6 @@ class Rule(object):
     def __init__(self, premise, conclusion):
         if DELETE_UNSATISFIABLE_CLAUSES_FLAG:
             premise = remove_unsatisfiable_clauses(clauses=premise)
-
-        # if DELETE_REDUNDANT_CLAUSES_FLAG:
-        #     premise = self.delete_redundant_clauses(clauses=premise)
 
         super(Rule, self).__setattr__('premise', premise)
         super(Rule, self).__setattr__('conclusion', conclusion)
@@ -117,26 +116,23 @@ class Rule(object):
             )},
             confidence=1
         )
-        rule_conclusion = output_class
-
-        return cls(premise={rule_premise}, conclusion=rule_conclusion)
+        return cls(premise={rule_premise}, conclusion=output_class)
 
     def get_terms_with_conf_from_rule_premises(self):
         """
         Return all the terms present in the bodies of all the rules in the
         ruleset with their max confidence
         """
-        term_confidences = {}
+        # Every term will be initialized to have a confidence of 1. We will
+        # select the minimum across all clauses that use the same term
+        term_confidences = defaultdict(lambda: 1)
 
         for clause in self.premise:
             clause_confidence = clause.get_confidence()
             for term in clause.get_terms():
-                if term in term_confidences:
-                    term_confidences[term] = max(
-                        term_confidences[term],
-                        clause_confidence
-                    )
-                else:
-                    term_confidences[term] = clause_confidence
+                term_confidences[term] = min(
+                    term_confidences[term],
+                    clause_confidence
+                )
 
         return term_confidences

@@ -12,7 +12,7 @@ def terms_set_to_neuron_dict(terms):
 
     :param Iterable[Terms] terms: The terms which will source our dictionary.
 
-    :returns Dict[Neuron, Dict[TermOperator, List[float]]]: the corresponding
+    :returns Dict[Neuron, Dict[TermOperator, Set[float]]]: the corresponding
                                                             dictionary of neuron
                                                             values.
     """
@@ -22,12 +22,12 @@ def terms_set_to_neuron_dict(terms):
     for term in terms:
         if not term.get_neuron() in neuron_conditions:  # unseen Neuron
             neuron_conditions[term.get_neuron()] = {
-                TermOp: []
+                TermOp: set()
                 for TermOp in TermOperator
             }
-        neuron_conditions[(term.get_neuron())][term.get_operator()].append(
+        neuron_conditions[(term.get_neuron())][term.get_operator()].add(
             term.get_threshold()
         )
 
-    # Return {Neuron: {TermOperator: [Float]}}
+    # Returns {Neuron: {TermOperator: Set[Float]}}
     return neuron_conditions

@@ -35,9 +35,9 @@ class TermOperator(Enum):
         # Given a list of values, return the most general depending on the
         # operator
         if self is self.GreaterThan:
-            return min(values)
-        if self is self.LessThanEq:
             return max(values)
+        if self is self.LessThanEq:
+            return min(values)
 
 
 class Neuron(object):

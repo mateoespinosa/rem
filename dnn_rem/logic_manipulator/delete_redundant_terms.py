@@ -16,15 +16,15 @@ def remove_redundant_terms(terms):
 
     # Find most general neuron thresholds, range as general as possible,
     # for '>' keep min, for '<=' keep max
-    for neuron in neuron_conditions.keys():
+    for neuron, threshold_map in neuron_conditions.items():
         for TermOp in TermOperator:
-            if neuron_conditions[neuron][TermOp]:  # if non-empty list
+            if threshold_map[TermOp]:  # if non-empty list
                 necessary_terms.add(
                     Term(
                         neuron=neuron,
                         operator=TermOp,
                         threshold=TermOp.most_general_value(
-                            neuron_conditions[neuron][TermOp]
+                            threshold_map[TermOp]
                         )
                     )
                 )

@@ -15,6 +15,7 @@ For you to be able to run recreate the experiments and use the rule extraction a
 - `R` 4.* needs to be installed and accessible in your machine. We use `rpy2` to wrap and run `R`'s C5.0 algorithm.
 
 Once you have installed R, you will also need to have the following packages installed in R:
+- `C50`
 - `Cubist`
 - `reshape2`
 - `plyr`
@@ -156,25 +157,28 @@ Test accuracy for fold 2/5 is 0.814, AUC is 0.805, and majority class accuracy i
 Test accuracy for fold 3/5 is 0.9, AUC is 0.734, and majority class accuracy is 0.911
 Test accuracy for fold 4/5 is 0.923, AUC is 0.868, and majority class accuracy is 0.907
 Test accuracy for fold 5/5 is 0.938, AUC is 0.685, and majority class accuracy is 0.915
-Training fold model 5/5: 100%|█████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████| 5/5 [00:34<00:00,  6.97s/it]
-Done extracting rules from neural network: 100%|█████████████████████████████████████████████████████████████████████████████████████████▉| 5.9999999999999964/6 [06:23<00:00, 64.00s/it]
-Done extracting rules from neural network: 100%|█████████████████████████████████████████████████████████████████████████████████████████▉| 5.999999999999999/6 [10:00<00:00, 100.10s/it]
-Done extracting rules from neural network: 100%|█████████████████████████████████████████████████████████████████████████████████████████████████████████| 6.0/6 [04:17<00:00, 42.91s/it]
-Done extracting rules from neural network: 100%|██████████████████████████████████████████████████████████████████████████████████████████| 6.0000000000000036/6 [04:12<00:00, 42.13s/it]
-[WARNING] Found an empty set of rules for class 0 and layer 0
-[WARNING] Found an empty set of rules for class 0 and layer 0
-Done extracting rules from neural network: 100%|██████████████████████████████████████████████████████████████████████████████████████████▉| 5.999999999999998/6 [03:09<00:00, 31.55s/it]
-+------+-------------+--------+----------------+-----------------------+------------------------+
-| Fold | NN Accuracy | NN AUC | REM-D Accuracy | Extraction Time (sec) | Extraction Memory (MB) |
-+------+-------------+--------+----------------+-----------------------+------------------------+
-|  0   |    0.8289   | 0.8283 |     0.8643     |        384.2171       |       6688.6728        |
-|  1   |    0.8142   | 0.8046 |     0.9086     |        600.7569       |        892.9505        |
-|  2   |    0.8997   | 0.7343 |     0.9145     |        257.5909       |        568.0148        |
-|  3   |    0.9233   | 0.8676 |     0.8761     |        252.9575       |        532.0765        |
-|  4   |    0.9379   | 0.6848 |     0.9142     |        189.4459       |        459.6419        |
-| avg  |    0.8808   | 0.7839 |     0.8955     |        336.9937       |       1828.2713        |
-+------+-------------+--------+----------------+-----------------------+------------------------+
-~~~~~~~~~~~~~~~~~~~~ Experiment successfully terminated after 1727.306 seconds ~~~~~~~~~~~~~~~~~~~~
+Training fold model 5/5: 100%|███████████████████████████████████████████████████████████████████████████████████████████████████████████| 5/5 [00:40<00:00,  8.13s/it]
+Done extracting rules from neural network: 100%|███████████████████████████████████████████████████████████████████████▉| 5.9999999999999964/6 [06:11<00:00, 61.95s/it]
+[INFO] Rule set test accuracy for fold 1/5 is 0.864, AUC is 0.77, and size of rule set is 54
+Done extracting rules from neural network: 100%|████████████████████████████████████████████████████████████████████████▉| 5.999999999999999/6 [09:07<00:00, 91.21s/it]
+[INFO] Rule set test accuracy for fold 2/5 is 0.909, AUC is 0.762, and size of rule set is 318
+Done extracting rules from neural network: 100%|███████████████████████████████████████████████████████████████████████████████████████| 6.0/6 [04:17<00:00, 42.90s/it]
+[INFO] Rule set test accuracy for fold 3/5 is 0.914, AUC is 0.607, and size of rule set is 32
+Done extracting rules from neural network: 100%|████████████████████████████████████████████████████████████████████████| 6.0000000000000036/6 [04:35<00:00, 45.95s/it]
+[INFO] Rule set test accuracy for fold 4/5 is 0.876, AUC is 0.676, and size of rule set is 34
+Done extracting rules from neural network: 100%|████████████████████████████████████████████████████████████████████████▉| 5.999999999999998/6 [03:23<00:00, 33.94s/it]
+[INFO] Rule set test accuracy for fold 5/5 is 0.914, AUC is 0.578, and size of rule set is 9
++------+-------------+--------+----------------+-----------+-----------------------+------------------------+-------------+---------------------+
+| Fold | NN Accuracy | NN AUC | REM-D Accuracy | REM-D AUC | Extraction Time (sec) | Extraction Memory (MB) | Rulset Size | Average Rule Length |
++------+-------------+--------+----------------+-----------+-----------------------+------------------------+-------------+---------------------+
+|  1   |    0.829    | 0.828  |     0.864      |    0.77   |        371.958        |        6615.792        |      54     |        5.167        |
+|  2   |    0.814    | 0.805  |     0.909      |   0.762   |        547.431        |        833.083         |     318     |        4.827        |
+|  3   |     0.9     | 0.734  |     0.914      |   0.607   |         257.53        |        575.797         |      32     |        3.281        |
+|  4   |    0.923    | 0.868  |     0.876      |   0.676   |         275.85        |        478.468         |      34     |        3.559        |
+|  5   |    0.938    | 0.685  |     0.914      |   0.578   |         203.82        |        453.785         |      9      |        1.667        |
+| avg  |    0.881    | 0.784  |     0.895      |   0.679   |        331.318        |        1791.385        |     89.4    |         3.7         |
++------+-------------+--------+----------------+-----------+-----------------------+------------------------+-------------+---------------------+
+~~~~~~~~~~~~~~~~~~~~ Experiment successfully terminated after 1704.153 seconds ~~~~~~~~~~~~~~~~~~~~
 ```
 
 The default cross-validation experiment will do the following:

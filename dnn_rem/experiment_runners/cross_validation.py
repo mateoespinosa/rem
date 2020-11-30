@@ -62,7 +62,7 @@ def cross_validate_re(manager):
             verbose=(
                 1 if logging.getLogger().getEffectiveLevel() == logging.DEBUG \
                 else 0
-            )
+            ),
         )
 
         ########################################################################
@@ -103,6 +103,7 @@ def cross_validate_re(manager):
                 nn_model.predict(X_test),
                 axis=1
             ),
+            num_labels=manager.DATASET_INFO.n_outputs,
         )
 
         ########################################################################
@@ -148,9 +149,9 @@ def cross_validate_re(manager):
 
         # Fill up our pretty table
         avg_rule_length = np.array(re_results['av_n_terms_per_rule'])
-        avg_rule_length *= np.array(re_results['av_n_terms_per_rule'])
+        avg_rule_length *= np.array(re_results['n_rules_per_class'])
         avg_rule_length = sum(avg_rule_length)
-        avg_rule_length /= len(re_results['output_classes'])
+        avg_rule_length /= sum(re_results['n_rules_per_class'])
         num_rules = sum(re_results['n_rules_per_class'])
         new_row = [
             round(nn_accuracy, manager.ROUNDING_DECIMALS),
@@ -162,7 +163,7 @@ def cross_validate_re(manager):
             num_rules,
             round(avg_rule_length, manager.ROUNDING_DECIMALS),
         ]
-        table.add_row([fold] + new_row)
+        table.add_row([fold + 1] + new_row)
 
         # And accumulate this last row unto our average
         averages += np.array(new_row) / manager.N_FOLDS

@@ -5,6 +5,7 @@ Main implementation of the DNN rule extraction algorithm.
 from tqdm import tqdm  # Loading bar for rule generation
 import logging
 import pandas as pd
+import numpy as np
 import scipy.special as activation_fns
 import tensorflow.keras.models as keras
 
@@ -41,6 +42,7 @@ class ModelCache(object):
         # Keeps in memory a map between layer ID and the activations it
         # generated when we processed the given training data
         self._activation_map = {}
+
         self._compute_layerwise_activations(
             train_data=train_data,
             last_activation=last_activation,
@@ -96,7 +98,7 @@ class ModelCache(object):
             # e.g., softmax_cross_entropy).
             if last_activation and (layer_index == (len(self) - 1)):
                 if last_activation == "softmax":
-                    activation = activation_fns.softmax(activation)
+                    activation = activation_fns.softmax(activation, axis=-1)
                 elif last_activation == "sigmoid":
                     # Else time to use sigmoid function here instead
                     activation = activation_fns.expit(activation)
@@ -180,11 +182,9 @@ def extract_rules(
         disable=(verbosity == logging.WARNING),
     ) as pbar:
         for output_class in range(num_classes):
-            layer_rulesets = [Ruleset() for _ in model.layers]
-
             # Initial output layer rule
             output_layer = len(model.layers) - 1
-            initial_rule = Rule.initial_rule(
+            class_rule = Rule.initial_rule(
                 output_layer=output_layer,
                 output_class=output_class,
                 # If we use sigmoid cross-entropy loss, then this threshold
@@ -195,22 +195,24 @@ def extract_rules(
                     (1 / num_classes) if (last_activation == "softmax") else 0.5
                 ),
             )
-            layer_rulesets[output_layer].add_rules({initial_rule})
-
             # Extract layer-wise rules
             for hidden_layer in reversed(range(output_layer)):
+                # We will generate an intermediate ruleset for this layer
+                intermediate_rules = Ruleset()
+
+                # Obtain our cached predictions
                 predictors = cache_model.get_layer_activations(
                     layer_index=hidden_layer,
                 )
 
-                term_confidences = layer_rulesets[
-                    hidden_layer + 1
-                ].get_terms_with_conf_from_rule_premises()
+                # And time to call C5.0 for each term
+                term_confidences = \
+                    class_rule.get_terms_with_conf_from_rule_premises()
                 terms = term_confidences.keys()
                 for i, term in enumerate(terms, start=1):
                     pbar.set_description(
-                        f'Extracting rules for term {i}/{len(terms)} of '
-                        f'layer {hidden_layer} for class {output_class}'
+                        f'Extracting rules for term {i}/{len(terms)} {term} '
+                        f'of layer {hidden_layer} for class {output_class}'
                     )
 
                     #  y1', y2', ...ym' = t(h(x1)), t(h(x2)), ..., t(h(xm))
@@ -219,6 +221,10 @@ def extract_rules(
                             layer_index=(hidden_layer + 1),
                             neuron_index=term.get_neuron_index()
                         )
+                    )
+                    logging.debug(
+                        f"\tA total of {np.count_nonzero(target)}/"
+                        f"{len(target)} training samples satisfied {term}."
                     )
 
                     prior_rule_confidence = term_confidences[term]
@@ -232,27 +238,25 @@ def extract_rules(
                         rule_conclusion_map=rule_conclusion_map,
                         prior_rule_confidence=prior_rule_confidence,
                     )
-
-                    layer_rulesets[hidden_layer].add_rules(new_rules)
+                    intermediate_rules.add_rules(new_rules)
                     pbar.update(1/len(terms))
 
-                if not len(layer_rulesets[hidden_layer]):
-                    pbar.write(
-                        f"[WARNING] Found an empty set of rules for "
-                        f"class {output_class} and layer {hidden_layer}"
-                    )
-
-            # Merge layer-wise rules
-            output_rule = initial_rule
-            for hidden_layer in reversed(range(output_layer)):
+                 # Merge rules with current accumulation
                 pbar.set_description(
                     f"Substituting rules for layer {hidden_layer}"
                 )
-                output_rule = substitute(
-                    total_rule=output_rule,
-                    intermediate_rules=layer_rulesets[hidden_layer],
+                class_rule = substitute(
+                    total_rule=class_rule,
+                    intermediate_rules=intermediate_rules,
                 )
-            dnf_rules.add(output_rule)
+                if not len(class_rule.premise):
+                    pbar.write(
+                        f"[WARNING] Found rule with empty premise of for "
+                        f"class {output_class}."
+                    )
+
+            # Finally add this class rule to our solution ruleset
+            dnf_rules.add(class_rule)
 
         pbar.set_description("Done extracting rules from neural network")
 

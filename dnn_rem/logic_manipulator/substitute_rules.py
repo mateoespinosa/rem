@@ -3,7 +3,6 @@ Methods for making rule substitution.
 """
 
 import itertools
-import logging
 
 from ..rules.clause import ConjunctiveClause
 from ..rules.rule import Rule
@@ -26,7 +25,7 @@ def substitute(total_rule, intermediate_rules):
     new_premise_clauses = set()
 
     # for each clause in the total rule
-    for i, old_premise_clause in enumerate(total_rule.get_premise(), start=1):
+    for old_premise_clause in total_rule.get_premise():
         # list of sets of conjunctive clauses that are all conjunctive
         conj_new_premise_clauses = []
         for old_premise_term in old_premise_clause.get_terms():

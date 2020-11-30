@@ -182,7 +182,7 @@ def get_data_configuration(dataset_name):
             n_outputs=len(output_classes),
             name=dataset_name,
             output_classes=output_classes,
-            preprocessing=None,
+            preprocessing=unit_scale_preprocess,
             target_col='ER_Expr',
         )
     if dataset_name == 'breastcancer':
@@ -357,7 +357,7 @@ def get_data_configuration(dataset_name):
             n_outputs=len(output_classes),
             name=dataset_name,
             output_classes=output_classes,
-            preprocessing=None,
+            preprocessing=unit_scale_preprocess,
             target_col='Histological_Type',
         )
 
@@ -371,7 +371,7 @@ def get_data_configuration(dataset_name):
             n_outputs=len(output_classes),
             name=dataset_name,
             output_classes=output_classes,
-            preprocessing=None,
+            preprocessing=unit_scale_preprocess,
             target_col='Histological_Type',
         )
 
@@ -453,7 +453,7 @@ def get_data_configuration(dataset_name):
             n_outputs=len(output_classes),
             name=dataset_name,
             output_classes=output_classes,
-            preprocessing=None,
+            preprocessing=unit_scale_preprocess,
             target_col='Histological_Type',
         )
 

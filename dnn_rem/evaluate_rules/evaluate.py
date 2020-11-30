@@ -7,7 +7,7 @@ import sklearn
 from . import metrics
 
 
-def evaluate(rules, X_test, y_test, high_fidelity_predictions):
+def evaluate(rules, X_test, y_test, high_fidelity_predictions, num_labels=2):
     """
     Evaluates the performance of the given set of rules given the provided
     test dataset. It compares this results to a higher fidelity prediction
@@ -41,16 +41,23 @@ def evaluate(rules, X_test, y_test, high_fidelity_predictions):
     # Overlapping features
     n_overlapping_features = metrics.overlapping_features(rules)
 
-    # Compute the AUC using this model
-    fpr, tpr, thresholds = sklearn.metrics.roc_curve(y_test, predicted_labels)
-    auc = sklearn.metrics.auc(fpr, tpr)
+    # Compute the AUC using this model. For multiple labels, we average
+    # across all labels
+    avg_auc = 0
+    for i in range(num_labels):
+        fpr, tpr, _ = sklearn.metrics.roc_curve(
+            y_test == i,
+            predicted_labels == i,
+        )
+        avg_auc += sklearn.metrics.auc(fpr, tpr)
+    avg_auc /= num_labels
 
     # And wrap them all together
     results = dict(
         acc=acc,
         fid=fid,
         n_overlapping_features=n_overlapping_features,
-        auc=auc,
+        auc=avg_auc,
     )
     results.update(comprehensibility_results)
 
