@@ -45,6 +45,7 @@ def run(manager, use_grid_search=False):
             ),
             serializing_fn=serialize_best_params,
             deserializing_fn=deserialize_best_params,
+            stage_name="grid_search",
         )
 
         # And overwrite our given config's hyperparameters so that we use the
@@ -61,6 +62,7 @@ def run(manager, use_grid_search=False):
             target_file=manager.BEST_NN_INIT_FP,
             execute_fn=lambda: find_best_nn_initialisation.run(manager),
             serializing_fn=_save_model_and_return,
+            stage_name="initialisation_trials",
         )
 
     # 4. Build neural network for each fold using best initialization found
@@ -107,6 +109,7 @@ def run(manager, use_grid_search=False):
                 execute_fn=lambda: _train_fold(fold, pbar),
                 serializing_fn=_save_model_and_return,
                 deserializing_fn=load_model,
+                stage_name="nn_train",
             )
             if deserialized:
                 # Then let's try and be nice and include some statistics

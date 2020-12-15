@@ -84,6 +84,7 @@ def cross_validate_re(manager):
             ),
             serializing_fn=_serialize_rules,
             deserializing_fn=_deserialize_rules,
+            stage_name="rule_extraction",
         )
 
         # Serialize a human readable version of the rules always for inspection

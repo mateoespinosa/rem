@@ -27,6 +27,16 @@ from dnn_rem.extract_rules.pedagogical import extract_rules as pedagogical
 # Algorithm used for Rule Extraction
 RuleExMode = namedtuple('RuleExMode', ['mode', 'run'])
 
+# The different stages we will have in our experimentation
+EXPERIMENT_STAGES = [
+    "data_split",
+    "fold_split",
+    "grid_search",
+    "initialisation_trials",
+    "nn_train",
+    "rule_extraction",
+]
+
 ################################################################################
 ## INPUT DATA HELPERS
 ################################################################################
@@ -124,11 +134,12 @@ class ExperimentManager(object):
                 best_initialisation.h5
     """
 
-    def __init__(self, config, force_rerun=False):
+    def __init__(self, config, start_rerun_stage=None):
 
         # Let's see if we allow for checkpointing or if we want to always do
         # a rerun
-        self.force_rerun = force_rerun
+        self._forced_rerun = start_rerun_stage in ["all", EXPERIMENT_STAGES[0]]
+        self._start_rerun_stage = start_rerun_stage
 
         # Some hidden state for management purposes only
         self._start_time = time.time()  # For timing purposes
@@ -351,6 +362,13 @@ class ExperimentManager(object):
         )
 
         # And time for some data and directory initialization!
+        if self._start_rerun_stage:
+            logging.warning(
+                "We will overwrite every previous result in "
+                f'"{self.experiment_dir}" starting from stage '
+                f'"{self._start_rerun_stage}"'
+            )
+
         self._initialize_directories()
         self._initialize_data()
 
@@ -515,9 +533,9 @@ f
         """
         # Create main output directory first
         if os.path.exists(self.experiment_dir):
-            if self.force_rerun:
+            if self._forced_rerun:
                 logging.warning(
-                    "Running in overwrite mode. This means that any previous "
+                    "Running in overwrite mode. This means that some previous "
                     f"results in output directory {self.experiment_dir} may be "
                     "overwritten by this run."
                 )
@@ -529,8 +547,8 @@ f
                     "run. If this directory contains any results from "
                     "different experiments that are not compatible with this "
                     "one, or if you want to rerun the entire experiment from "
-                    "scratch, please call this script with the --force_rerun "
-                    "flag."
+                    "scratch, please call this script with the --forced_rerun "
+                    "argument."
                 )
         os.makedirs(self.experiment_dir, exist_ok=True)
         # Create directory: cross_validation/<n>_folds/
@@ -577,6 +595,7 @@ f
             ),
             serializing_fn=split_serializer,
             deserializing_fn=split_deserializer,
+            stage_name="data_split",
         )
 
         # And do the same but now for the folds that we will use for training
@@ -591,6 +610,7 @@ f
             ),
             serializing_fn=split_serializer,
             deserializing_fn=split_deserializer,
+            stage_name="fold_split",
         )
 
     def get_fold_data(self, fold):
@@ -661,11 +681,12 @@ f
         serializing_fn=lambda result, path: result,
         # Trivial deserializing function by default
         deserializing_fn=lambda path: None,
+        stage_name=None,
     ):
         """
         Method for blocking the execution of a call if that call has been done
         before and its result has been serialized. Used for loading checkpoints
-        when not running in "force_rerun" mode and obtaining their results
+        when not running in "forced_rerun" mode and obtaining their results
         if available.
 
         This is intended to be called for stages that are SEQUENTIAL in nature.
@@ -697,7 +718,11 @@ f
             managed to deserialize the target file and False otherwise.
         """
 
-        if os.path.exists(target_file) and (not self.force_rerun):
+        if os.path.exists(target_file) and (not self._forced_rerun) and (
+            (stage_name is None) or
+            (self._start_rerun_stage is None) or
+            (stage_name != self._start_rerun_stage)
+        ):
             # Then time to deserialize it and return it to the user
             try:
                 logging.debug(f'We hit the cache for "{target_file}"')
@@ -709,7 +734,7 @@ f
 
         # Else we will run the whole thing from scratch and we WILL FORCE ALL
         # FUTURE CALLS TO ALSO DO THE SAME THING
-        self.force_rerun = True
+        self._forced_rerun = True
         result = execute_fn()
 
         # Serialize it and allow for further data processing (if any)

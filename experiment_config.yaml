@@ -6,6 +6,25 @@ dataset_file: "../DNN-RE-data-new/MB-GE-ER/data.csv"
 # experiment runners.
 dataset_name: 'MB-GE-ER'
 
+# Whether or not we want our experiment runner to overwrite results from
+# previous runs found in the given output directory or we want to reuse them
+# instead.
+# If not provided, or set to null, then we will NOT overwrite any
+# previous results and use them as checkpoints to avoid double work in this
+# experiment.
+# Otherwise, it must be one of
+#    - "all"
+#    - "data_split"
+#    - "fold_split"
+#    - "grid_search"
+#    - "initialisation_trials"
+#    - "nn_train"
+#    - "rule_extraction"
+# to indicate the stage in which we will start rewriting previous results. If
+# such a specific stage is provided, then all subsequent stages will be also
+# overwritten (following the same order as the list above)
+force_rerun: null
+
 # Number of split folds for our training. If not provided, then it will default
 # to a single fold.
 n_folds: 5
@@ -55,7 +74,7 @@ rule_extractor: "REM-D"
 extractor_params:
     # An integer indicating how many decimals should we truncate our thresholds
     # to. If null, then no truncation will happen.
-    threshold_decimals: null
+    threshold_decimals: 6
     # The winnow parameter to use for C5. Must be a boolean.
     winnow: True
     # The minimum number of cases for a split in C5. Must be a positive integer

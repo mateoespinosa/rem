@@ -16,7 +16,9 @@ import yaml
 
 from dnn_rem.model_training import generate_data
 from dnn_rem.experiment_runners.cross_validation import cross_validate_re
-from dnn_rem.experiment_runners.manager import ExperimentManager
+from dnn_rem.experiment_runners.manager import (
+    ExperimentManager, EXPERIMENT_STAGES
+)
 
 
 ################################################################################
@@ -122,13 +124,14 @@ def build_parser():
     parser.add_argument(
         '--force_rerun',
         '-f',
-        default=False,
-        action="store_true",
+        choices=(["all"] + EXPERIMENT_STAGES),
+        default=None,
         help=(
             "If set and we are given as output directory the directory of a "
-            "previous run, then we will overwrite any previous work and redo "
-            "all computations. Otherwise, we will attempt to use as much as we "
-            "can from the previous run."
+            "previous run, then we will overwrite any previous work starting "
+            "from the provided stage (and all subsequent stages of the "
+            "experiment) and redo all computations. Otherwise, we will "
+            "attempt to use as much as we can from the previous run."
         ),
 
     )
@@ -230,8 +233,11 @@ def main():
         # Else let's fix it to a the answer to the universe
         config["random_seed"] = 42
 
+    # And our initial stage to start overwriting, if any.
+    start_rerun_stage = args.force_rerun or config.get("force_rerun")
+
     # Time to initialize our experiment manager
-    with ExperimentManager(config, args.force_rerun) as manager:
+    with ExperimentManager(config, start_rerun_stage) as manager:
         # Generate our neural network, train it, and then extract the ruleset
         # that approximates it from it
         generate_data.run(

@@ -20,12 +20,42 @@ C50 = importr('C50')
 C5_0 = robjects.r('C5.0')
 
 
+def _truncate(x, decimals):
+    """
+    Truncates a given number x to contain at most `decimals`.
+
+    :param float x: Number which we want to truncate.
+    :param int decimals: Maximum number of decimals that the result will
+        contain.
+
+    :returns float: Truncated result.
+    """
+    power = 10**decimals
+    return math.trunc(power * x) / power
+
+
 def _parse_C5_rule_str(
     rule_str,
     rule_conclusion_map,
     prior_rule_confidence,
     threshold_decimals=None,
 ):
+    """
+    Helper function for extracting rules from the generated string text of
+    R's C5.0 output.
+
+    :param str rule_str: The result of running R's C5.0 algorithm in raw string
+        form.
+    :param Dict[X, Y] rule_conclusion_map: A map between all possible output
+        labels of our rules and their corresponding conclusions.
+    :param Dict prior_rule_confidence: The prior confidence levels of each
+        term in our given ruleset.
+    :param int threshold_decimals: If provided, the number of decimals to
+        truncate our thresholds when generating new rules.
+
+    :returns Set[Rule]: A set of rules representing the onces extracted from
+        the given output of C5.0.
+    """
     rules_set = set()
 
     rule_str_lines = rule_str.split('\n')
@@ -71,10 +101,16 @@ def _parse_C5_rule_str(
             )  # In C5, < -> <=, > -> >
             threshold = term_variables['cut']
             if threshold_decimals is not None:
-                threshold = (
-                    round(threshold, threshold_decimals) if term_operator == "<="
-                    else math.trunc(10**4 * threshold_decimals) / 10**4
-                )
+                if term_operator == "<=":
+                    # Then we will truncate it in a way that we can be sure
+                    # any element that was less to this one before this
+                    # operation, is still  kept that way
+                    threshold = _truncate(
+                        round(threshold, threshold_decimals + 1),
+                        threshold_decimals
+                    )
+                else:
+                    threshold = _truncate(threshold, threshold_decimals)
             rule_terms.add(Term(
                 neuron=term_neuron,
                 operator=term_operator,
