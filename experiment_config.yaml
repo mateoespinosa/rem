@@ -1,10 +1,10 @@
 # The directory of our training data. Can be a path relative to the caller or
 # an absolute path.
-dataset_file: "../DNN-RE-data-new/MB-1004-GE-2Hist/data.csv"
+dataset_file: "../DNN-RE-data-new/MB-GE-ER/data.csv"
 
 # The name of our dataset. Must be one of the data sets supported by our
 # experiment runners.
-dataset_name: 'MB-1004-GE-2Hist'
+dataset_name: 'MB-GE-ER'
 
 # Number of split folds for our training. If not provided, then it will default
 # to a single fold.
@@ -15,27 +15,37 @@ hyperparameters:
     # The batch size we will use for training.
     batch_size: 16
     # Number of epochs to run our model for
-    epochs: 50
+    epochs: 100
     # Now many hidden layers we will use and how many activations in each
-    layer_units: [128, 64]
+    layer_units: [128, 128]
     # The activation use in between hidden layers. Can be any valid Keras
     # activation function. If not provided, it defaults to "tanh"
-    activation: "tanh"
+    activation: "elu"
     # The last activation used in our model. Used to define the type of
-    # categorical loss we will use. If not provided, it defaults to "sigmoid".
-    last_activation: "sigmoid"
+    # categorical loss we will use. If not provided, it defaults to the
+    # corresponding last activation for the given loss function.
+    last_activation: "softmax"
     # The type of loss we will use. Must be one of
     # ["sofxmax_xentr", "sigmoid_xentr"]. If not provided, we will use the
-    # given last layer's activation to obtain the corresponding loss.
+    # given last layer's activation to obtain the corresponding loss if it was
+    # provided. Otherwise, we will default to softmax xentropy.
     loss_function: "softmax_xentr"
     # The learning rate we will use for our Adam optimizer. If not provided,
     # then it will be defaulted to 0.001
-    learning_rate: 0.001
+    learning_rate: 0.0001
+    # Dropout rate to use in layer in between last hidden layer and last layer
+    # If 0, then no dropout is done. This is the probability that a given
+    # activation will be dropped.
+    dropout_rate: 0
 
 # How many trials we will attempt for finding our best initialisation. If not
 # provided or less than or equal to 1, then we will use a random initialisation
 # at train time.
 initialisation_trials: 1
+
+# If we are looking for a best initialisation, then we also need to provide
+# a metric to optimize over. This can be one of [accuracy", "auc"]
+initialisation_trial_metric: "accuracy"
 
 # The rule extractor we will use. If not provided, it defaults to REM-D.
 rule_extractor: "REM-D"
@@ -43,3 +53,25 @@ rule_extractor: "REM-D"
 # Where are we dumping our results. If not provided, it will default to the same
 # directory as the one containing the dataset.
 output_dir: "experiment_results"
+
+# Parameters to be used during our grid search
+grid_search_params:
+    # Whether or not to perform grid-search
+    enable: False
+    # The metric we will optimize over during our grid-search. Must be one of
+    # ["accuracy", "auc"]
+    metric_name: "accuracy"
+    # Batch sizes to be used during training
+    batch_sizes: [16, 32]
+    # Training epochs to use for our DNNs
+    epochs: [50, 100, 150]
+    # Learning rates to try in our optimizer
+    learning_rates: [0.001, 0.0001]
+    # The sizes to try for each hidden layer
+    layer_sizes: [[128, 64, 32], [64, 32]]
+    # Activations to use between hidden layers. Must be valid Keras activations
+    activations: ["tanh", "elu"]
+    # The amount of dropout to use between hidden layers and the last layer
+    dropout_rates: [0, 0.2]
+    # Finally, the loss function to use for training
+    loss_functions: ["softmax_xentr", "sigmoid_xentr"]

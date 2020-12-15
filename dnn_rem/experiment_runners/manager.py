@@ -171,6 +171,18 @@ class ExperimentManager(object):
             pathlib.Path(self.DATA_FP).parent
         )
 
+        # Time to set up our grid-search config
+        self.GRID_SEARCH_PARAMS = config.get(
+            "grid_search_params",
+            {},
+        )
+
+        # And our initialization trial
+        self.BEST_INIT_METRIC_NAME = config.get(
+            "initialisation_trial_metric",
+            "acc",
+        )
+
         # <dataset_name>/cross_validation/<n>_folds/
         cross_val_dir = os.path.join(self.experiment_dir, 'cross_validation')
         self.SUMMARY_FILE = os.path.join(cross_val_dir, "summary.txt")
@@ -547,7 +559,6 @@ f
         self.X = data.drop([self.DATASET_INFO.target_col], axis=1).values
         self.y = data[self.DATASET_INFO.target_col].values
 
-
         # Split our data into two groups of train and test data in general
         self.data_split, _ = self.serializable_stage(
             target_file=self.N_FOLD_CV_SPLIT_INDICES_FP,
@@ -564,7 +575,7 @@ f
 
         # And do the same but now for the folds that we will use for training
         self.fold_split, _ = self.serializable_stage(
-            target_file=self.NN_INIT_SPLIT_INDICES_FP,
+            target_file=self.N_FOLD_CV_SPLIT_INDICES_FP,
             execute_fn=lambda: stratified_k_fold_split(
                 X=self.X,
                 y=self.y,
@@ -683,6 +694,7 @@ f
         if os.path.exists(target_file) and (not self.force_rerun):
             # Then time to deserialize it and return it to the user
             try:
+                logging.debug(f'We hit the cache for "{target_file}"')
                 return deserializing_fn(target_file), True
             except:
                 # Then at this point we will simply recompute it as the

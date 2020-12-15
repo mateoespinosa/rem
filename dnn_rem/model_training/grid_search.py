@@ -93,7 +93,7 @@ class CustomMetricKerasClassifier(KerasClassifier):
         )
 
 
-def grid_search(X, y, X_val=None, y_val=None, num_outputs=2):
+def grid_search(X, y, manager=None, X_val=None, y_val=None, num_outputs=2):
     """
     Performs a grid search over the hyper-parameters of our model using
     training dataset X with labels y.
@@ -102,33 +102,65 @@ def grid_search(X, y, X_val=None, y_val=None, num_outputs=2):
         'Performing grid search over hyper parameters from scratch. '
         'This will take a while...'
     )
-    batch_size = [16, 32]#, 64, 128]
-    epochs = [50, 100]#, 150]
-    learning_rate = [1e-3, 1e-4]
-    layer_1 = [128, 64, 32]
-    layer_2 = [64, 32, 16]
-    layer_3 = [32, 16, 8]
-    activation = ["tanh", "elu"]
-    last_activation = ["softmax", "sigmoid"]
-    loss_function = [None]  #"softmax_xentr", "sigmoid_xentr"]
+    if manager and manager.GRID_SEARCH_PARAMS:
+        batch_sizes = manager.GRID_SEARCH_PARAMS.get("batch_sizes", [16, 32])
+        epochs = manager.GRID_SEARCH_PARAMS.get(
+            "epochs",
+            [50, 100, 150],
+        )
+        learning_rates = manager.GRID_SEARCH_PARAMS.get(
+            "learning_rates",
+            [1e-3, 1e-4],
+        )
+        layer_sizes = manager.GRID_SEARCH_PARAMS.get(
+            "layer_sizes",
+            ([128, 64, 32], [64, 32]),
+        )
+        activations = manager.GRID_SEARCH_PARAMS.get(
+            "activations",
+            ["tanh", "elu"]
+        )
+        loss_functions = manager.GRID_SEARCH_PARAMS.get(
+            "loss_functions",
+            ["softmax_xentr", "sigmoid_xentr"]
+        )
+        dropout_rates = manager.GRID_SEARCH_PARAMS.get(
+            "dropout_rates",
+            [0, 0.2]
+        )
+    else:
+        batch_sizes = [16, 32]
+        epochs = [50, 100, 150]
+        learning_rates = [1e-3, 1e-4]
+        layer_sizes = (
+            [128, 64, 32],
+            [64, 32],
+        )
+        activations = ["tanh", "elu"]
+        loss_functions = ["softmax_xentr", "sigmoid_xentr"]
+        dropout_rates = [0, 0.2]
 
     param_grid = dict(
         input_features=[X.shape[-1]],
         num_outputs=[num_outputs],
-        batch_size=batch_size,
+        batch_size=batch_sizes,
         epochs=epochs,
-        layer_units=list(itertools.product(layer_1, layer_2, layer_3)),
-        activation=activation,
-        last_activation=last_activation,
-        loss_function=loss_function,
-        learning_rate=learning_rate,
+        layer_units=list(itertools.product(*layer_sizes)),
+        activation=activations,
+        last_activation=[None],
+        loss_function=loss_functions,
+        learning_rate=learning_rates,
+        dropout_rate=dropout_rates,
     )
 
     model = CustomMetricKerasClassifier(
         build_fn=model_fn,
         # Given class imbalance, we will score our fits based on AUC rather
         # than plain accuracy.
-        metric_name='auc',
+        metric_name=manager.GRID_SEARCH_PARAMS.get(
+            "metric_name",
+            "accuracy",
+        ) if manager else "accuracy",
         verbose=0,
     )
 

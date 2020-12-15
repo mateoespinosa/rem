@@ -26,6 +26,13 @@ def run(manager):
     logging.info("Finding best initialisation")
     X_train, y_train, _, _ = manager.get_train_split()
 
+    # The metric name to optimize over for our given initializations
+    metric_name = manager.BEST_INIT_METRIC_NAME
+    if metric_name == "accuracy":
+        # Then we rewrite it as "acc" as that's what we use in for stats
+        # collection in here
+        metric_name = "acc"
+
     # Save information about nn initialisation
     if not os.path.exists(manager.NN_INIT_RE_RESULTS_FP):
         pd.DataFrame(data=[], columns=['run']).to_csv(
@@ -35,7 +42,7 @@ def run(manager):
 
     # Smallest ruleset i.e. total number of rules
     smallest_ruleset_size = np.float('inf')
-    smallest_ruleset_acc = 0
+    smallest_ruleset_metric = 0
     best_init_index = 0
     best_model = None
 
@@ -59,22 +66,12 @@ def run(manager):
             model, nn_accuracy, nn_auc, maj_class_acc = run_train_loop(
                 X_train=X_train,
                 y_train=y_train,
-                # Validate on our training data itself
+                # Validate on our training data itself. In the near future,
+                # use a validation set for this instead
                 X_test=X_train,
                 y_test=y_train,
                 manager=manager,
             )
-            if logging.getLogger().getEffectiveLevel() not in [
-                logging.ERROR,
-                logging.WARNING,
-            ]:
-                pbar.write(
-                    f"Test accuracy for initialisation {i + 1}/"
-                    f"{manager.INITIALISATION_TRIALS} is "
-                    f"{round(nn_accuracy, 3)}, "
-                    f"AUC is {round(nn_auc, 3)}, and majority class accuracy "
-                    f"is {round(maj_class_acc, 3)}."
-                )
 
             ####################################################################
             ## RULE EXTRACTION + EVALUATION
@@ -110,12 +107,26 @@ def run(manager):
 
             # If this initialisation extracts a smaller ruleset - save it
             ruleset_size = sum(re_results['n_rules_per_class'])
+
+            if logging.getLogger().getEffectiveLevel() not in [
+                logging.ERROR,
+                logging.WARNING,
+            ]:
+                pbar.write(
+                    f"Test accuracy for initialisation {i + 1}/"
+                    f"{manager.INITIALISATION_TRIALS} is "
+                    f"{round(nn_accuracy, 3)}, "
+                    f"AUC is {round(nn_auc, 3)}, and majority class accuracy "
+                    f"is {round(maj_class_acc, 3)}. Number of rules extracted "
+                    f"was {ruleset_size}."
+                )
+
             if (ruleset_size < smallest_ruleset_size) or (
                 (ruleset_size == smallest_ruleset_size) and
-                (re_results['acc'] > smallest_ruleset_acc)
+                (re_results[metric_name] > smallest_ruleset_metric)
             ):
                 smallest_ruleset_size = ruleset_size
-                smallest_ruleset_acc = re_results['acc']
+                smallest_ruleset_metric = re_results[metric_name]
                 best_init_index = i
 
                 # Keep our best model
@@ -130,6 +141,7 @@ def run(manager):
             results_df.loc[i, 're_time (sec)'] = re_time
             results_df.loc[i, 'nn_acc'] = nn_accuracy
             results_df.loc[i, 're_acc'] = re_results['acc']
+            results_df.loc[i, 're_auc'] = re_results['auc']
             results_df.loc[i, 're_fid'] = re_results['fid']
             results_df.loc[i, 'rules_num'] = sum(
                 re_results['n_rules_per_class']
@@ -137,6 +149,7 @@ def run(manager):
             results_df["run"] = results_df["run"].astype(int)
             results_df["nn_acc"] = results_df["nn_acc"].round(3)
             results_df["re_acc"] = results_df["re_acc"].round(3)
+            results_df["re_auc"] = results_df["re_auc"].round(3)
             results_df["re_fid"] = results_df["re_fid"].round(3)
             results_df["re_time (sec)"] = results_df["re_time (sec)"].round(3)
             results_df["rules_num"] = results_df["rules_num"]
@@ -145,6 +158,7 @@ def run(manager):
                 "run",
                 "nn_acc",
                 "re_acc",
+                "re_auc",
                 "re_fid",
                 "re_time (sec)",
                 "rules_num"

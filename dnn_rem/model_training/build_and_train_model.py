@@ -60,9 +60,10 @@ def model_fn(
     num_outputs,
     activation="tanh",
     optimizer=None,
-    last_activation="sigmoid",
-    loss_function="sigmoid_xentr",
+    last_activation="softmax",
+    loss_function="softmax_xentr",
     learning_rate=0.001,
+    dropout_rate=0,
 ):
     """
     Model function to construct our TF model for learning our given task.
@@ -105,7 +106,7 @@ def model_fn(
         elif last_activation == "softmax":
             loss_function = "softmax_xentr"
     if last_activation is None:
-        if loss_function is not None:
+        if loss_function is None:
             raise ValueError(
                 "We were not provided with a loss function or last activation "
                 "function in our model."
@@ -115,6 +116,9 @@ def model_fn(
         else:
             # Default to empty so that we can do substring search
             last_activation = ""
+    # We add a dropout layer for regularization
+    if dropout_rate:
+        net = tf.keras.layers.Dropout(dropout_rate)(net)
 
     # And our output layer map
     net = tf.keras.layers.Dense(
@@ -242,9 +246,11 @@ def run_train_loop(
             input_features=X_train.shape[-1],
             layer_units=hyperparams["layer_units"],
             num_outputs=manager.DATASET_INFO.n_outputs,
-            last_activation=hyperparams.get("last_activation", "softmax"),
+            last_activation=hyperparams.get("last_activation", None),
+            loss_function=hyperparams.get("loss_function", "softmax_xentr"),
             activation=hyperparams.get("activation", "tanh"),
-            learning_rate=hyperparams.get("learning_rate", 0.001)
+            learning_rate=hyperparams.get("learning_rate", 0.001),
+            dropout_rate=hyperparams.get("dropout_rate", 0),
         )
 
     # If on debug mode, then let's look at the architecture of the model we

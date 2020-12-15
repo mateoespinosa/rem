@@ -85,7 +85,7 @@ def build_parser():
     parser.add_argument(
         '--grid_search',
         action="store_true",
-        default=False,
+        default=None,
         help=(
             "whether we want to do a grid search over our model's "
             "hyperparameters. If the results of a previous grid search are "
@@ -219,6 +219,10 @@ def main():
         config["initialisation_trials"] = args.initialisation_trials
     if args.output_dir is not None:
         config["output_dir"] = args.output_dir
+    if args.grid_search is not None:
+        if "grid_search_params" not in config:
+            config["grid_search_params"] = {}
+        config["grid_search_params"]["enable"] = args.grid_search
     if args.randomize:
         # Then set the seed to be the current time
         config["random_seed"] = time.time()
@@ -232,7 +236,7 @@ def main():
         # that approximates it from it
         generate_data.run(
             manager=manager,
-            use_grid_search=args.grid_search,
+            use_grid_search=manager.GRID_SEARCH_PARAMS.get("enable", False),
         )
 
         # Perform n fold cross validated rule extraction on the dataset
