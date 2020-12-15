@@ -101,11 +101,11 @@ One can run the tool by manually inputing the dataset information as command-lin
 ```yaml
 # The directory of our training data. Can be a path relative to the caller or
 # an absolute path.
-dataset_file: "../DNN-RE-data-new/MB-1004-GE-2Hist/data.csv"
+dataset_file: "../DNN-RE-data-new/MB-GE-ER/data.csv"
 
 # The name of our dataset. Must be one of the data sets supported by our
 # experiment runners.
-dataset_name: 'MB-1004-GE-2Hist'
+dataset_name: 'MB-GE-ER'
 
 # Number of split folds for our training. If not provided, then it will default
 # to a single fold.
@@ -116,69 +116,121 @@ hyperparameters:
     # The batch size we will use for training.
     batch_size: 16
     # Number of epochs to run our model for
-    epochs: 50
+    epochs: 100
     # Now many hidden layers we will use and how many activations in each
-    layer_units: [128, 64]
+    layer_units: [128, 128]
     # The activation use in between hidden layers. Can be any valid Keras
     # activation function. If not provided, it defaults to "tanh"
-    activation: "tanh"
+    activation: "elu"
     # The last activation used in our model. Used to define the type of
-    # categorical loss we will use. If not provided, it defaults to "sigmoid".
-    last_activation: "sigmoid"
+    # categorical loss we will use. If not provided, it defaults to the
+    # corresponding last activation for the given loss function.
+    last_activation: "softmax"
     # The type of loss we will use. Must be one of
     # ["sofxmax_xentr", "sigmoid_xentr"]. If not provided, we will use the
-    # given last layer's activation to obtain the corresponding loss.
+    # given last layer's activation to obtain the corresponding loss if it was
+    # provided. Otherwise, we will default to softmax xentropy.
     loss_function: "softmax_xentr"
+    # The learning rate we will use for our Adam optimizer. If not provided,
+    # then it will be defaulted to 0.001
+    learning_rate: 0.0001
+    # Dropout rate to use in layer in between last hidden layer and last layer
+    # If 0, then no dropout is done. This is the probability that a given
+    # activation will be dropped.
+    dropout_rate: 0
 
 # How many trials we will attempt for finding our best initialisation. If not
-# provided, then we will use a random initialisation at train time.
-initialisation_trials: 5
+# provided or less than or equal to 1, then we will use a random initialisation
+# at train time.
+initialisation_trials: 1
+
+# If we are looking for a best initialisation, then we also need to provide
+# a metric to optimize over. This can be one of [accuracy", "auc"]
+initialisation_trial_metric: "accuracy"
 
 # The rule extractor we will use. If not provided, it defaults to REM-D.
 rule_extractor: "REM-D"
 
+# And any parameters we want to provide to the extractor for further
+# tuning/experimentation. This is dependent on the used extractor
+extractor_params:
+    # An integer indicating how many decimals should we truncate our thresholds
+    # to. If null, then no truncation will happen.
+    threshold_decimals: null
+    # The winnow parameter to use for C5. Must be a boolean.
+    winnow: True
+    # The minimum number of cases for a split in C5. Must be a positive integer
+    min_cases: 15
+
 # Where are we dumping our results. If not provided, it will default to the same
 # directory as the one containing the dataset.
 output_dir: "experiment_results"
+
+# Parameters to be used during our grid search
+grid_search_params:
+    # Whether or not to perform grid-search
+    enable: False
+    # The metric we will optimize over during our grid-search. Must be one of
+    # ["accuracy", "auc"]
+    metric_name: "accuracy"
+    # Batch sizes to be used during training
+    batch_sizes: [16, 32]
+    # Training epochs to use for our DNNs
+    epochs: [50, 100, 150]
+    # Learning rates to try in our optimizer
+    learning_rates: [0.001, 0.0001]
+    # The sizes to try for each hidden layer
+    layer_sizes: [[128, 64, 32], [64, 32]]
+    # Activations to use between hidden layers. Must be valid Keras activations
+    activations: ["tanh", "elu"]
+    # The amount of dropout to use between hidden layers and the last layer
+    dropout_rates: [0, 0.2]
+    # Finally, the loss function to use for training
+    loss_functions: ["softmax_xentr", "sigmoid_xentr"]
+
 ```
 
-In this example, we are indicating the path where we are we storing our `MB-1004-GE-2Hist` dataset and what hyper-parameters we want to use for our neural network.
+In this example, we are indicating the path where we are we storing our `MB-1004-GE-ER` dataset and what hyper-parameters we want to use for our neural network.
 
 You can then use this to run the experiment as follows:
 ```bash
 python run_experiment.py --config experiment_config.yaml
 ```
 
-If run successfully, then you should see an output similar to this one:
+If run successfully, then you should see an output similar to this one (note that for this one, we asked to try out two different initialisations through the command line):
 ```bash
-$ python run_experiment.py --config experiment_config.yaml
-Test accuracy for fold 1/5 is 0.829, AUC is 0.828, and majority class accuracy is 0.918
-Test accuracy for fold 2/5 is 0.814, AUC is 0.805, and majority class accuracy is 0.91
-Test accuracy for fold 3/5 is 0.9, AUC is 0.734, and majority class accuracy is 0.911
-Test accuracy for fold 4/5 is 0.923, AUC is 0.868, and majority class accuracy is 0.907
-Test accuracy for fold 5/5 is 0.938, AUC is 0.685, and majority class accuracy is 0.915
-Training fold model 5/5: 100%|███████████████████████████████████████████████████████████████████████████████████████████████████████████| 5/5 [00:40<00:00,  8.13s/it]
-Done extracting rules from neural network: 100%|███████████████████████████████████████████████████████████████████████▉| 5.9999999999999964/6 [06:11<00:00, 61.95s/it]
-[INFO] Rule set test accuracy for fold 1/5 is 0.864, AUC is 0.77, and size of rule set is 54
-Done extracting rules from neural network: 100%|████████████████████████████████████████████████████████████████████████▉| 5.999999999999999/6 [09:07<00:00, 91.21s/it]
-[INFO] Rule set test accuracy for fold 2/5 is 0.909, AUC is 0.762, and size of rule set is 318
-Done extracting rules from neural network: 100%|███████████████████████████████████████████████████████████████████████████████████████| 6.0/6 [04:17<00:00, 42.90s/it]
-[INFO] Rule set test accuracy for fold 3/5 is 0.914, AUC is 0.607, and size of rule set is 32
-Done extracting rules from neural network: 100%|████████████████████████████████████████████████████████████████████████| 6.0000000000000036/6 [04:35<00:00, 45.95s/it]
-[INFO] Rule set test accuracy for fold 4/5 is 0.876, AUC is 0.676, and size of rule set is 34
-Done extracting rules from neural network: 100%|████████████████████████████████████████████████████████████████████████▉| 5.999999999999998/6 [03:23<00:00, 33.94s/it]
-[INFO] Rule set test accuracy for fold 5/5 is 0.914, AUC is 0.578, and size of rule set is 9
+$ python run_experiment.py --config experiment_config.yaml --initialisation_trials 2
+[INFO] Finding best initialisation
+Test accuracy for initialisation 1/2 is 0.999, AUC is 1.0, and majority class accuracy is 0.766. Number of rules extracted was 439.
+Test accuracy for initialisation 2/2 is 0.999, AUC is 1.0, and majority class accuracy is 0.766. Number of rules extracted was 34.
+Testing initialisation 2/2: 100%|█████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████| 2/2 [09:37<00:00, 288.85s/it]
+Test accuracy for fold 1/5 is 0.976, AUC is 0.98, and majority class accuracy is 0.762
+Test accuracy for fold 2/5 is 0.986, AUC is 0.99, and majority class accuracy is 0.756
+Test accuracy for fold 3/5 is 0.985, AUC is 0.977, and majority class accuracy is 0.76
+Test accuracy for fold 4/5 is 0.977, AUC is 0.987, and majority class accuracy is 0.764
+Test accuracy for fold 5/5 is 0.955, AUC is 0.97, and majority class accuracy is 0.764
+Training fold model 5/5: 100%|█████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████| 5/5 [01:11<00:00, 14.21s/it]
+Done extracting rules from neural network: 100%|██████████████████████████████████████████████████████████████████████████████████████████▉| 6/6 [02:29<00:00, 24.99s/it]
+[INFO] Rule set test accuracy for fold 1/5 is 0.922, AUC is 0.901, and size of rule set is 37
+Done extracting rules from neural network: 100%|███████████████████████████████████████████████████████████████████████████████████████████| 6/6 [04:50<00:00, 48.40s/it]
+[INFO] Rule set test accuracy for fold 2/5 is 0.909, AUC is 0.825, and size of rule set is 154
+Done extracting rules from neural network: 100%|███████████████████████████████████████████████████████████████████████████████████████████| 6/6 [05:10<00:00, 51.83s/it]
+[INFO] Rule set test accuracy for fold 3/5 is 0.896, AUC is 0.813, and size of rule set is 440
+Done extracting rules from neural network: 100%|███████████████████████████████████████████████████████████████████████████████████████████| 6/6 [04:23<00:00, 43.99s/it]
+[INFO] Rule set test accuracy for fold 4/5 is 0.922, AUC is 0.866, and size of rule set is 350
+Done extracting rules from neural network: 100%|███████████████████████████████████████████████████████████████████████████████████████████| 6/6 [05:26<00:00, 54.41s/it]
+[INFO] Rule set test accuracy for fold 5/5 is 0.876, AUC is 0.753, and size of rule set is 2269
 +------+-------------+--------+----------------+-----------+----------------+-----------------------+------------------------+-------------+---------------------+
 | Fold | NN Accuracy | NN AUC | REM-D Accuracy | REM-D AUC | REM-D Fidelity | Extraction Time (sec) | Extraction Memory (MB) | Rulset Size | Average Rule Length |
 +------+-------------+--------+----------------+-----------+----------------+-----------------------+------------------------+-------------+---------------------+
-|  1   |    0.829    | 0.828  |     0.876      |    0.76   |     0.847      |        209.616        |        906.398         |      47     |        4.723        |
-|  2   |    0.814    | 0.805  |     0.906      |   0.745   |     0.838      |        246.882        |        958.928         |     311     |        4.894        |
-|  3   |     0.9     | 0.734  |     0.903      |   0.585   |     0.909      |        119.115        |         514.1          |      32     |        3.281        |
-|  4   |    0.923    | 0.868  |     0.876      |   0.691   |     0.882      |        134.698        |        6328.574        |      34     |        3.559        |
-|  5   |    0.938    | 0.685  |     0.914      |   0.578   |     0.947      |         79.878        |        435.206         |      9      |        1.667        |
-| avg  |    0.881    | 0.784  |     0.895      |   0.672   |     0.885      |        158.038        |        1828.641        |     86.6    |        3.625        |
+|  1   |     0.98    | 0.976  |     0.922      |   0.901   |     0.942      |        150.074        |        533.989         |      37     |        3.757        |
+|  2   |     0.99    | 0.986  |     0.909      |   0.825   |     0.909      |        290.573        |        708.282         |     154     |        5.468        |
+|  3   |    0.977    | 0.985  |     0.896      |   0.813   |     0.889      |        311.154        |        1207.839        |     440     |        7.755        |
+|  4   |    0.987    | 0.977  |     0.922      |   0.866   |     0.929      |        264.117        |        1052.154        |     350     |        6.894        |
+|  5   |     0.97    | 0.955  |     0.876      |   0.753   |     0.891      |        326.662        |        5631.363        |     2269    |        11.322       |
+| avg  |    0.981    | 0.976  |     0.905      |   0.832   |     0.912      |        268.516        |        1826.725        |    650.0    |        7.039        |
 +------+-------------+--------+----------------+-----------+----------------+-----------------------+------------------------+-------------+---------------------+
-~~~~~~~~~~~~~~~~~~~~ Experiment successfully terminated after 1704.153 seconds ~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~ Experiment successfully terminated after 2113.612 seconds ~~~~~~~~~~~~~~~~~~~~
 ```
 
 The default cross-validation experiment will do the following:

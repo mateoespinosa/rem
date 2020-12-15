@@ -15,17 +15,27 @@ from dnn_rem.rules.ruleset import Ruleset
 ################################################################################
 
 
-def extract_rules(model, train_data, verbosity=logging.INFO):
+def extract_rules(
+    model,
+    train_data,
+    verbosity=logging.INFO,
+    winnow=True,
+    threshold_decimals=None,
+    min_cases=15,
+):
     """
     Extracts a set of rules which imitates given the provided model in a
     pedagogical manner using C5 on the outputs and inputs of the network.
 
     :param tf.keras.Model model: The model we want to imitate using our ruleset.
     :param np.array train_data: 2D data matrix containing all the training
-                                   points used to train the provided keras
-                                   model.
+        points used to train the provided keras model.
     :param logging.verbosity verbosity: The verbosity in which we want to run
-                                        this algorithm.
+        this algorithm.
+    :param bool winnow: whether or not to use winnowing for C5.0
+    :param int threshold_decimals: how many decimal points to use for
+        thresholds. If None, then no truncation is done.
+    :param int min_cases: minimum number of cases for a split to happen in C5.0
     :returns Set[Rule]: the set of rules extracted from the given model.
     """
 
@@ -51,6 +61,9 @@ def extract_rules(model, train_data, verbosity=logging.INFO):
         y=y,
         rule_conclusion_map=dict(zip(range(num_classes), range(num_classes))),
         prior_rule_confidence=1,
+        winnow=winnow,
+        threshold_decimals=threshold_decimals,
+        min_cases=min_cases,
     )
 
     # Merge rules so that they are in Disjunctive Normal Form

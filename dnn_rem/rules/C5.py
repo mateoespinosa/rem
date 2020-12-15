@@ -1,6 +1,7 @@
 """
 Python wrapper implementation around R's C5.0 package.
 """
+import math
 
 from .term import Term, Neuron
 from .helpers import parse_variable_str_to_dict
@@ -22,7 +23,8 @@ C5_0 = robjects.r('C5.0')
 def _parse_C5_rule_str(
     rule_str,
     rule_conclusion_map,
-    prior_rule_confidence
+    prior_rule_confidence,
+    threshold_decimals=None,
 ):
     rules_set = set()
 
@@ -67,12 +69,16 @@ def _parse_C5_rule_str(
             term_operator = (
                 '<=' if term_variables['result'] == '<' else '>'
             )  # In C5, < -> <=, > -> >
-            term_operand = term_variables['cut']
-
+            threshold = term_variables['cut']
+            if threshold_decimals is not None:
+                threshold = (
+                    round(threshold, threshold_decimals) if term_operator == "<="
+                    else math.trunc(10**4 * threshold_decimals) / 10**4
+                )
             rule_terms.add(Term(
                 neuron=term_neuron,
                 operator=term_operator,
-                threshold=term_operand,
+                threshold=threshold,
             ))
 
         rules_set.add(Rule.from_term_set(
@@ -91,6 +97,7 @@ def C5(
     prior_rule_confidence,
     winnow=True,
     min_cases=15,
+    threshold_decimals=None,
 ):
     y = robjects.vectors.FactorVector(
         y.map(str),
@@ -109,5 +116,6 @@ def C5(
         C5_rules_str,
         rule_conclusion_map,
         prior_rule_confidence,
+        threshold_decimals=threshold_decimals,
     )
     return C5_rules

@@ -10,7 +10,7 @@ class ConjunctiveClause(object):
 
     Each conjunctive clause of terms has its own confidence value
 
-    The rank_score refers to the hill-climbing score associated with each clause.  
+    The rank_score refers to the hill-climbing score associated with each clause.
     """
     __slots__ = [
         'terms',
@@ -31,7 +31,7 @@ class ConjunctiveClause(object):
         super(ConjunctiveClause, self).__setattr__('rank_score', rank_score)
 
     def __str__(self):
-        terms_str = [str(term) for term in self.terms]
+        terms_str = [str(term) for term in sorted(self.terms, key=str)]
         return f"{self.confidence}[{' AND '.join(terms_str)}]"
 
     def __eq__(self, other):

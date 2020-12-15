@@ -23,7 +23,6 @@ def substitute(total_rule, intermediate_rules):
                    intermediate rules into total_rule.
     """
     new_premise_clauses = set()
-
     # for each clause in the total rule
     for old_premise_clause in total_rule.get_premise():
         # list of sets of conjunctive clauses that are all conjunctive

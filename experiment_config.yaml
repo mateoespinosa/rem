@@ -50,6 +50,17 @@ initialisation_trial_metric: "accuracy"
 # The rule extractor we will use. If not provided, it defaults to REM-D.
 rule_extractor: "REM-D"
 
+# And any parameters we want to provide to the extractor for further
+# tuning/experimentation. This is dependent on the used extractor
+extractor_params:
+    # An integer indicating how many decimals should we truncate our thresholds
+    # to. If null, then no truncation will happen.
+    threshold_decimals: null
+    # The winnow parameter to use for C5. Must be a boolean.
+    winnow: True
+    # The minimum number of cases for a split in C5. Must be a positive integer
+    min_cases: 15
+
 # Where are we dumping our results. If not provided, it will default to the same
 # directory as the one containing the dataset.
 output_dir: "experiment_results"

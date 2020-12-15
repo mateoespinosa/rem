@@ -157,7 +157,8 @@ class ExperimentManager(object):
 
         # And build our rule extractor
         self.RULE_EXTRACTOR = self.get_rule_extractor(
-            config.get("rule_extractor", "rem_d")
+            config.get("rule_extractor", "rem_d"),
+            **config.get("extractor_params", {})
         )
 
         # A random seed to use for deterministic training
@@ -466,7 +467,7 @@ f
                     f"field."
                 )
 
-    def get_rule_extractor(self, extractor_name):
+    def get_rule_extractor(self, extractor_name, **extractor_params):
         name = extractor_name.lower()
         if name == "rem-d":
             loss_function = self.HYPERPARAMS.get(
@@ -486,6 +487,7 @@ f
                 run=lambda *args, **kwargs: rem_d(
                     *args,
                     **kwargs,
+                    **extractor_params,
                     last_activation=last_activation,
                 )
             )
@@ -493,7 +495,11 @@ f
         if name == "pedagogical":
             return RuleExMode(
                 mode='pedagogical',
-                run=pedagogical,
+                run=lambda *args, **kwargs: pedagogical(
+                    *args,
+                    **kwargs,
+                    **extractor_params,
+                ),
             )
 
         raise ValueError(

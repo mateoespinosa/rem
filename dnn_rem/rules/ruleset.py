@@ -124,8 +124,8 @@ class Ruleset(object):
 
     def __str__(self):
         ruleset_str = '\n'
-        for rule in self.rules:
-            ruleset_str += str(sorted(rule)) + '\n'
+        for rule in sorted(self.rules, key=str):
+            ruleset_str += str(rule) + '\n'
 
         return ruleset_str
 

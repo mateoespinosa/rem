@@ -144,6 +144,9 @@ def extract_rules(
     train_data,
     verbosity=logging.INFO,
     last_activation=None,
+    threshold_decimals=None,
+    winnow=True,
+    min_cases=15,
 ):
     """
     Extracts a set of rules which imitates given the provided model using the
@@ -159,6 +162,10 @@ def extract_rules(
         This is needed in case the network's last activation function got merged
         into the network's loss. If None, then no activation is done. Otherwise,
         it must be either "sigmoid" or "softmax".
+    :param bool winnow: whether or not to use winnowing for C5.0
+    :param int threshold_decimals: how many decimal points to use for
+        thresholds. If None, then no truncation is done.
+    :param int min_cases: minimum number of cases for a split to happen in C5.0
 
     :returns Ruleset: the set of rules extracted from the given model.
     """
@@ -209,7 +216,8 @@ def extract_rules(
                 term_confidences = \
                     class_rule.get_terms_with_conf_from_rule_premises()
                 terms = term_confidences.keys()
-                for i, term in enumerate(terms, start=1):
+
+                for i, term in enumerate(sorted(terms, key=str), start=1):
                     pbar.set_description(
                         f'Extracting rules for term {i}/{len(terms)} {term} '
                         f'of layer {hidden_layer} for class {output_class}'
@@ -237,11 +245,14 @@ def extract_rules(
                         y=target,
                         rule_conclusion_map=rule_conclusion_map,
                         prior_rule_confidence=prior_rule_confidence,
+                        winnow=winnow,
+                        threshold_decimals=threshold_decimals,
+                        min_cases=min_cases,
                     )
                     intermediate_rules.add_rules(new_rules)
                     pbar.update(1/len(terms))
 
-                 # Merge rules with current accumulation
+                # Merge rules with current accumulation
                 pbar.set_description(
                     f"Substituting rules for layer {hidden_layer}"
                 )

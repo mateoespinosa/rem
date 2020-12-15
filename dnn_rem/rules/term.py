@@ -4,6 +4,7 @@ Represent components that make up a rule. All immutable and hashable.
 
 from enum import Enum
 from typing import List
+import numpy as np
 
 
 class TermOperator(Enum):
@@ -23,13 +24,10 @@ class TermOperator(Enum):
 
     def eval(self):
         # Return evaluation operation for term operator
-        import operator
         if self is self.GreaterThan:
-            return operator.gt
+            return lambda x, y: x > y
         if self is self.LessThanEq:
-            return operator.le
-        # if self is self.Equal:
-        #     return operator.eq
+            return lambda x, y: np.logical_or(np.isclose(x, y), (x < y))
 
     def most_general_value(self, values):
         # Given a list of values, return the most general depending on the
@@ -93,7 +91,7 @@ class Term(object):
             isinstance(other, Term) and
             (self.neuron == other.neuron) and
             (self.operator == other.operator) and
-            (self.threshold == other.threshold)
+            (np.isclose(self.threshold, other.threshold))
         )
 
     def __hash__(self):

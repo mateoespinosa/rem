@@ -41,6 +41,7 @@ def run(manager, use_grid_search=False):
                 X=X_train,
                 y=y_train,
                 num_outputs=manager.DATASET_INFO.n_outputs,
+                manager=manager,
             ),
             serializing_fn=serialize_best_params,
             deserializing_fn=deserialize_best_params,

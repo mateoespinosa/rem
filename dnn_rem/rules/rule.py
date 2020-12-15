@@ -69,10 +69,12 @@ class Rule(object):
         )
 
     def __hash__(self):
-        return hash((self.conclusion))
+        return hash(self.conclusion)
 
     def __str__(self):
-        premise_str = [(str(clause)) for clause in self.premise]
+        premise_str = [
+            (str(clause)) for clause in sorted(self.premise, key=str)
+        ]
         return f"IF {' OR '.join(premise_str)} THEN {self.conclusion}"
 
     def evaluate_rule_by_majority_voting(self, data):
