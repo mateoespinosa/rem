@@ -20,6 +20,7 @@ setuptools.setup(
     ],
     python_requires='>=3.6, <3.9',
     install_requires=[
+        "dill==0.3.3",
         "Keras-Preprocessing==1.1.2",
         "numpy<1.19.0",
         "pandas==0.25.3",

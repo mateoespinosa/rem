@@ -18,6 +18,7 @@ import tempfile
 import tensorflow as tf
 import time
 import tracemalloc
+import yaml
 
 from . import dataset_configs
 from dnn_rem.extract_rules.rem_d import extract_rules as rem_d
@@ -360,6 +361,12 @@ class ExperimentManager(object):
             N_FOLD_RULES_REMAINING_DP(reduction_percentage),
             "fold.rules",
         )
+
+        # For reference purposes, let's dump our effective config file into
+        # the experiment directory to make sure we can always reproduce the
+        # results generated here
+        with open(os.path.join(self.experiment_dir, "config.yaml"), 'w') as f:
+            f.write(yaml.dump(config, sort_keys=True))
 
         # And time for some data and directory initialization!
         if self._start_rerun_stage:
