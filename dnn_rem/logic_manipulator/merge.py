@@ -26,13 +26,13 @@ def merge(rules):
     # ConjunctiveClauses)
     rule_conclusion_to_premises_map = {}
     for rule in rules:
-        premise = rule.get_premise()
-        conclusion = rule.get_conclusion()
+        premise = rule.premise
+        conclusion = rule.conclusion
 
         assert len(premise) == 1, \
             'Error: all C5 rules must return 1 conjunctive clause'
 
-        if rule.get_conclusion() in rule_conclusion_to_premises_map:
+        if rule.conclusion in rule_conclusion_to_premises_map:
             # Seen conclusion - add rule premise to set of premises for that
             #                   conclusion
             rule_conclusion_to_premises_map[conclusion] = \

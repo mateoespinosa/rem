@@ -32,10 +32,10 @@ class Ruleset(object):
         rules.
 
         :param np.array X: 2D matrix of data points of which we want to obtain a
-                           prediction for.
+            prediction for.
 
         :returns np.array: 1D vector with as many entries as data points in X
-                           containing our predicted results.
+            containing our predicted results.
         """
         X = np.atleast_2d(X)
         y = np.array([])
@@ -76,6 +76,9 @@ class Ruleset(object):
             y = np.append(y, max_class)
         return y
 
+    def rank_rules(self, X, y):
+        pass
+
     def add_rules(self, rules):
         self.rules = self.rules.union(rules)
 
@@ -85,8 +88,8 @@ class Ruleset(object):
         """
         premises = set()
         for rule in self.rules:
-            if conclusion == rule.get_conclusion():
-                premises = premises.union(rule.get_premise())
+            if conclusion == rule.conclusion:
+                premises = premises.union(rule.premise)
 
         return premises
 
@@ -98,9 +101,9 @@ class Ruleset(object):
         term_confidences = {}
 
         for rule in self.rules:
-            for clause in rule.get_premise():
-                clause_confidence = clause.get_confidence()
-                for term in clause.get_terms():
+            for clause in rule.premise:
+                clause_confidence = clause.confidence
+                for term in clause.terms:
                     if term in term_confidences:
                         term_confidences[term] = max(
                             term_confidences[term],
@@ -118,8 +121,8 @@ class Ruleset(object):
         """
         terms = set()
         for rule in self.rules:
-            for clause in rule.get_premise():
-                terms = terms.union(clause.get_terms())
+            for clause in rule.premise:
+                terms = terms.union(clause.terms)
         return terms
 
     def __str__(self):
@@ -131,13 +134,13 @@ class Ruleset(object):
 
     def get_rule_by_conclusion(self, conclusion) -> Rule:
         for rule in self.rules:
-            if conclusion == rule.get_conclusion():
+            if conclusion == rule.conclusion:
                 return rule
 
     def get_ruleset_conclusions(self):
         conclusions = set()
         for rule in self.rules:
-            conclusions.add(rule.get_conclusion())
+            conclusions.add(rule.conclusion)
         return conclusions
 
     def combine_external_clause(self, conjunctiveClause, conclusion):
@@ -163,16 +166,16 @@ class Ruleset(object):
         intersect = conclusions_self.intersection(conclusions_other)
 
         for rule in self.rules.union(other.rules):
-            if rule.get_conclusion() in diff:
+            if rule.conclusion in diff:
                 combined_rules.add(rule)
 
         for rule in self.rules:
-            if rule.get_conclusion() in intersect:
+            if rule.conclusion in intersect:
                 premise = other.get_rule_premises_by_conclusion(
-                    rule.get_conclusion()
+                    rule.conclusion
                 )
-                combined_premise = premise.union(rule.get_premise())
-                combined_rule = Rule(combined_premise, rule.get_conclusion())
+                combined_premise = premise.union(rule.premise)
+                combined_rule = Rule(combined_premise, rule.conclusion)
                 combined_rules.add(combined_rule)
         return combined_rules
 

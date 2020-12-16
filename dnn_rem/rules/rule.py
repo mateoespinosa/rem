@@ -7,7 +7,6 @@ from collections import defaultdict
 
 from .clause import ConjunctiveClause
 from .term import Term, Neuron
-from . import DELETE_UNSATISFIABLE_CLAUSES_FLAG
 from dnn_rem.logic_manipulator.satisfiability import \
     remove_unsatisfiable_clauses
 
@@ -19,11 +18,10 @@ class OutputClass(object):
     Each output class has a name and its relevant encoding in the network
     i.e. which output neuron it corresponds to
     """
-    __slots__ = ['name', 'encoding']
 
     def __init__(self, name: str, encoding: int):
-        super(OutputClass, self).__setattr__('name', name)
-        super(OutputClass, self).__setattr__('encoding', encoding)
+        self.name = name
+        self.encoding = encoding
 
     def __str__(self):
         return f'OUTPUT_CLASS={self.name} (Neuron {self.encoding})'
@@ -46,20 +44,10 @@ class Rule(object):
 
     Immutable and Hashable.
     """
-    __slots__ = ['premise', 'conclusion']
 
     def __init__(self, premise, conclusion):
-        if DELETE_UNSATISFIABLE_CLAUSES_FLAG:
-            premise = remove_unsatisfiable_clauses(clauses=premise)
-
-        super(Rule, self).__setattr__('premise', premise)
-        super(Rule, self).__setattr__('conclusion', conclusion)
-
-    def get_premise(self):
-        return self.premise
-
-    def get_conclusion(self):
-        return self.conclusion
+        self.premise = remove_unsatisfiable_clauses(clauses=premise)
+        self.conclusion = conclusion
 
     def __eq__(self, other):
         return (
@@ -105,7 +93,6 @@ class Rule(object):
                 explanation_clauses.append(clause)
                 n_satisfied_clauses += 1
 
-        # print('satisfied: %d, total: %d, ratio: %f' % (n_satisfied_clauses, total, n_satisfied_clauses/total))
         return n_satisfied_clauses/total, explanation_clauses
 
     @classmethod
@@ -147,11 +134,10 @@ class Rule(object):
         term_confidences = defaultdict(lambda: 1)
 
         for clause in self.premise:
-            clause_confidence = clause.get_confidence()
-            for term in clause.get_terms():
+            for term in clause.terms:
                 term_confidences[term] = min(
                     term_confidences[term],
-                    clause_confidence
+                    clause.confidence
                 )
 
         return term_confidences

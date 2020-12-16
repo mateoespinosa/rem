@@ -362,12 +362,6 @@ class ExperimentManager(object):
             "fold.rules",
         )
 
-        # For reference purposes, let's dump our effective config file into
-        # the experiment directory to make sure we can always reproduce the
-        # results generated here
-        with open(os.path.join(self.experiment_dir, "config.yaml"), 'w') as f:
-            f.write(yaml.dump(config, sort_keys=True))
-
         # And time for some data and directory initialization!
         if self._start_rerun_stage:
             logging.warning(
@@ -376,7 +370,16 @@ class ExperimentManager(object):
                 f'"{self._start_rerun_stage}"'
             )
 
+        # Set up all the directories we will need
         self._initialize_directories()
+
+        # For reference purposes, let's dump our effective config file into
+        # the experiment directory to make sure we can always reproduce the
+        # results generated here
+        with open(os.path.join(self.experiment_dir, "config.yaml"), 'w') as f:
+            f.write(yaml.dump(config, sort_keys=True))
+
+        # And initialize our data splits
         self._initialize_data()
 
     def __enter__(self):

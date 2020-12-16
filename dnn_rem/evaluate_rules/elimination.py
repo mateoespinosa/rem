@@ -1,4 +1,3 @@
-import pickle
 import copy
 import numpy as np
 from ..rules.rule import Rule
@@ -7,9 +6,10 @@ from ..rules.rule import Rule
 
 def eliminate_rules(rules, n):
     """
-    :param Iterable[Rule] rules:    The rules that will be subjected to elimination
-    :param int n:   The percentage of rules that will be eliminated. n = 0.7 eliminates 70% of the rules
-    Returns Iterable[Rule] rule:    The remaining rules after elimination
+    :param Iterable[Rule] rules: The rules that will be subjected to elimination
+    :param int n:  The percentage of rules that will be eliminated.
+        n = 0.7 eliminates 70% of the rules
+    Returns Iterable[Rule] rule: The remaining rules after elimination
 
     """
 
@@ -17,9 +17,9 @@ def eliminate_rules(rules, n):
     for class_rule in rules:
         clause_list = []
         clause_score = []
-        for clause in class_rule.get_premise():
+        for clause in class_rule.premise:
             clause_list.append(clause)
-            clause_score.append(clause.get_rank_score())
+            clause_score.append(clause.rank_score)
 
         numToEliminate = round(len(clause_list) * n)
         remained_clause = copy.deepcopy(clause_list)
@@ -28,7 +28,10 @@ def eliminate_rules(rules, n):
             del remained_clause[index]
             del clause_score[index]
 
-        updated_class_Rule = Rule(premise=(set(remained_clause)), conclusion=class_rule.get_conclusion())
+        updated_class_Rule = Rule(
+            premise=(set(remained_clause)),
+            conclusion=class_rule.conclusion,
+        )
         updated_class_Rule_list.append(updated_class_Rule)
 
     rules.clear()

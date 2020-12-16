@@ -12,18 +12,18 @@ def is_satisfiable(clause):
     Unsatisfiable if empty or a neurons min value >= its max value
 
     :param ConjuctiveClause clause: The clause whose satisfiability we want to
-                                    determine.
+        determine.
 
-    :returns boolean : True if the specified clause is satisfiable, False
-                       otherwise.
+    :returns boolean: True if the specified clause is satisfiable, False
+        otherwise.
     """
 
     # Empty Clause
-    if len(clause.get_terms()) == 0:
+    if len(clause.terms) == 0:
         return False
 
     # Check if neurons min value >= max value
-    neuron_conditions = terms_set_to_neuron_dict(clause.get_terms())
+    neuron_conditions = terms_set_to_neuron_dict(clause.terms)
     for neuron in neuron_conditions.keys():
         # If neuron is specified with <= and >
         if (
@@ -50,7 +50,7 @@ def remove_unsatisfiable_clauses(clauses):
     :param Set[ConjuctiveClause] clauses: The set of clauses we want to filter.
 
     :returns Set[ConjuctiveClause]: Equivalent set of clauses with all
-                                    unsatisfiable clauses removed.
+        unsatisfiable clauses removed.
     """
     satisfiable_clauses = set()
     for clause in clauses:

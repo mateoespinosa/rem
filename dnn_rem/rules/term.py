@@ -43,11 +43,9 @@ class Neuron(object):
     Represent specific neuron in the neural network. Immutable and Hashable.
     """
 
-    __slots__ = ['layer', 'index']
-
     def __init__(self, layer: int, index: int):
-        super(Neuron, self).__setattr__('layer', layer)
-        super(Neuron, self).__setattr__('index', index)
+        self.layer = layer
+        self.index = index
 
     def __str__(self):
         return f'h_{self.layer},{self.index}'
@@ -62,9 +60,6 @@ class Neuron(object):
     def __hash__(self):
         return hash((self.layer, self.index))
 
-    def get_index(self):
-        return self.index
-
 
 class Term(object):
     """
@@ -73,36 +68,31 @@ class Term(object):
 
     Immutable and Hashable.
     """
-
-    __slots__ = ['neuron', 'operator', 'threshold']
-
     def __init__(self, neuron, operator, threshold):
-        super(Term, self).__setattr__('neuron', neuron)
-        super(Term, self).__setattr__('threshold', threshold)
-
-        operator = TermOperator(operator)
-        super(Term, self).__setattr__('operator', operator)
+        self._neuron = neuron
+        self.threshold = threshold
+        self.operator = TermOperator(operator)
 
     def __str__(self):
-        return f'({self.neuron} {self.operator} {self.threshold})'
+        return f'({self._neuron} {self.operator} {self.threshold})'
 
     def __eq__(self, other):
         return (
             isinstance(other, Term) and
-            (self.neuron == other.neuron) and
+            (self._neuron == other.neuron) and
             (self.operator == other.operator) and
             (np.isclose(self.threshold, other.threshold))
         )
 
     def __hash__(self):
-        return hash((self.neuron, self.operator, self.threshold))
+        return hash((self._neuron, self.operator, self.threshold))
 
     def negate(self):
         """
         Return term with opposite sign
         """
         return Term(
-            self.neuron,
+            self._neuron,
             str(self.operator.negate()),
             self.threshold
         )
@@ -117,15 +107,14 @@ class Term(object):
         """
         Return index of neuron specified in the term
         """
-        return self.neuron.get_index()
+        return self._neuron.index
 
-    def get_neuron(self):
-        return Neuron(self.neuron.layer, self.neuron.index)
+    @property
+    def neuron(self):
+        # Return a copy of our current neuron
+        return Neuron(self._neuron.layer, self._neuron.index)
 
-    def get_operator(self):
-        return self.operator
-
-    def get_threshold(self):
-        return self.threshold
-
-
+    @neuron.setter
+    def neuron(self, value):
+        # Copy the input neuron
+        self._neuron = Neuron(value.layer, value.index)

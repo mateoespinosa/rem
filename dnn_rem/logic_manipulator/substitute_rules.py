@@ -14,20 +14,19 @@ def substitute(total_rule, intermediate_rules):
     rule.
 
     :param Rule total_rule: The receiver rule of the beta reduction we are about
-                            to make.
+        to make.
     :param Ruleset intermediate_rules: The set of intermediate rules which we
-                                       want to substitute in the given total
-                                       rule.
+        want to substitute in the given total rule.
 
     :returns Rule: a new rule equivalent to making the substitution of the given
-                   intermediate rules into total_rule.
+        intermediate rules into total_rule.
     """
     new_premise_clauses = set()
     # for each clause in the total rule
-    for old_premise_clause in total_rule.get_premise():
+    for old_premise_clause in total_rule.premise:
         # list of sets of conjunctive clauses that are all conjunctive
         conj_new_premise_clauses = []
-        for old_premise_term in old_premise_clause.get_terms():
+        for old_premise_term in old_premise_clause.terms:
             clauses_to_append = \
                 intermediate_rules.get_rule_premises_by_conclusion(
                     old_premise_term
@@ -35,7 +34,7 @@ def substitute(total_rule, intermediate_rules):
             if clauses_to_append:
                 conj_new_premise_clauses.append(clauses_to_append)
 
-        # When combined into a cartesian product, get all possible conjunctive
+        # When combined into a Cartesian product, get all possible conjunctive
         # clauses for merged rule
         # Itertools implementation does not build up intermediate results in
         # memory
@@ -53,5 +52,5 @@ def substitute(total_rule, intermediate_rules):
 
     return Rule(
         premise=new_premise_clauses,
-        conclusion=total_rule.get_conclusion(),
+        conclusion=total_rule.conclusion,
     )

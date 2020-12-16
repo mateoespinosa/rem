@@ -23,7 +23,7 @@ def evaluate(rules, X_test, y_test, high_fidelity_predictions, num_labels=2):
         using a high fidelity method that is not our ruleset.
 
     :returns Dict[str, object]: A dictionary containing several statistics and
-                                metrics of the current run.
+        metrics of the current run.
     """
 
     # Make our predictions using our ruleset
