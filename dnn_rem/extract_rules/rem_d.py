@@ -2,10 +2,12 @@
 Main implementation of the DNN rule extraction algorithm.
 """
 
+from multiprocessing import Pool
 from tqdm import tqdm  # Loading bar for rule generation
+import dill
 import logging
-import pandas as pd
 import numpy as np
+import pandas as pd
 import scipy.special as activation_fns
 import tensorflow.keras.models as keras
 
@@ -134,10 +136,21 @@ class ModelCache(object):
         return self.get_layer_activations(layer_index)[neuron_key]
 
 
+def _serialized_function_execute(serialized):
+    """
+    Helper function to execute a serialized serialized (using dill)
+
+    :param str serialized: The string containing a serialized tuple
+        (function, args) which was generated using dill.
+    :returns X: the result of executing function(*args)
+    """
+    function, args = dill.loads(serialized)
+    return function(*args)
+
+
 ################################################################################
 ## Exposed Methods
 ################################################################################
-
 
 def extract_rules(
     model,
@@ -147,6 +160,7 @@ def extract_rules(
     threshold_decimals=None,
     winnow=True,
     min_cases=15,
+    num_workers=1,
 ):
     """
     Extracts a set of rules which imitates given the provided model using the
@@ -215,20 +229,34 @@ def extract_rules(
                 # And time to call C5.0 for each term
                 term_confidences = \
                     class_rule.get_terms_with_conf_from_rule_premises()
-                terms = term_confidences.keys()
+                terms = list(term_confidences.keys())
+                num_terms = len(terms)
 
-                for i, term in enumerate(sorted(terms, key=str), start=1):
-                    pbar.set_description(
-                        f'Extracting rules for term {i}/{len(terms)} {term} '
-                        f'of layer {hidden_layer} for class {output_class}'
-                    )
+                # We preemptively extract all the activations of the next layer
+                # so that we can serialize the function below using dill.
+                # Otherwise, we will hit issues due to Pandas dataframes not
+                # being compatible with dill/pickle
+                next_layer_activations = cache_model.get_layer_activations(
+                    layer_index=(hidden_layer + 1),
+                )
+
+                # Helper method to extract rules from the terms coming from a
+                # hidden layer and a given label. We encapsulate it as an
+                # anonymous function for it to be able to be used in a
+                # multi-process fashion.
+                def _extract_rules_from_term(term, i=None, pbar=None):
+                    if pbar and (i is not None):
+                        pbar.set_description(
+                            f'Extracting rules for term {i}/'
+                            f'{num_terms} {term} of layer '
+                            f'{hidden_layer} for class {output_class}'
+                        )
 
                     #  y1', y2', ...ym' = t(h(x1)), t(h(x2)), ..., t(h(xm))
                     target = term.apply(
-                        cache_model.get_layer_activations_of_neuron(
-                            layer_index=(hidden_layer + 1),
-                            neuron_index=term.get_neuron_index()
-                        )
+                        next_layer_activations[
+                            f'h_{hidden_layer+1}_{term.get_neuron_index()}'
+                        ]
                     )
                     logging.debug(
                         f"\tA total of {np.count_nonzero(target)}/"
@@ -249,12 +277,65 @@ def extract_rules(
                         threshold_decimals=threshold_decimals,
                         min_cases=min_cases,
                     )
-                    intermediate_rules.add_rules(new_rules)
-                    pbar.update(1/len(terms))
+                    if pbar:
+                        pbar.update(1/num_terms)
+                    return new_rules
+
+                # Now compute the effective number of workers we've got as
+                # it can be less than the provided ones if we have less terms
+                effective_workers = min(num_workers, num_terms)
+                if effective_workers > 1:
+                    # Them time to do this the multi-process way
+                    pbar.set_description(
+                        f"Extracting rules for layer {hidden_layer} of with "
+                        f"output class {output_class} using "
+                        f"{effective_workers} new processes for {num_terms} "
+                        f"terms"
+                    )
+                    with Pool(processes=effective_workers) as pool:
+                        # Now time to do a multiprocess map call. Because this
+                        # needs to operate only on serializable objects, what
+                        # we will do is the following: we will serialize each
+                        # partition bound and the function we are applying
+                        # into a tuple using dill and then the map operation
+                        # will deserialize each entry using dill and execute
+                        # the provided method
+                        serialized_terms = [None for _ in range(len(terms))]
+                        for j, term in enumerate(sorted(terms, key=str)):
+                            # Let's serialize our (function, args) tuple
+                            serialized_terms[j] = dill.dumps(
+                                (_extract_rules_from_term, (term,))
+                            )
+
+                        # And do the multi-process pooling call
+                        new_rulesets = pool.map(
+                            _serialized_function_execute,
+                            serialized_terms,
+                        )
+
+                    # And update our bar with only one step as we do not have
+                    # the granularity we do in the non-multi-process way
+                    pbar.update(1)
+                else:
+                    # Else we will do it in this same process in one jump
+                    new_rulesets = list(map(
+                        lambda x: _extract_rules_from_term(
+                            term=x[1],
+                            i=x[0],
+                            pbar=pbar
+                        ),
+                        enumerate(sorted(terms, key=str), start=1),
+                    ))
+
+                # Time to do our simple reduction from our map above by
+                # accumulating all the generated rules into a single ruleset
+                for ruleset in new_rulesets:
+                    intermediate_rules.add_rules(ruleset)
 
                 # Merge rules with current accumulation
                 pbar.set_description(
-                    f"Substituting rules for layer {hidden_layer}"
+                    f"Substituting rules for layer {hidden_layer} with output "
+                    f"class {output_class}"
                 )
                 class_rule = substitute(
                     total_rule=class_rule,

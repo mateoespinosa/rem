@@ -86,7 +86,7 @@ def run(manager, use_grid_search=False):
             logging.ERROR
         ]:
             pbar.write(
-                f'Test accuracy for fold {fold + 1}/{manager.N_FOLDS} '
+                f'Test accuracy for fold {fold}/{manager.N_FOLDS} '
                 f'is {round(acc, 3)}, AUC is {round(auc, 3)}, and '
                 f'majority class accuracy is {round(maj_class_acc, 3)}'
             )
@@ -95,12 +95,12 @@ def run(manager, use_grid_search=False):
     # We instantiate a progress bar that keeps track how many more models
     # we will need to train
     with tqdm(
-        range(manager.N_FOLDS),
+        range(1, manager.N_FOLDS + 1),
         desc="Training fold models"
     ) as pbar:
         for fold in pbar:
             pbar.set_description(
-                f'Training fold model {fold + 1}/{manager.N_FOLDS}'
+                f'Training fold model {fold}/{manager.N_FOLDS}'
             )
             # Manager bypass here if we have already trained a model for this
             # fold
@@ -121,7 +121,7 @@ def run(manager, use_grid_search=False):
                     verbose=0,
                 )
                 pbar.write(
-                    f'Test accuracy for fold {fold + 1}/{manager.N_FOLDS} '
+                    f'Test accuracy for fold {fold}/{manager.N_FOLDS} '
                     f'is {round(acc, 3)}, AUC is {round(auc, 3)}, and '
                     f'majority class accuracy is {round(maj_class_acc, 3)}'
                 )

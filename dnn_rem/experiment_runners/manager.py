@@ -627,13 +627,13 @@ f
         :raises ValueError: when given fold is not a valid fold for the dataset
             handled by this manager.
         """
-        if fold >= len(self.fold_split):
+        if (fold > len(self.fold_split)) or (fold <= 0):
             raise ValueError(
                 f'We obtained a request for split of fold {fold} however we '
                 f'have only split the dataset into {len(self.fold_split)} '
-                f'folds.'
+                f'folds with first fold being fold 1.'
             )
-        train_indices, test_indices = self.fold_split[fold]
+        train_indices, test_indices = self.fold_split[fold - 1]
         X_train, y_train = self.X[train_indices], self.y[train_indices]
         X_test, y_test = self.X[test_indices], self.y[test_indices]
 

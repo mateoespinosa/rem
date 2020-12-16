@@ -45,7 +45,7 @@ def cross_validate_re(manager):
     results_df = pd.DataFrame(data=[], columns=['fold'])
 
     # Extract rules from model from each fold
-    for fold in range(manager.N_FOLDS):
+    for fold in range(1, manager.N_FOLDS + 1):
 
         ########################################################################
         ## Neural Network Evaluation
@@ -94,7 +94,7 @@ def cross_validate_re(manager):
 
         logging.debug(
             f'Evaluating rules extracted from '
-            f'fold {fold + 1}/{manager.N_FOLDS}...'
+            f'fold {fold}/{manager.N_FOLDS}...'
         )
 
         re_results = evaluate(
@@ -166,7 +166,7 @@ def cross_validate_re(manager):
             num_rules,
             round(avg_rule_length, manager.ROUNDING_DECIMALS),
         ]
-        table.add_row([fold + 1] + new_row)
+        table.add_row([fold] + new_row)
 
         # And accumulate this last row unto our average
         averages += np.array(new_row) / manager.N_FOLDS
@@ -174,7 +174,7 @@ def cross_validate_re(manager):
         # Finally, log this int the progress bar if not on quiet mode to get
         # some feedback
         logging.info(
-            f'Rule set test accuracy for fold {fold + 1}/{manager.N_FOLDS} '
+            f'Rule set test accuracy for fold {fold}/{manager.N_FOLDS} '
             f'is {round(re_results["acc"], 3)}, AUC is '
             f'{round(re_results["auc"], 3)}, and size of rule set is '
             f'{num_rules}'

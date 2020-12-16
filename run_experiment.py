@@ -226,6 +226,7 @@ def main():
         if "grid_search_params" not in config:
             config["grid_search_params"] = {}
         config["grid_search_params"]["enable"] = args.grid_search
+
     if args.randomize:
         # Then set the seed to be the current time
         config["random_seed"] = time.time()

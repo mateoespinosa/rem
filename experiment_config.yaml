@@ -79,6 +79,10 @@ extractor_params:
     winnow: True
     # The minimum number of cases for a split in C5. Must be a positive integer
     min_cases: 15
+    # The number of processes (i.e. workers) to use when extracting rules from
+    # our ruleset. Make sure to pick a reasonable number depending on the number
+    # of cores you have
+    num_workers: 2
 
 # Where are we dumping our results. If not provided, it will default to the same
 # directory as the one containing the dataset.
