@@ -2,12 +2,12 @@
 Merge multiple rules of into Disjunctive Normal Form rules
 
 e.g.
-if x>1 AND y<3 AND z<1 THEN 1
-if x>4 THEN 2
-if y<0.4 THEN 2
-->
-if (x>1 AND y<3 AND z<1) THEN 1
-if (x>4) OR (y<0.4) THEN 2
+    if x>1 AND y<3 AND z<1 THEN 1
+    if x>4 THEN 2
+    if y<0.4 THEN 2
+        ->
+    if (x>1 AND y<3 AND z<1) THEN 1
+    if (x>4) OR (y<0.4) THEN 2
 """
 from ..rules.rule import Rule
 

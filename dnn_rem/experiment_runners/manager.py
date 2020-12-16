@@ -152,9 +152,7 @@ class ExperimentManager(object):
 
         # Obtain our rule score mode
         self.RULE_SCORE_MECHANISM = None
-        mechanism_name = self._get_rule_score_mechanism(
-            config.get("rule_score_mechanism", "majority"),
-        )
+        mechanism_name = config.get("rule_score_mechanism", "majority")
         search_name = mechanism_name.lower()
         for enum_entry in RuleScoreMechanism:
             if enum_entry.name.lower() == search_name:

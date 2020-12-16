@@ -164,8 +164,6 @@ def features_recurrence(rules, features_name, n):
     return cnt
 
 
-
-
 def features_recurrence_per_class(rules, features_name, n):
     """
     :param Iterable[Rule] rules:  The rules whose top features per class we want
@@ -196,7 +194,6 @@ def features_recurrence_per_class(rules, features_name, n):
         )[:n]
 
     return features_dict
-
 
 
 def features_operator_frequency_recurrence_per_class(rules, features_name):
@@ -294,7 +291,6 @@ def top_features_operator_frequency_recurrence_per_class(
             if k not in temp_list:
                 del operator_frequency_new[key][k]
     return operator_frequency_new
-
 
 
 def features_recurrence_in_explanation(explanation, features_name):
