@@ -34,16 +34,16 @@ class ConjunctiveClause(object):
         """
         Returns the conjunctive union of this clause with another clause.
 
-        :param ConjunctiveClause other: The other ConjuctiveClause we want to
+        :param ConjunctiveClause other: The other ConjunctiveClause we want to
             union this clause with.
 
         :returns ConjunctiveClause: The result of ANDing both this clause and
             the provided clause.
         """
-        if not isinstance(other, ConjuctiveClause):
+        if not isinstance(other, ConjunctiveClause):
             raise ValueError(
-                "We only support && operator with a ConjuctiveClause "
-                "if both arguments are ConjuctiveClause. However, one of the "
+                "We only support && operator with a ConjunctiveClause "
+                "if both arguments are ConjunctiveClause. However, one of the "
                 f"provided arguments is of type {type(other).__name__}"
             )
         # Return new conjunctive clause that has all terms from both
@@ -57,10 +57,10 @@ class ConjunctiveClause(object):
         """
         Bitwise 'and' operator.
 
-        :param ConjuctiveClause other: The other clause which we want to
+        :param ConjunctiveClause other: The other clause which we want to
             perform a conjunctive union with.
 
-        :returns ConjuctiveClause: The result of the 'and' operator between
+        :returns ConjunctiveClause: The result of the 'and' operator between
             the given clauses.
         """
         return self.union(other)
