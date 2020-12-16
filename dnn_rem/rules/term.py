@@ -3,7 +3,6 @@ Represent components that make up a rule. All immutable and hashable.
 """
 
 from enum import Enum
-from typing import List
 import numpy as np
 
 

@@ -21,8 +21,9 @@ import tracemalloc
 import yaml
 
 from . import dataset_configs
-from dnn_rem.extract_rules.rem_d import extract_rules as rem_d
 from dnn_rem.extract_rules.pedagogical import extract_rules as pedagogical
+from dnn_rem.extract_rules.rem_d import extract_rules as rem_d
+from dnn_rem.rules.ruleset import RuleScoreMechanism
 
 
 # Algorithm used for Rule Extraction
@@ -148,6 +149,22 @@ class ExperimentManager(object):
 
         # Validate our provided config
         self.validate_config_object(config)
+
+        # Obtain our rule score mode
+        self.RULE_SCORE_MECHANISM = None
+        mechanism_name = self._get_rule_score_mechanism(
+            config.get("rule_score_mechanism", "majority"),
+        )
+        search_name = mechanism_name.lower()
+        for enum_entry in RuleScoreMechanism:
+            if enum_entry.name.lower() == search_name:
+                self.RULE_SCORE_MECHANISM = enum_entry
+        if self.RULE_SCORE_MECHANISM is None:
+            raise ValueError(
+                f'We do not support score mode "{mechanism_name}" as a rule '
+                f'scoring mechanism. We support the following rule scoring '
+                f'mechanisms: {list(map(lambda x: x.name, RuleScoreMechanism))}'
+            )
 
         # Now time to build all the directory variables we will need to
         # construct our experiment
@@ -403,7 +420,7 @@ class ExperimentManager(object):
         we remove our temporary folders and/or state we changed as soon as we
         are out.
         """
-        if  self.RANDOM_SEED and self._previous_seed:
+        if self.RANDOM_SEED and self._previous_seed:
             # Then reset our environment
             os.environ['PYTHONHASHSEED'] = self._previous_seed
 

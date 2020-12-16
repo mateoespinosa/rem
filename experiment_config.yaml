@@ -84,6 +84,22 @@ extractor_params:
     # of cores you have
     num_workers: 2
 
+# We can specify which mechanism we will obtain a score a given rule given our
+# training data and its class. When classifying a new point, we will assign
+# scores to every rule and then pick the class corresponding to the ruleset with
+# the highest average score for all triggered rules of that set. We currently
+# support the following scoring functions:
+#   - "Majority": Rule majority voting will be done to determine the output
+#                 class. This means every rule has a score of 1.
+#   - "Accuracy": accuracy of each rule in the training set will be used to
+#                 score each rule.
+#   - "HillClimb": HillClimb scoring function based on the training set will be
+#                  used to score each rule.
+#   - "Confidence": the confidence level of each rule when generating the
+#                   ruleset will be used as its score function.
+# If not given, we will default to "Majority".
+rule_score_mechanism: "Majority"
+
 # Where are we dumping our results. If not provided, it will default to the same
 # directory as the one containing the dataset.
 output_dir: "experiment_results"

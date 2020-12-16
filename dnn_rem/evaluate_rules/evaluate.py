@@ -7,7 +7,13 @@ import sklearn
 from . import metrics
 
 
-def evaluate(rules, X_test, y_test, high_fidelity_predictions, num_labels=2):
+def evaluate(
+    ruleset,
+    X_test,
+    y_test,
+    high_fidelity_predictions,
+    num_labels=2,
+):
     """
     Evaluates the performance of the given set of rules given the provided
     test dataset. It compares this results to a higher fidelity prediction
@@ -16,7 +22,7 @@ def evaluate(rules, X_test, y_test, high_fidelity_predictions, num_labels=2):
     Will generate a dictionary with several statistics describing the nature
     and performance of the given ruleset.
 
-    :param Ruleset rules: The set of rules we want to evaluate.
+    :param Ruleset ruleset: The set of rules we want to evaluate.
     :param np.ndarray X_test: testing data set for evaluation.
     :param np.ndarray y_test: testing labels of X_test for evaluation.
     :param np.ndarray high_fidelity_predictions: labels predicted for X_test
@@ -27,7 +33,7 @@ def evaluate(rules, X_test, y_test, high_fidelity_predictions, num_labels=2):
     """
 
     # Make our predictions using our ruleset
-    predicted_labels = rules.predict(X_test)
+    predicted_labels = ruleset.predict(X_test)
 
     # Compute Accuracy
     acc = sklearn.metrics.accuracy_score(predicted_labels, y_test)
@@ -36,10 +42,10 @@ def evaluate(rules, X_test, y_test, high_fidelity_predictions, num_labels=2):
     fid = metrics.fidelity(predicted_labels, high_fidelity_predictions)
 
     # Compute Comprehensibility
-    comprehensibility_results = metrics.comprehensibility(rules)
+    comprehensibility_results = metrics.comprehensibility(ruleset)
 
     # Overlapping features
-    n_overlapping_features = metrics.overlapping_features(rules)
+    n_overlapping_features = metrics.overlapping_features(ruleset)
 
     # Compute the AUC using this model. For multiple labels, we average
     # across all labels

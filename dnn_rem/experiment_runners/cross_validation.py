@@ -75,7 +75,7 @@ def cross_validate_re(manager):
 
         # Run our rule extraction only if it has not been done in the past
         # through a sequential checkpoint
-        (rules, re_time, re_memory), _ = manager.serializable_stage(
+        (ruleset, re_time, re_memory), _ = manager.serializable_stage(
             target_file=extracted_rules_file_path,
             execute_fn=lambda: manager.resource_compute(
                 function=manager.RULE_EXTRACTOR.run,
@@ -89,7 +89,7 @@ def cross_validate_re(manager):
 
         # Serialize a human readable version of the rules always for inspection
         with open(extracted_rules_file_path + ".txt", 'w') as f:
-            for rule in rules:
+            for rule in ruleset:
                 f.write(str(rule) + "\n")
 
         logging.debug(
@@ -97,8 +97,16 @@ def cross_validate_re(manager):
             f'fold {fold}/{manager.N_FOLDS}...'
         )
 
+        # Now let's assign scores to our rules depending on what scoring
+        # function we were asked to use for this experiment
+        ruleset.rank_rules(
+            X=X_train,
+            y=y_train,
+            score_mechanism=manager.RULE_SCORE_MECHANISM,
+        )
+        # And actually evaluate them
         re_results = evaluate(
-            rules=rules,
+            ruleset=ruleset,
             X_test=X_test,
             y_test=y_test,
             high_fidelity_predictions=np.argmax(

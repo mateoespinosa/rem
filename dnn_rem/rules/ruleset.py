@@ -2,16 +2,38 @@
 Represents a ruleset made up of rules
 """
 
-import random
+from enum import Enum
 import numpy as np
+import random
 
 from .rule import Rule
 from .term import Neuron
 
+################################################################################
+## Exposed Classes
+################################################################################
+
+
+class RuleScoreMechanism(Enum):
+    """
+    This class encapsulates the different rule score mechanisms/algorithms
+    we support during rule evaluation.
+    """
+    # Majority algorithm: every rule has score 1
+    Majority = 0
+    # Accuracy algorithm: every rule has a score equal to
+    # (samples covered with same label as this rule)/(total samples covered)
+    Accuracy = 1
+    # Augmented Hill Climbing algorithm: same as used in paper.
+    HillClimb = 2
+    # Confidence algorithm: every rule has a score equal to its confidence
+    # level
+    Confidence = 3
+
 
 class Ruleset(object):
     """
-    Represents a set of disjunctive rules
+    Represents a set of disjunctive rules, one with its own conclusion.
     """
 
     def __init__(self, rules=None):
@@ -56,11 +78,11 @@ class Ruleset(object):
             # Each output class given a score based on how many rules x
             # satisfies
             class_ruleset_scores = {}
-            for class_ruleset in self.rules:
-                score = class_ruleset.evaluate_rule_by_majority_voting(
+            for class_rules in self.rules:
+                score = class_rules.evaluate_score(
                     neuron_to_value_map
                 )
-                class_ruleset_scores[class_ruleset] = score
+                class_ruleset_scores[class_rules] = score
 
             # Output class with max score decides the classification of
             # instance. If a tie happens, then choose randomly
@@ -76,8 +98,99 @@ class Ruleset(object):
             y = np.append(y, max_class)
         return y
 
-    def rank_rules(self, X, y):
-        pass
+    def rank_rules(
+        self,
+        X,
+        y,
+        score_mechanism=RuleScoreMechanism.Majority,
+        k=4,
+    ):
+        """
+        Assigns scores to all rules in this dataset given training data (X, y)
+        and using the provided score mechanism to score each rule.
+
+        :param np.darray X: 2D np.ndarray containing the training data for our
+            scoring. First dimension is the sample dimension and second
+            dimension is the feature dimension.
+        :param np.darray y: 1D np.ndarray containing the training labels for
+            datapoints in X.
+            scoring.
+        :param RuleScoreMechanism score_mechanism: The mechanism to use for
+            our scoring function in the rules.
+        :param int k: k parameter used in the augmented HillClimbing rule
+            scoring mechanism.
+        """
+
+        # We will cache a map between sample IDs and their corresponding
+        # maps of neurons to values to avoid computing this at all times.
+        # We only do this when we use the training data for scoring our rules.
+        if score_mechanism in [
+            RuleScoreMechanism.Accuracy,
+            RuleScoreMechanism.HillClimb,
+        ]:
+            neuron_map_cache = [None] * len(X)
+        for class_rule in self.rules:
+            # Each run of rule extraction return a DNF rule for each output
+            # class
+            rule_output = class_rule.conclusion
+
+            # Each clause in the DBF rule is considered a rule for this output
+            # class
+            for i, clause in enumerate(class_rule.premise):
+                correct = incorrect = 0
+
+                if score_mechanism == RuleScoreMechanism.Majority:
+                    # Then every single rule will have score of 1 as we will
+                    # only consider the majority class in there
+                    clause.score = 1
+                elif score_mechanism == RuleScoreMechanism.Confidence:
+                    # We will use the confidence of this clause as its scoring
+                    # function as well
+                    clause.score = clause.confidence
+                else:
+                    # Else we will score it based on
+                    # Iterate over all items in the training data
+                    for sample_id, (sample, label) in enumerate(zip(X, y)):
+                        # Map of Neuron objects to values from input data. This
+                        # is the form of data a rule expects
+                        if neuron_map_cache[sample_id] is None:
+                            # Then we are populating our cache for the first
+                            # time
+                            neuron_map_cache[sample_id] = {
+                                Neuron(layer=0, index=j): sample[j]
+                                for j in range(len(sample))
+                            }
+                        neuron_to_value_map = neuron_map_cache[sample_id]
+
+                        # if rule predicts the correct output class
+                        if clause.evaluate(data=neuron_to_value_map):
+                            if rule_output == label:
+                                correct += 1
+                            else:
+                                incorrect += 1
+
+                    # Compute score that we will use for this clause
+                    if correct + incorrect == 0:
+                        clause.score = 0
+                    else:
+                        if score_mechanism == RuleScoreMechanism.Accuracy:
+                            # Then we only use the plain accuracy to score
+                            # this method
+                            clause.score = correct / (correct + incorrect)
+                        elif score_mechanism == RuleScoreMechanism.HillClimb:
+                            clause.score = (
+                                (correct - incorrect) / (correct + incorrect)
+                            )
+                            clause.score += correct / (incorrect + k)
+                            # Then we include the extra correction term from
+                            # the length of the ruleset
+                            clause.score += correct / len(clause.terms)
+
+                        else:
+                            raise ValueError(
+                                f"Unsupported scoring mechanism "
+                                f"{score_mechanism}"
+                            )
 
     def add_rules(self, rules):
         self.rules = self.rules.union(rules)
@@ -142,40 +255,3 @@ class Ruleset(object):
         for rule in self.rules:
             conclusions.add(rule.conclusion)
         return conclusions
-
-    def combine_external_clause(self, conjunctiveClause, conclusion):
-        premises = self.get_rule_premises_by_conclusion(conclusion)
-        premises.add(conjunctiveClause)
-
-        rule = self.get_rule_by_conclusion(conclusion)
-        newRule = Rule(premises, conclusion)
-
-        if rule is not None:
-            self.rules.remove(rule)
-
-        self.rules.add(newRule)
-
-        return self.rules
-
-    def combine_ruleset(self, other):
-        conclusions_self = self.get_ruleset_conclusions()
-        conclusions_other = other.get_ruleset_conclusions()
-        combined_rules = set()
-
-        diff = conclusions_self.symmetric_difference(conclusions_other)
-        intersect = conclusions_self.intersection(conclusions_other)
-
-        for rule in self.rules.union(other.rules):
-            if rule.conclusion in diff:
-                combined_rules.add(rule)
-
-        for rule in self.rules:
-            if rule.conclusion in intersect:
-                premise = other.get_rule_premises_by_conclusion(
-                    rule.conclusion
-                )
-                combined_premise = premise.union(rule.premise)
-                combined_rule = Rule(combined_premise, rule.conclusion)
-                combined_rules.add(combined_rule)
-        return combined_rules
-

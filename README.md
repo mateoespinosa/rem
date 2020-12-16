@@ -52,7 +52,8 @@ usage: run_experiment.py [-h] [--config file.yaml] [--n_folds N]
                          [--initialisation_trials N] [--dataset_name name]
                          [--dataset_file data.cvs] [--rule_extractor name]
                          [--grid_search] [--output_dir path] [--randomize]
-                         [--force_rerun] [-d]
+                         [--force_rerun {all,data_split,fold_split,grid_search,initialisation_trials,nn_train,rule_extraction}]
+                         [-d]
 
 Process some integers.
 
@@ -89,15 +90,17 @@ optional arguments:
                         will not be fixed and the experiment will be
                         randomized. By default, otherwise, all experiments are
                         run with the same seed for reproducibility.
-  --force_rerun, -f     If set and we are given as output directory the
+  --force_rerun {all,data_split,fold_split,grid_search,initialisation_trials,nn_train,rule_extraction}, -f {all,data_split,fold_split,grid_search,initialisation_trials,nn_train,rule_extraction}
+                        If set and we are given as output directory the
                         directory of a previous run, then we will overwrite
-                        any previous work and redo all computations.
-                        Otherwise, we will attempt to use as much as we can
-                        from the previous run.
+                        any previous work starting from the provided stage
+                        (and all subsequent stages of the experiment) and redo
+                        all computations. Otherwise, we will attempt to use as
+                        much as we can from the previous run.
   -d, --debug           starts debug mode in our program.
 ```
 
-One can run the tool by manually inputing the dataset information as command-line arguments or by providing a YAML config as the following example:
+One can run the tool by manually inputing the dataset information as command-line arguments or by providing a YAML config containing the experiment parameterization as the following example:
 ```yaml
 # The directory of our training data. Can be a path relative to the caller or
 # an absolute path.
@@ -106,6 +109,25 @@ dataset_file: "../DNN-RE-data-new/MB-GE-ER/data.csv"
 # The name of our dataset. Must be one of the data sets supported by our
 # experiment runners.
 dataset_name: 'MB-GE-ER'
+
+# Whether or not we want our experiment runner to overwrite results from
+# previous runs found in the given output directory or we want to reuse them
+# instead.
+# If not provided, or set to null, then we will NOT overwrite any
+# previous results and use them as checkpoints to avoid double work in this
+# experiment.
+# Otherwise, it must be one of
+#    - "all"
+#    - "data_split"
+#    - "fold_split"
+#    - "grid_search"
+#    - "initialisation_trials"
+#    - "nn_train"
+#    - "rule_extraction"
+# to indicate the stage in which we will start rewriting previous results. If
+# such a specific stage is provided, then all subsequent stages will be also
+# overwritten (following the same order as the list above)
+force_rerun: null
 
 # Number of split folds for our training. If not provided, then it will default
 # to a single fold.
@@ -156,11 +178,31 @@ rule_extractor: "REM-D"
 extractor_params:
     # An integer indicating how many decimals should we truncate our thresholds
     # to. If null, then no truncation will happen.
-    threshold_decimals: null
+    threshold_decimals: 6
     # The winnow parameter to use for C5. Must be a boolean.
     winnow: True
     # The minimum number of cases for a split in C5. Must be a positive integer
     min_cases: 15
+    # The number of processes (i.e. workers) to use when extracting rules from
+    # our ruleset. Make sure to pick a reasonable number depending on the number
+    # of cores you have
+    num_workers: 2
+
+# We can specify which mechanism we will obtain a score a given rule given our
+# training data and its class. When classifying a new point, we will assign
+# scores to every rule and then pick the class corresponding to the ruleset with
+# the highest average score for all triggered rules of that set. We currently
+# support the following scoring functions:
+#   - "Majority": Rule majority voting will be done to determine the output
+#                 class. This means every rule has a score of 1.
+#   - "Accuracy": accuracy of each rule in the training set will be used to
+#                 score each rule.
+#   - "HillClimb": HillClimb scoring function based on the training set will be
+#                  used to score each rule.
+#   - "Confidence": the confidence level of each rule when generating the
+#                   ruleset will be used as its score function.
+# If not given, we will default to "Majority".
+rule_score_mechanism: "Majority"
 
 # Where are we dumping our results. If not provided, it will default to the same
 # directory as the one containing the dataset.
@@ -187,7 +229,6 @@ grid_search_params:
     dropout_rates: [0, 0.2]
     # Finally, the loss function to use for training
     loss_functions: ["softmax_xentr", "sigmoid_xentr"]
-
 ```
 
 In this example, we are indicating the path where we are we storing our `MB-1004-GE-ER` dataset and what hyper-parameters we want to use for our neural network.
