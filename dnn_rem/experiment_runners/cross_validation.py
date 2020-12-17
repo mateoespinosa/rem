@@ -104,6 +104,10 @@ def cross_validate_re(manager):
             y=y_train,
             score_mechanism=manager.RULE_SCORE_MECHANISM,
         )
+
+        # Drop any rules if we are interested in dropping them
+        ruleset.eliminate_rules(manager.RULE_DROP_PRECENT)
+
         # And actually evaluate them
         re_results = evaluate(
             ruleset=ruleset,

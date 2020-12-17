@@ -186,7 +186,7 @@ extractor_params:
     # The number of processes (i.e. workers) to use when extracting rules from
     # our ruleset. Make sure to pick a reasonable number depending on the number
     # of cores you have
-    num_workers: 2
+    num_workers: 4
 
 # We can specify which mechanism we will obtain a score a given rule given our
 # training data and its class. When classifying a new point, we will assign
@@ -203,6 +203,11 @@ extractor_params:
 #                   ruleset will be used as its score function.
 # If not given, we will default to "Majority".
 rule_score_mechanism: "Majority"
+
+# If we wan to drop the lowest `percent` rules after scoring, then you can do
+# so by modifying this argument here which will drop them after scoring and
+# before evaluation. This must be a real number in [0, 1]
+rule_elimination_percent: 0
 
 # Where are we dumping our results. If not provided, it will default to the same
 # directory as the one containing the dataset.
@@ -238,40 +243,30 @@ You can then use this to run the experiment as follows:
 python run_experiment.py --config experiment_config.yaml
 ```
 
-If run successfully, then you should see an output similar to this one (note that for this one, we asked to try out two different initialisations through the command line):
+If run successfully, then you should see an output similar to this one:
 ```bash
-$ python run_experiment.py --config experiment_config.yaml --initialisation_trials 2
-[INFO] Finding best initialisation
-Test accuracy for initialisation 1/2 is 0.999, AUC is 1.0, and majority class accuracy is 0.766. Number of rules extracted was 439.
-Test accuracy for initialisation 2/2 is 0.999, AUC is 1.0, and majority class accuracy is 0.766. Number of rules extracted was 34.
-Testing initialisation 2/2: 100%|█████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████| 2/2 [09:37<00:00, 288.85s/it]
-Test accuracy for fold 1/5 is 0.976, AUC is 0.98, and majority class accuracy is 0.762
-Test accuracy for fold 2/5 is 0.986, AUC is 0.99, and majority class accuracy is 0.756
-Test accuracy for fold 3/5 is 0.985, AUC is 0.977, and majority class accuracy is 0.76
-Test accuracy for fold 4/5 is 0.977, AUC is 0.987, and majority class accuracy is 0.764
-Test accuracy for fold 5/5 is 0.955, AUC is 0.97, and majority class accuracy is 0.764
-Training fold model 5/5: 100%|█████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████| 5/5 [01:11<00:00, 14.21s/it]
-Done extracting rules from neural network: 100%|██████████████████████████████████████████████████████████████████████████████████████████▉| 6/6 [02:29<00:00, 24.99s/it]
-[INFO] Rule set test accuracy for fold 1/5 is 0.922, AUC is 0.901, and size of rule set is 37
-Done extracting rules from neural network: 100%|███████████████████████████████████████████████████████████████████████████████████████████| 6/6 [04:50<00:00, 48.40s/it]
-[INFO] Rule set test accuracy for fold 2/5 is 0.909, AUC is 0.825, and size of rule set is 154
-Done extracting rules from neural network: 100%|███████████████████████████████████████████████████████████████████████████████████████████| 6/6 [05:10<00:00, 51.83s/it]
-[INFO] Rule set test accuracy for fold 3/5 is 0.896, AUC is 0.813, and size of rule set is 440
-Done extracting rules from neural network: 100%|███████████████████████████████████████████████████████████████████████████████████████████| 6/6 [04:23<00:00, 43.99s/it]
-[INFO] Rule set test accuracy for fold 4/5 is 0.922, AUC is 0.866, and size of rule set is 350
-Done extracting rules from neural network: 100%|███████████████████████████████████████████████████████████████████████████████████████████| 6/6 [05:26<00:00, 54.41s/it]
-[INFO] Rule set test accuracy for fold 5/5 is 0.876, AUC is 0.753, and size of rule set is 2269
+$ python run_experiment.py --config experiment_config.yaml
+Test accuracy for fold 1/5 is 0.944, AUC is 0.949, and majority class accuracy is 0.762
+Test accuracy for fold 2/5 is 0.98, AUC is 0.976, and majority class accuracy is 0.756
+Test accuracy for fold 3/5 is 0.952, AUC is 0.958, and majority class accuracy is 0.76
+Test accuracy for fold 4/5 is 0.96, AUC is 0.948, and majority class accuracy is 0.764
+Test accuracy for fold 5/5 is 0.96, AUC is 0.937, and majority class accuracy is 0.764
+Training fold model 5/5: 100%|█████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████| 5/5 [00:04<00:00,  1.22it/s]
+[INFO] Rule set test accuracy for fold 1/5 is 0.924, AUC is 0.888, and size of rule set is 150
+[INFO] Rule set test accuracy for fold 2/5 is 0.97, AUC is 0.958, and size of rule set is 88
+[INFO] Rule set test accuracy for fold 3/5 is 0.904, AUC is 0.872, and size of rule set is 98
+[INFO] Rule set test accuracy for fold 4/5 is 0.914, AUC is 0.875, and size of rule set is 28
+[INFO] Rule set test accuracy for fold 5/5 is 0.909, AUC is 0.897, and size of rule set is 196
 +------+-------------+--------+----------------+-----------+----------------+-----------------------+------------------------+-------------+---------------------+
 | Fold | NN Accuracy | NN AUC | REM-D Accuracy | REM-D AUC | REM-D Fidelity | Extraction Time (sec) | Extraction Memory (MB) | Rulset Size | Average Rule Length |
 +------+-------------+--------+----------------+-----------+----------------+-----------------------+------------------------+-------------+---------------------+
-|  1   |     0.98    | 0.976  |     0.922      |   0.901   |     0.942      |        150.074        |        533.989         |      37     |        3.757        |
-|  2   |     0.99    | 0.986  |     0.909      |   0.825   |     0.909      |        290.573        |        708.282         |     154     |        5.468        |
-|  3   |    0.977    | 0.985  |     0.896      |   0.813   |     0.889      |        311.154        |        1207.839        |     440     |        7.755        |
-|  4   |    0.987    | 0.977  |     0.922      |   0.866   |     0.929      |        264.117        |        1052.154        |     350     |        6.894        |
-|  5   |     0.97    | 0.955  |     0.876      |   0.753   |     0.891      |        326.662        |        5631.363        |     2269    |        11.322       |
-| avg  |    0.981    | 0.976  |     0.905      |   0.832   |     0.912      |        268.516        |        1826.725        |    650.0    |        7.039        |
+|  1   |    0.944    | 0.949  |     0.924      |   0.888   |     0.919      |         87.806        |        1149.617        |     150     |        5.307        |
+|  2   |     0.98    | 0.976  |      0.97      |   0.958   |      0.97      |        111.085        |        456.966         |      88     |        5.011        |
+|  3   |    0.952    | 0.958  |     0.904      |   0.872   |     0.922      |        106.309        |         426.48         |      98     |        4.031        |
+|  4   |     0.96    | 0.948  |     0.914      |   0.875   |     0.914      |         62.085        |         292.33         |      28     |        3.643        |
+|  5   |     0.96    | 0.937  |     0.909      |   0.897   |     0.904      |        106.863        |        857.591         |     196     |        6.429        |
+| avg  |    0.959    | 0.954  |     0.924      |   0.898   |     0.926      |         94.83         |        636.597         |    112.0    |        4.884        |
 +------+-------------+--------+----------------+-----------+----------------+-----------------------+------------------------+-------------+---------------------+
-~~~~~~~~~~~~~~~~~~~~ Experiment successfully terminated after 2113.612 seconds ~~~~~~~~~~~~~~~~~~~~
 ```
 
 The default cross-validation experiment will do the following:

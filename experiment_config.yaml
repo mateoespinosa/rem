@@ -82,7 +82,7 @@ extractor_params:
     # The number of processes (i.e. workers) to use when extracting rules from
     # our ruleset. Make sure to pick a reasonable number depending on the number
     # of cores you have
-    num_workers: 2
+    num_workers: 4
 
 # We can specify which mechanism we will obtain a score a given rule given our
 # training data and its class. When classifying a new point, we will assign
@@ -99,6 +99,11 @@ extractor_params:
 #                   ruleset will be used as its score function.
 # If not given, we will default to "Majority".
 rule_score_mechanism: "Majority"
+
+# If we wan to drop the lowest `percent` rules after scoring, then you can do
+# so by modifying this argument here which will drop them after scoring and
+# before evaluation. This must be a real number in [0, 1]
+rule_elimination_percent: 0
 
 # Where are we dumping our results. If not provided, it will default to the same
 # directory as the one containing the dataset.

@@ -195,6 +195,41 @@ class Ruleset(object):
     def add_rules(self, rules):
         self.rules = self.rules.union(rules)
 
+    def eliminate_rules(self, percent):
+        """
+        Eliminates the lowest scoring `percent` of clauses for each rule in this
+        ruleset.
+
+        :param float percent: A value in [0, 1] indicating the percent of
+            rules we will drop.
+        """
+        if percent == 0:
+            # Then nothing to see here
+            return
+
+        # Otherwise, let's do a quick sanity check
+        if (percent > 1) or (percent < 0):
+            raise ValueError(
+                f'Expected given percentage to be a real number between 0 and '
+                f'1 but got {percent} instead.'
+            )
+
+        # Time to actually do the elimination
+        for class_rule in self.rules:
+            # For each set of rules of a given class, we will sort all all the
+            # individual clauses in it by their score and drop the lowest
+            # `percent` of them.
+
+            # 1. Sort all rules based on their score
+            premise = sorted(list(class_rule.premise), key=lambda x: x.score)
+
+            # 2. Eliminate the lowest `percent` percent of the rules
+            to_eliminate = int(len(premise) * percent)
+            premise = premise[:-to_eliminate]
+
+            # 3. And update this class's premise
+            class_rule.premise = set(premise)
+
     def get_rule_premises_by_conclusion(self, conclusion):
         """
         Return a set of conjunctive clauses that all imply a given conclusion

@@ -163,6 +163,7 @@ class ExperimentManager(object):
                 f'scoring mechanism. We support the following rule scoring '
                 f'mechanisms: {list(map(lambda x: x.name, RuleScoreMechanism))}'
             )
+        self.RULE_DROP_PRECENT = config.get("rule_elimination_percent", 0)
 
         # Now time to build all the directory variables we will need to
         # construct our experiment
@@ -276,105 +277,6 @@ class ExperimentManager(object):
         self.BEST_NN_INIT_FP = os.path.join(
             nn_init_dir,
             'best_initialisation.h5'
-        )
-
-        n_fold_rules_dir = os.path.join(
-            self.N_FOLD_CV_DP,
-            'rule_extraction/MOD_DecisionTree',
-        )
-        self.N_FOLD_RESULTS_DT_FP = os.path.join(
-            n_fold_rules_dir,
-            'results.csv',
-        )
-        self.N_FOLD_RULES_DT_DP = os.path.join(
-            n_fold_rules_dir,
-            'rules_extracted',
-        )
-        self.n_fold_rules_DT_fp = (
-            lambda fold: os.path.join(
-                self.N_FOLD_RULES_DT_DP,
-                f'fold_{fold}.rules',
-            )
-        )
-
-        n_fold_rules_dir = os.path.join(
-            self.N_FOLD_CV_DP,
-            'rule_extraction/MOD_RandomForest',
-        )
-        self.N_FOLD_RESULTS_RF_FP = os.path.join(
-            n_fold_rules_dir,
-            'results.csv',
-        )
-        self.N_FOLD_RULES_RF_DP = os.path.join(
-            n_fold_rules_dir,
-            'rules_extracted',
-        )
-        n_fold_rules_RF_fp = (
-            lambda fold: os.path.join(
-                self.N_FOLD_RULES_RF_DP,
-                f'fold_{fold}.rules',
-            )
-        )
-
-        n_fold_rules_dir = os.path.join(
-            self.N_FOLD_CV_DP,
-            'rule_extraction/MOD_DT_Combined',
-        )
-        self.N_FOLD_RESULTS_DT_COMB_FP = os.path.join(
-            n_fold_rules_dir,
-            'results.csv'
-        )
-        self.N_FOLD_RULES_DT_COMB_DP = os.path.join(
-            n_fold_rules_dir,
-            'rules_extracted'
-        )
-        n_fold_rules_DT_COMB_fp = (
-            lambda fold: os.path.join(
-                self.N_FOLD_RULES_DT_COMB_DP,
-                f'fold_{fold}.rules',
-            )
-        )
-
-        n_fold_rules_dir = os.path.join(
-            self.N_FOLD_CV_DP,
-            'rule_extraction/MOD_RF_Combined',
-        )
-        self.N_FOLD_RESULTS_RF_COMB_FP = os.path.join(
-            n_fold_rules_dir,
-            'results.csv',
-        )
-        self.N_FOLD_RULES_RF_COMB_DP = os.path.join(
-            n_fold_rules_dir,
-            'rules_extracted/',
-        )
-        self.n_fold_rules_RF_COMB_fp = (
-            lambda fold: os.path.join(
-                self.N_FOLD_RULES_RF_COMB_DP,
-                f'fold_{fold}.rules',
-            )
-        )
-
-        self.N_FOLD_RULES_REMAINING_DP = \
-            lambda reduction_percentage: os.path.join(
-                self.N_FOLD_RULE_EX_MODE_DP,
-                f'rules_remaining_after_{reduction_percentage}_reduction',
-            )
-        self.n_fold_rules_fp_remaining = (
-            lambda path, fold: (
-                lambda reduction_percentage: os.path.join(
-                    path(reduction_percentage),
-                    f'fold_{fold}_remaining.rules'
-                )
-            )
-        )
-        self.N_FOLD_RESULTS_FP_REMAINING = \
-            lambda reduction_percentage: os.path.join(
-                self.N_FOLD_RULE_EX_MODE_DP,
-                f'results_{reduction_percentage}_reduction.csv'
-            )
-        self.rules_fp_remaining = lambda reduction_percentage: os.path.join(
-            N_FOLD_RULES_REMAINING_DP(reduction_percentage),
-            "fold.rules",
         )
 
         # And time for some data and directory initialization!
