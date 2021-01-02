@@ -33,7 +33,10 @@ def build_parser():
     :returns ArgumentParser: The parser for our program's configuration.
     """
     parser = argparse.ArgumentParser(
-        description='Process some integers.'
+        description=(
+            'Runs cross validation experiment with REM-D and our '
+            'neural network training.'
+        ),
     )
     parser.add_argument(
         '--config',

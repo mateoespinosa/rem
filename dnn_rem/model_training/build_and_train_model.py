@@ -93,12 +93,23 @@ def model_fn(
 
     # And build our intermediate dense layers
     net = input_layer
-    for i, units in enumerate(layer_units):
+    for i, units in enumerate(layer_units, start=1):
+        if units == 0:
+            # Then this is a no-op layer so we will skip it. This is useful
+            # for grid searching
+            continue
         net = tf.keras.layers.Dense(
             units,
             activation=activation,
             name=f"dense_{i}",
         )(net)
+
+        if ((i % 2) == 0) and dropout_rate:
+            # Then let's add a dropout layer in here
+            net = tf.keras.layers.Dropout(
+                dropout_rate,
+                name=f"dropout_{i//2}",
+            )(net)
 
     if loss_function is None and last_activation:
         if last_activation == "sigmoid":
@@ -116,9 +127,6 @@ def model_fn(
         else:
             # Default to empty so that we can do substring search
             last_activation = ""
-    # We add a dropout layer for regularization
-    if dropout_rate:
-        net = tf.keras.layers.Dropout(dropout_rate)(net)
 
     # And our output layer map
     net = tf.keras.layers.Dense(
@@ -155,11 +163,7 @@ def model_fn(
         loss=loss,
         optimizer=optimizer,
         metrics=[
-            (
-                LogitAUC(name='auc', multi_label=True)
-                if (last_activation in loss_function)
-                else tf.keras.metrics.AUC(name='auc', multi_label=True)
-            ),
+            LogitAUC(name='auc', multi_label=True),
             'accuracy',
             majority_classifier_acc,
         ]

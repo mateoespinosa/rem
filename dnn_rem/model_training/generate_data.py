@@ -72,7 +72,7 @@ def run(manager, use_grid_search=False):
         X_train, y_train, X_test, y_test = manager.get_fold_data(fold)
 
         # Actually build and train the model
-        model, auc, acc, maj_class_acc = run_train_loop(
+        model, acc, auc, maj_class_acc = run_train_loop(
             X_train=X_train,
             y_train=y_train,
             X_test=X_test,

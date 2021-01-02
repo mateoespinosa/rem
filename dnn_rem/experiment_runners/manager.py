@@ -268,7 +268,7 @@ class ExperimentManager(object):
         )
         self.NN_INIT_SPLIT_INDICES_FP = os.path.join(
             nn_init_dir,
-            'data_split_indices.txt'
+            'data_complete_split_indices.txt'
         )
         self.NN_INIT_RE_RESULTS_FP = os.path.join(
             nn_init_dir,
@@ -512,7 +512,7 @@ f
 
         # Split our data into two groups of train and test data in general
         self.data_split, _ = self.serializable_stage(
-            target_file=self.N_FOLD_CV_SPLIT_INDICES_FP,
+            target_file=self.NN_INIT_SPLIT_INDICES_FP,
             execute_fn=lambda: stratified_k_fold_split(
                 X=self.X,
                 y=self.y,
@@ -654,10 +654,10 @@ f
             try:
                 logging.debug(f'We hit the cache for "{target_file}"')
                 return deserializing_fn(target_file), True
-            except:
+            except Exception as e:
                 # Then at this point we will simply recompute it as the
                 # deserialization did not work
-                pass
+                logging.debug(f'We error {e} during deserialization...')
 
         # Else we will run the whole thing from scratch and we WILL FORCE ALL
         # FUTURE CALLS TO ALSO DO THE SAME THING
