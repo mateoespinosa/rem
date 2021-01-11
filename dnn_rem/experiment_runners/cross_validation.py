@@ -117,7 +117,6 @@ def cross_validate_re(manager):
                 nn_model.predict(X_test),
                 axis=1
             ),
-            num_labels=manager.DATASET_INFO.n_outputs,
         )
 
         ########################################################################

@@ -3,6 +3,7 @@ Methods used for evaluating the performance of a given set of rules.
 """
 
 import sklearn
+import tensorflow as tf
 
 from . import metrics
 
@@ -12,7 +13,6 @@ def evaluate(
     X_test,
     y_test,
     high_fidelity_predictions,
-    num_labels=2,
 ):
     """
     Evaluates the performance of the given set of rules given the provided
@@ -49,21 +49,18 @@ def evaluate(
 
     # Compute the AUC using this model. For multiple labels, we average
     # across all labels
-    avg_auc = 0
-    for i in range(num_labels):
-        fpr, tpr, _ = sklearn.metrics.roc_curve(
-            y_test == i,
-            predicted_labels == i,
-        )
-        avg_auc += sklearn.metrics.auc(fpr, tpr)
-    avg_auc /= num_labels
+    auc = sklearn.metrics.roc_auc_score(
+        tf.keras.utils.to_categorical(y_test),
+        tf.keras.utils.to_categorical(predicted_labels),
+        multi_class="ovr",
+    )
 
     # And wrap them all together
     results = dict(
         acc=acc,
         fid=fid,
         n_overlapping_features=n_overlapping_features,
-        auc=avg_auc,
+        auc=auc,
     )
     results.update(comprehensibility_results)
 

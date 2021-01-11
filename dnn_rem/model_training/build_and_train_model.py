@@ -163,7 +163,10 @@ def model_fn(
         loss=loss,
         optimizer=optimizer,
         metrics=[
-            LogitAUC(name='auc', multi_label=True),
+            LogitAUC(
+                name='auc',
+                multi_label=(loss_function == "sigmoid_xentr"),
+            ),
             'accuracy',
             majority_classifier_acc,
         ]
@@ -283,5 +286,5 @@ def run_train_loop(
             1 if logging.getLogger().getEffectiveLevel() == logging.DEBUG else 0
         ),
     )
-
+    predicted_labels = model.predict(X_test)
     return model, nn_accuracy, nn_auc, maj_class_acc
