@@ -5,9 +5,9 @@ Represents a ruleset made up of rules
 from enum import Enum
 import numpy as np
 import random
+import pickle
 
 from .rule import Rule
-from .term import Neuron
 
 ################################################################################
 ## Exposed Classes
@@ -36,8 +36,13 @@ class Ruleset(object):
     Represents a set of disjunctive rules, one with its own conclusion.
     """
 
-    def __init__(self, rules=None):
+    def __init__(self, rules=None, feature_names=None, output_class_names=None):
         self.rules = rules or set()
+        self.feature_names = feature_names
+        self.output_class_map = dict(zip(
+            output_class_names or [],
+            range(len(output_class_names or [])),
+        ))
 
     def __iter__(self):
         # If we iterate over this guy, it is the same as iterating over
@@ -48,7 +53,16 @@ class Ruleset(object):
         # The size of our ruleset will be how many rules we have inside it
         return len(self.rules)
 
-    def predict(self, X):
+    def _get_named_dictionary(self, instance):
+        neuron_to_value_map = {}
+        for i in range(len(instance)):
+            neuron_name = f'h_0_{i}'
+            if self.feature_names is not None:
+                neuron_name = self.feature_names[i]
+            neuron_to_value_map[neuron_name] = instance[i]
+        return neuron_to_value_map
+
+    def predict(self, X, use_label_names=False):
         """
         Predicts the labels corresponding to unseen data points X given a set of
         rules.
@@ -69,11 +83,8 @@ class Ruleset(object):
             )
 
         for instance in X:
-            # Map of Neuron objects to values from input data
-            neuron_to_value_map = {
-                Neuron(layer=0, index=i): instance[i]
-                for i in range(len(instance))
-            }
+            # Map of neuron names to values from input data
+            neuron_to_value_map = self._get_named_dictionary(instance)
 
             # Each output class given a score based on how many rules x
             # satisfies
@@ -95,6 +106,9 @@ class Ruleset(object):
                 ).conclusion
 
             # Output class encoding is index out output neuron
+            if not use_label_names:
+                # Then turn this into its encoding
+                max_class = self.output_class_map.get(max_class, max_class)
             y = np.append(y, max_class)
         return y
 
@@ -151,15 +165,13 @@ class Ruleset(object):
                     # Else we will score it based on
                     # Iterate over all items in the training data
                     for sample_id, (sample, label) in enumerate(zip(X, y)):
-                        # Map of Neuron objects to values from input data. This
+                        # Map of neuron names to values from input data. This
                         # is the form of data a rule expects
                         if neuron_map_cache[sample_id] is None:
                             # Then we are populating our cache for the first
                             # time
-                            neuron_map_cache[sample_id] = {
-                                Neuron(layer=0, index=j): sample[j]
-                                for j in range(len(sample))
-                            }
+                            neuron_map_cache[sample_id] = \
+                                self._get_named_dictionary(sample)
                         neuron_to_value_map = neuron_map_cache[sample_id]
 
                         # if rule predicts the correct output class
@@ -290,3 +302,27 @@ class Ruleset(object):
         for rule in self.rules:
             conclusions.add(rule.conclusion)
         return conclusions
+
+    def to_file(self, path):
+        with open(path, 'wb') as f:
+            pickle.dump(self, f)
+        return self
+
+    def from_file(self, path):
+        with open(path, 'rb') as f:
+            deserialized = pickle.load(f)
+        if isinstance(deserialized, tuple):
+            deserialized = deserialized[0]
+        self.rules = deserialized.rules
+        self.feature_names = deserialized.feature_names
+        self.output_class_map = deserialized.output_class_map
+        return self
+
+    def to_json(self, **kwargs):
+        result = {}
+        result["rules"] = []
+        for rule in self.rules:
+            result["rules"].append(rule.to_json())
+        result["feature_names"] = list(self.feature_names)
+        result["output_class_map"] = dict(self.output_class_map)
+        return result

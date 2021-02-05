@@ -4,28 +4,28 @@ Helper functions for our logic manipulators.
 from ..rules.term import TermOperator
 
 
-def terms_set_to_neuron_dict(terms):
+def terms_set_to_variable_dict(terms):
     """
-    Converts a set of terms into a dictionary mapping each neuron in each term
+    Converts a set of terms into a dictionary mapping each variable in each term
     to a map between operators ('>' and '<=') and thresholds used in those
-    neurons with those operators.
+    variables with those operators.
 
     :param Iterable[Terms] terms: The terms which will source our dictionary.
 
-    :returns Dict[Neuron, Dict[TermOperator, Set[float]]]: the corresponding
-        dictionary of neuron values.
+    :returns Dict[str, Dict[TermOperator, Set[float]]]: the corresponding
+        dictionary of variable values.
     """
     # Convert set of conditions into dictionary
-    neuron_conditions = {}
+    variable_conditions = {}
 
     for term in terms:
-        neuron = term.neuron
-        if not neuron in neuron_conditions:  # unseen Neuron
-            neuron_conditions[neuron] = {
+        variable = term.variable
+        if not variable in variable_conditions:  # unseen variable name
+            variable_conditions[variable] = {
                 TermOp: set()
                 for TermOp in TermOperator
             }
-        neuron_conditions[neuron][term.operator].add(term.threshold)
+        variable_conditions[variable][term.operator].add(term.threshold)
 
-    # Returns {Neuron: {TermOperator: Set[Float]}}
-    return neuron_conditions
+    # Returns {variable_name (str): {TermOperator: Set[Float]}}
+    return variable_conditions

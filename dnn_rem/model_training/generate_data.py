@@ -40,7 +40,7 @@ def run(manager, use_grid_search=False):
             execute_fn=lambda: grid_search_fn(
                 X=X_train,
                 y=y_train,
-                num_outputs=manager.DATASET_INFO.n_outputs,
+                num_outputs=len(manager.DATASET_INFO.output_classes),
                 manager=manager,
             ),
             serializing_fn=serialize_best_params,

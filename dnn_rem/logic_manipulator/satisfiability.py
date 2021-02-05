@@ -2,7 +2,7 @@
 Methods for satisfiability checks.
 """
 
-from .utils import terms_set_to_neuron_dict
+from .utils import terms_set_to_variable_dict
 from ..rules.term import TermOperator
 
 
@@ -23,7 +23,7 @@ def is_satisfiable(clause):
         return False
 
     # Check if neurons min value >= max value
-    neuron_conditions = terms_set_to_neuron_dict(clause.terms)
+    neuron_conditions = terms_set_to_variable_dict(clause.terms)
     for neuron in neuron_conditions.keys():
         # If neuron is specified with <= and >
         if (

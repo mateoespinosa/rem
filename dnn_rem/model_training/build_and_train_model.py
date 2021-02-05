@@ -24,16 +24,8 @@ class LogitAUC(tf.keras.metrics.AUC):
 
     def update_state(self, y_true, y_pred, sample_weight=None):
         # Simply call the parent function with the argmax of the given tensor
-        y_true = tf.where(
-            tf.equal(tf.reduce_max(y_true, axis=-1, keepdims=True), y_true),
-            1,
-            0
-        )
-        y_pred = tf.where(
-            tf.equal(tf.reduce_max(y_pred, axis=-1, keepdims=True), y_pred),
-            1,
-            0
-        )
+        # y_true = tf.where(
+        y_pred = tf.nn.softmax(y_pred, axis=-1)
         super(LogitAUC, self).update_state(
             y_true=y_true,
             y_pred=y_pred,
@@ -252,7 +244,7 @@ def run_train_loop(
         model = model_fn(
             input_features=X_train.shape[-1],
             layer_units=hyperparams["layer_units"],
-            num_outputs=manager.DATASET_INFO.n_outputs,
+            num_outputs=len(manager.DATASET_INFO.output_classes),
             last_activation=hyperparams.get("last_activation", None),
             loss_function=hyperparams.get("loss_function", "softmax_xentr"),
             activation=hyperparams.get("activation", "tanh"),
@@ -286,5 +278,19 @@ def run_train_loop(
             1 if logging.getLogger().getEffectiveLevel() == logging.DEBUG else 0
         ),
     )
+
     predicted_labels = model.predict(X_test)
+    auc = sklearn.metrics.roc_auc_score(
+        y_test,
+        predicted_labels,
+        multi_class="ovr",
+        average='samples',
+    )
+    auc_2 = sklearn.metrics.roc_auc_score(
+        y_test,
+        predicted_labels,
+        multi_class="ovo",
+        average='macro',
+    )
+    print("TF AUC", nn_auc, "VS sklearn AUC", auc, "and", auc_2)
     return model, nn_accuracy, nn_auc, maj_class_acc

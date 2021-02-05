@@ -14,7 +14,6 @@ import tensorflow.keras.models as keras
 from dnn_rem.rules.rule import Rule
 from dnn_rem.rules.ruleset import Ruleset
 from dnn_rem.rules.C5 import C5
-from dnn_rem.rules.term import TermOperator
 from dnn_rem.logic_manipulator.substitute_rules import substitute
 
 
@@ -35,6 +34,8 @@ class ModelCache(object):
         train_data,
         activations_path=None,
         last_activation=None,
+        feature_names=None,
+        output_class_names=None,
     ):
         self._model = keras_model
         # We will dump intermediate activations into this path if and only
@@ -44,6 +45,8 @@ class ModelCache(object):
         # Keeps in memory a map between layer ID and the activations it
         # generated when we processed the given training data
         self._activation_map = {}
+        self._feature_names = feature_names
+        self._output_class_names = output_class_names
 
         self._compute_layerwise_activations(
             train_data=train_data,
@@ -88,10 +91,16 @@ class ModelCache(object):
                         f"We encountered some branding in input model with "
                         f"layer at index {layer_index}"
                     )
-            neuron_labels = [
-                f'h_{layer_index}_{i}'
-                for i in range(out_shape[-1])
-            ]
+            neuron_labels = []
+            for i in range(out_shape[-1]):
+                if (layer_index == 0) and (self._feature_names is not None):
+                    neuron_labels.append(self._feature_names[i])
+                elif (layer_index == (len(self) - 1)) and (
+                    self._output_class_names is not None
+                ):
+                    neuron_labels.append(self._output_class_names[i])
+                else:
+                    neuron_labels.append(f'h_{layer_index}_{i}')
 
             # For the last layer, let's make sure it is turned into a
             # probability distribution in case the operation was merged into
@@ -133,6 +142,11 @@ class ModelCache(object):
         a given neuron index
         """
         neuron_key = f'h_{layer_index}_{neuron_index}'
+        if (layer_index == 0) and self._feature_names:
+            neuron_key = self._feature_names[neuron_index]
+        if (layer_index == (len(self) - 1)) and self._output_class_names:
+            neuron_key = self._output_class_names[neuron_index]
+
         return self.get_layer_activations(layer_index)[neuron_key]
 
 
@@ -161,6 +175,8 @@ def extract_rules(
     winnow=True,
     min_cases=15,
     num_workers=1,
+    feature_names=None,
+    output_class_names=None,
 ):
     """
     Extracts a set of rules which imitates given the provided model using the
@@ -190,6 +206,8 @@ def extract_rules(
         keras_model=model,
         train_data=train_data,
         last_activation=last_activation,
+        feature_names=feature_names,
+        output_class_names=output_class_names,
     )
 
     # Now time to actually extract our set of rules
@@ -202,12 +220,16 @@ def extract_rules(
         total=total_loop_volume,
         disable=(verbosity == logging.WARNING),
     ) as pbar:
-        for output_class in range(num_classes):
+        for output_class_idx in range(num_classes):
+            if output_class_names:
+                output_class_name = output_class_names[output_class_idx]
+            else:
+                output_class_name = str(output_class_idx)
+
             # Initial output layer rule
             output_layer = len(model.layers) - 1
             class_rule = Rule.initial_rule(
-                output_layer=output_layer,
-                output_class=output_class,
+                output_class=output_class_name,
                 # If we use sigmoid cross-entropy loss, then this threshold
                 # becomes 0.5 and does not depend on the number of classes.
                 # Also if activation function is not provided, we will default
@@ -249,14 +271,12 @@ def extract_rules(
                         pbar.set_description(
                             f'Extracting rules for term {i}/'
                             f'{num_terms} {term} of layer '
-                            f'{hidden_layer} for class {output_class}'
+                            f'{hidden_layer} for class {output_class_name}'
                         )
 
                     #  y1', y2', ...ym' = t(h(x1)), t(h(x2)), ..., t(h(xm))
                     target = term.apply(
-                        next_layer_activations[
-                            f'h_{hidden_layer+1}_{term.get_neuron_index()}'
-                        ]
+                        next_layer_activations[str(term.variable)]
                     )
                     logging.debug(
                         f"\tA total of {np.count_nonzero(target)}/"
@@ -288,7 +308,7 @@ def extract_rules(
                     # Them time to do this the multi-process way
                     pbar.set_description(
                         f"Extracting rules for layer {hidden_layer} of with "
-                        f"output class {output_class} using "
+                        f"output class {output_class_name} using "
                         f"{effective_workers} new processes for {num_terms} "
                         f"terms"
                     )
@@ -335,7 +355,7 @@ def extract_rules(
                 # Merge rules with current accumulation
                 pbar.set_description(
                     f"Substituting rules for layer {hidden_layer} with output "
-                    f"class {output_class}"
+                    f"class {output_class_name}"
                 )
                 class_rule = substitute(
                     total_rule=class_rule,
@@ -344,7 +364,7 @@ def extract_rules(
                 if not len(class_rule.premise):
                     pbar.write(
                         f"[WARNING] Found rule with empty premise of for "
-                        f"class {output_class}."
+                        f"class {output_class_name}."
                     )
 
             # Finally add this class rule to our solution ruleset
@@ -352,4 +372,8 @@ def extract_rules(
 
         pbar.set_description("Done extracting rules from neural network")
 
-    return Ruleset(rules=dnf_rules)
+    return Ruleset(
+        rules=dnf_rules,
+        feature_names=feature_names,
+        output_class_names=output_class_names,
+    )

@@ -101,7 +101,7 @@ def overlapping_features(rules, include_operand=False):
         class_features = set()
         for clause in class_rule.premise:
             for term in clause.terms:
-                class_features.add(term.neuron)
+                class_features.add(term.variable)
         all_features.append(class_features)
 
     # Intersection over features used in each rule
@@ -125,7 +125,7 @@ def random_features_in_rules(rules, features_name, n):
     for rule in rules:
         for clause in rule.premise:
             for term in clause.terms:
-                neuron = term.neuron
+                neuron = term.variable
                 feature_name = features_name[neuron.index]
                 if feature_name not in features_list:
                     features_list.append(feature_name)
@@ -150,7 +150,7 @@ def features_recurrence(rules, features_name, n):
     for rule in rules:
         for clause in rule.premise:
             for term in clause.terms:
-                neuron = term.neuron
+                neuron = term.variable
                 feature_name = features_name[neuron.index]
                 features_list.append(feature_name)
 
@@ -180,7 +180,7 @@ def features_recurrence_per_class(rules, features_name, n):
         class_features = []
         for clause in rule.premise:
             for term in clause.terms:
-                neuron = term.neuron
+                neuron = term.variable
                 feature_name = features_name[neuron.index]
                 class_features.append(feature_name)
         features_dict[rule.conclusion.name] = class_features
@@ -229,7 +229,7 @@ def features_operator_frequency_recurrence_per_class(rules, features_name):
                 class_terms.append(term)
 
         for term in class_terms:
-            neuron = term.neuron
+            neuron = term.variable
             feature_name = features_name[neuron.index]
             if feature_name not in class_feature_operator_frequency_dict:
                 op_list = [0, 0]
@@ -306,7 +306,7 @@ def features_recurrence_in_explanation(explanation, features_name):
     features_list = []
     for clause in explanation:
         for term in clause.terms:
-            neuron = term.neuron
+            neuron = term.variable
             feature_name = features_name[neuron.index]
             features_list.append(feature_name)
 

@@ -53,6 +53,7 @@ def evaluate(
         tf.keras.utils.to_categorical(y_test),
         tf.keras.utils.to_categorical(predicted_labels),
         multi_class="ovr",
+        average='samples',
     )
 
     # And wrap them all together

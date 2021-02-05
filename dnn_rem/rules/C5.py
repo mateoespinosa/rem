@@ -3,7 +3,7 @@ Python wrapper implementation around R's C5.0 package.
 """
 import math
 
-from .term import Term, Neuron
+from .term import Term
 from .helpers import parse_variable_str_to_dict
 from .rule import Rule
 
@@ -90,11 +90,6 @@ def _parse_C5_rule_str(
             term_variables = parse_variable_str_to_dict(
                 rule_str_lines[line_index]
             )
-            term_neuron_str = term_variables['att'].split('_')
-            term_neuron = Neuron(
-                layer=int(term_neuron_str[1]),
-                index=int(term_neuron_str[2]),
-            )
 
             term_operator = (
                 '<=' if term_variables['result'] == '<' else '>'
@@ -112,7 +107,7 @@ def _parse_C5_rule_str(
                 else:
                     threshold = _truncate(threshold, threshold_decimals)
             rule_terms.add(Term(
-                neuron=term_neuron,
+                variable=term_variables['att'],
                 operator=term_operator,
                 threshold=threshold,
             ))

@@ -68,11 +68,18 @@ class ConjunctiveClause(object):
     def evaluate(self, data):
 
         """
-        Evaluate clause with data Dict[Neuron, float]
+        Evaluate clause with data Dict[str, float]
         """
         for term in self.terms:
-            if not term.apply(data[term.neuron]):
+            if not term.apply(data[term.variable]):
                 return False
 
         # All conditions in the clause are satisfied
         return True
+
+    def to_json(self):
+        result = {}
+        result["terms"] = list(map(lambda x: x.to_json(), self.terms))
+        result["confidence"] = self.confidence
+        result["score"] = self.score
+        return result

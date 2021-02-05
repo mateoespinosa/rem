@@ -37,61 +37,38 @@ class TermOperator(Enum):
             return min(values)
 
 
-class Neuron(object):
-    """
-    Represent specific neuron in the neural network. Immutable and Hashable.
-    """
-
-    def __init__(self, layer: int, index: int):
-        self.layer = layer
-        self.index = index
-
-    def __str__(self):
-        return f'h_{self.layer},{self.index}'
-
-    def __eq__(self, other):
-        return (
-            isinstance(other, Neuron) and
-            (self.index == other.index) and
-            (self.layer == other.layer)
-        )
-
-    def __hash__(self):
-        return hash((self.layer, self.index))
-
-
 class Term(object):
     """
-    Represent a condition indicating if activation value of neuron is
+    Represent a condition indicating if activation value of variable is
     above/below a threshold.
 
     Immutable and Hashable.
     """
-    def __init__(self, neuron, operator, threshold):
-        self._neuron = neuron
+    def __init__(self, variable, operator, threshold):
+        self.variable = variable
         self.threshold = threshold
         self.operator = TermOperator(operator)
 
     def __str__(self):
-        return f'({self._neuron} {self.operator} {self.threshold})'
+        return f'({self.variable} {self.operator} {self.threshold})'
 
     def __eq__(self, other):
         return (
             isinstance(other, Term) and
-            (self._neuron == other.neuron) and
+            (self.variable == other.variable) and
             (self.operator == other.operator) and
             (np.isclose(self.threshold, other.threshold))
         )
 
     def __hash__(self):
-        return hash((self._neuron, self.operator, self.threshold))
+        return hash((self.variable, self.operator, self.threshold))
 
     def negate(self):
         """
         Return term with opposite sign
         """
         return Term(
-            self._neuron,
+            self.variable,
             str(self.operator.negate()),
             self.threshold
         )
@@ -104,16 +81,13 @@ class Term(object):
 
     def get_neuron_index(self):
         """
-        Return index of neuron specified in the term
+        Return index of variable specified in the term
         """
-        return self._neuron.index
+        return self.variable.index
 
-    @property
-    def neuron(self):
-        # Return a copy of our current neuron
-        return Neuron(self._neuron.layer, self._neuron.index)
-
-    @neuron.setter
-    def neuron(self, value):
-        # Copy the input neuron
-        self._neuron = Neuron(value.layer, value.index)
+    def to_json(self):
+        result = {}
+        result["variable"] = self.variable
+        result["threshold"] = self.threshold
+        result["operator"] = str(self.operator)
+        return result

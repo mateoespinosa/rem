@@ -6,8 +6,6 @@ from sklearn.preprocessing import MinMaxScaler
 import logging
 import numpy as np
 
-from dnn_rem.rules.rule import OutputClass
-
 ################################################################################
 ## Global Variables
 ################################################################################
@@ -44,19 +42,51 @@ AVAILABLE_DATASETS = [
 ## Helper Classes
 ################################################################################
 
+
+class OutputClass(object):
+    """
+    Represents the conclusion of a given rule. Immutable and Hashable.
+
+    Each output class has a name and its relevant encoding in the network
+    i.e. which output neuron it corresponds to
+    """
+
+    def __init__(self, name: str, encoding: int):
+        self.name = name
+        self.encoding = encoding
+
+    def __str__(self):
+        return f'OUTPUT_CLASS={self.name} (neuron name {self.encoding})'
+
+    def __eq__(self, other):
+        return (
+            isinstance(other, OutputClass) and
+            (self.name == other.name) and
+            (self.encoding == other.encoding)
+        )
+
+    def __hash__(self):
+        return hash((self.name, self.encoding))
+
+
 # Define a class that can be used to encapsulate all the information we will
 # store from a given dataset.
-DatasetMetaData = namedtuple(
-    'DatasetMetaData',
-    [
-        'n_inputs',
-        'n_outputs',
-        'name',
-        'output_classes',
-        'preprocessing',
-        'target_col',
-    ],
-)
+class DatasetMetaData(object):
+    def __init__(
+        self,
+        name,
+        output_classes,
+        n_features=None,
+        target_col=None,
+        feature_names=None,
+        preprocessing=None,
+    ):
+        self.name = name
+        self.n_features = n_features
+        self.output_classes = output_classes
+        self.target_col = target_col
+        self.feature_names = feature_names
+        self.preprocessing = preprocessing
 
 
 ################################################################################
@@ -152,11 +182,9 @@ def get_data_configuration(dataset_name):
             OutputClass(name='y1', encoding=1),
         )
         return DatasetMetaData(
-            n_inputs=5,
-            n_outputs=len(output_classes),
+            n_features=5,
             name=dataset_name,
             output_classes=output_classes,
-            preprocessing=None,
             target_col='y',
         )
     if dataset_name == 'artif-2':
@@ -165,11 +193,9 @@ def get_data_configuration(dataset_name):
             OutputClass(name='y1', encoding=1),
         )
         return DatasetMetaData(
-            n_inputs=5,
-            n_outputs=len(output_classes),
+            n_features=5,
             name=dataset_name,
             output_classes=output_classes,
-            preprocessing=None,
             target_col='y',
         )
     if dataset_name == 'mb-ge-er':
@@ -178,8 +204,7 @@ def get_data_configuration(dataset_name):
             OutputClass(name='+', encoding=1),
         )
         return DatasetMetaData(
-            n_inputs=1000,
-            n_outputs=len(output_classes),
+            n_features=1000,
             name=dataset_name,
             output_classes=output_classes,
             preprocessing=unit_scale_preprocess,
@@ -191,11 +216,9 @@ def get_data_configuration(dataset_name):
             OutputClass(name='B', encoding=1),
         )
         return DatasetMetaData(
-            n_inputs=30,
-            n_outputs=len(output_classes),
+            n_features=30,
             name=dataset_name,
             output_classes=output_classes,
-            preprocessing=None,
             target_col='diagnosis',
         )
     if dataset_name == 'iris':
@@ -214,8 +237,7 @@ def get_data_configuration(dataset_name):
                 output_classes=output_classes,
             )
         return DatasetMetaData(
-            n_inputs=4,
-            n_outputs=len(output_classes),
+            n_features=4,
             name=dataset_name,
             output_classes=output_classes,
             preprocessing=preprocess_fun,
@@ -227,11 +249,9 @@ def get_data_configuration(dataset_name):
             OutputClass(name='B-Z', encoding=1),
         )
         return DatasetMetaData(
-            n_inputs=16,
-            n_outputs=len(output_classes),
+            n_features=16,
             name=dataset_name,
             output_classes=output_classes,
-            preprocessing=None,
             target_col='letter',
         )
     if dataset_name == 'mnist':
@@ -240,11 +260,9 @@ def get_data_configuration(dataset_name):
             OutputClass(name='1-9', encoding=1),
         )
         return DatasetMetaData(
-            n_inputs=784,
-            n_outputs=len(output_classes),
+            n_features=784,
             name=dataset_name,
             output_classes=output_classes,
-            preprocessing=None,
             target_col='digit',
         )
     if dataset_name == 'tcga-pancan':
@@ -256,11 +274,9 @@ def get_data_configuration(dataset_name):
             OutputClass(name='COAD', encoding=4),
         )
         return DatasetMetaData(
-            n_inputs=20502,
-            n_outputs=len(output_classes),
+            n_features=20502,
             name=dataset_name,
             output_classes=output_classes,
-            preprocessing=None,
             target_col='TCGA',
         )
     if dataset_name == 'mb-ge-dr':
@@ -269,11 +285,9 @@ def get_data_configuration(dataset_name):
             OutputClass(name='DR', encoding=1),
         )
         return DatasetMetaData(
-            n_inputs=1000,
-            n_outputs=len(output_classes),
+            n_features=1000,
             name=dataset_name,
             output_classes=output_classes,
-            preprocessing=None,
             target_col='DR',
         )
 
@@ -283,11 +297,9 @@ def get_data_configuration(dataset_name):
             OutputClass(name='DR', encoding=1),
         )
         return DatasetMetaData(
-            n_inputs=350,
-            n_outputs=len(output_classes),
+            n_features=350,
             name=dataset_name,
             output_classes=output_classes,
-            preprocessing=None,
             target_col='DR',
         )
 
@@ -297,11 +309,9 @@ def get_data_configuration(dataset_name):
             OutputClass(name='+', encoding=1),
         )
         return DatasetMetaData(
-            n_inputs=350,
-            n_outputs=len(output_classes),
+            n_features=350,
             name=dataset_name,
             output_classes=output_classes,
-            preprocessing=None,
             target_col='ER_Expr',
         )
 
@@ -311,11 +321,9 @@ def get_data_configuration(dataset_name):
             OutputClass(name='+', encoding=1),
         )
         return DatasetMetaData(
-            n_inputs=13,
-            n_outputs=len(output_classes),
+            n_features=13,
             name=dataset_name,
             output_classes=output_classes,
-            preprocessing=None,
             target_col='ER_Expr',
         )
 
@@ -325,11 +333,9 @@ def get_data_configuration(dataset_name):
             OutputClass(name='+', encoding=1),
         )
         return DatasetMetaData(
-            n_inputs=1350,
-            n_outputs=len(output_classes),
+            n_features=1350,
             name=dataset_name,
             output_classes=output_classes,
-            preprocessing=None,
             target_col='ER_Expr',
         )
 
@@ -339,11 +345,9 @@ def get_data_configuration(dataset_name):
             OutputClass(name='+', encoding=1),
         )
         return DatasetMetaData(
-            n_inputs=1013,
-            n_outputs=len(output_classes),
+            n_features=1013,
             name=dataset_name,
             output_classes=output_classes,
-            preprocessing=None,
             target_col='ER_Expr',
         )
 
@@ -353,8 +357,7 @@ def get_data_configuration(dataset_name):
             OutputClass(name='ILC', encoding=1),
         )
         return DatasetMetaData(
-            n_inputs=1000,
-            n_outputs=len(output_classes),
+            n_features=1000,
             name=dataset_name,
             output_classes=output_classes,
             preprocessing=unit_scale_preprocess,
@@ -367,8 +370,7 @@ def get_data_configuration(dataset_name):
             OutputClass(name='ILC', encoding=1),
         )
         return DatasetMetaData(
-            n_inputs=1001,
-            n_outputs=len(output_classes),
+            n_features=1001,
             name=dataset_name,
             output_classes=output_classes,
             preprocessing=unit_scale_preprocess,
@@ -381,8 +383,7 @@ def get_data_configuration(dataset_name):
             OutputClass(name='ILC', encoding=1),
         )
         return DatasetMetaData(
-            n_inputs=1004,
-            n_outputs=len(output_classes),
+            n_features=1004,
             name=dataset_name,
             output_classes=output_classes,
             preprocessing=unit_scale_preprocess,
@@ -399,11 +400,9 @@ def get_data_configuration(dataset_name):
             OutputClass(name='IDC-MED', encoding=5),
         )
         return DatasetMetaData(
-            n_inputs=368,
-            n_outputs=len(output_classes),
+            n_features=368,
             name=dataset_name,
             output_classes=output_classes,
-            preprocessing=None,
             target_col='Histological_Type',
         )
 
@@ -417,11 +416,9 @@ def get_data_configuration(dataset_name):
             OutputClass(name='IDC-MED', encoding=5),
         )
         return DatasetMetaData(
-            n_inputs=368,
-            n_outputs=len(output_classes),
+            n_features=368,
             name=dataset_name,
             output_classes=output_classes,
-            preprocessing=None,
             target_col='Histological_Type',
         )
 
@@ -431,11 +428,9 @@ def get_data_configuration(dataset_name):
             OutputClass(name='ILC', encoding=1),
         )
         return DatasetMetaData(
-            n_inputs=368,
-            n_outputs=len(output_classes),
+            n_features=368,
             name=dataset_name,
             output_classes=output_classes,
-            preprocessing=None,
             target_col='Histological_Type',
         )
 
@@ -449,8 +444,7 @@ def get_data_configuration(dataset_name):
             OutputClass(name='IDC-MED', encoding=5),
         )
         return DatasetMetaData(
-            n_inputs=1000,
-            n_outputs=len(output_classes),
+            n_features=1000,
             name=dataset_name,
             output_classes=output_classes,
             preprocessing=unit_scale_preprocess,
@@ -463,11 +457,9 @@ def get_data_configuration(dataset_name):
             OutputClass(name='+', encoding=1),
         )
         return DatasetMetaData(
-            n_inputs=368,
-            n_outputs=len(output_classes),
+            n_features=368,
             name=dataset_name,
             output_classes=output_classes,
-            preprocessing=None,
             target_col='ER_Expr',
         )
 
@@ -477,11 +469,9 @@ def get_data_configuration(dataset_name):
             OutputClass(name='DR', encoding=1),
         )
         return DatasetMetaData(
-            n_inputs=368,
-            n_outputs=len(output_classes),
+            n_features=368,
             name=dataset_name,
             output_classes=output_classes,
-            preprocessing=None,
             target_col='DR',
         )
 

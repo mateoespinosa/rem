@@ -434,6 +434,11 @@ f
                     **kwargs,
                     **extractor_params,
                     last_activation=last_activation,
+                    feature_names=self.DATASET_INFO.feature_names,
+                    output_class_names=list(map(
+                        lambda x: x.name,
+                        self.DATASET_INFO.output_classes,
+                    )),
                 )
             )
 
@@ -507,6 +512,17 @@ f
 
         # Read our dataset. This will be the first thing we will do:
         data = pd.read_csv(self.DATA_FP)
+        # Set the target column, number of inputs, and feature names of our
+        # dataset accordingly from the opened file if they were not provided
+        self.DATASET_INFO.target_col = self.DATASET_INFO.target_col or (
+            data.columns[-1]
+        )
+        self.DATASET_INFO.n_features = self.DATASET_INFO.n_features or (
+            len(data.columns) - 1
+        )
+        self.DATASET_INFO.feature_names = self.DATASET_INFO.feature_names or (
+            data.columns[:self.DATASET_INFO.n_features]
+        )
         self.X = data.drop([self.DATASET_INFO.target_col], axis=1).values
         self.y = data[self.DATASET_INFO.target_col].values
 

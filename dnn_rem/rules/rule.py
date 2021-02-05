@@ -6,35 +6,9 @@ of another term or class conclusion
 from collections import defaultdict
 
 from .clause import ConjunctiveClause
-from .term import Term, Neuron
+from .term import Term
 from dnn_rem.logic_manipulator.satisfiability import \
     remove_unsatisfiable_clauses
-
-
-class OutputClass(object):
-    """
-    Represents the conclusion of a given rule. Immutable and Hashable.
-
-    Each output class has a name and its relevant encoding in the network
-    i.e. which output neuron it corresponds to
-    """
-
-    def __init__(self, name: str, encoding: int):
-        self.name = name
-        self.encoding = encoding
-
-    def __str__(self):
-        return f'OUTPUT_CLASS={self.name} (Neuron {self.encoding})'
-
-    def __eq__(self, other):
-        return (
-            isinstance(other, OutputClass) and
-            (self.name == other.name) and
-            (self.encoding == other.encoding)
-        )
-
-    def __hash__(self):
-        return hash((self.name, self.encoding))
 
 
 class Rule(object):
@@ -92,17 +66,14 @@ class Rule(object):
         return cls(premise=rule_premise, conclusion=conclusion)
 
     @classmethod
-    def initial_rule(cls, output_layer, output_class, threshold):
+    def initial_rule(cls, output_class, threshold):
         """
         Construct Initial Rule given parameters with default confidence value
         of 1
         """
         rule_premise = ConjunctiveClause(
             terms={Term(
-                neuron=Neuron(
-                    layer=output_layer,
-                    index=output_class,
-                ),
+                variable=output_class,
                 operator='>',
                 threshold=threshold,
             )},
@@ -127,3 +98,11 @@ class Rule(object):
                 )
 
         return term_confidences
+
+    def to_json(self):
+        result = {}
+        result["premise"] = []
+        for clause in sorted(self.premise, key=str):
+            result["premise"].append(clause.to_json())
+        result["conclusion"] = self.conclusion
+        return result
