@@ -9,8 +9,9 @@ def _clause_to_str(clause):
     for term in clause.terms:
         op = '&leq;' if term.operator == '<=' else term.operator
         terms.append(
-            f"(<span style='color: #ff6666;'>{term.variable}</span> {op} "
-            f"{term.threshold})"
+            f"(<span style='font-weight: bold; color: #ff6666;'>"
+            f"{term.variable}"
+            f"</span> {op} {term.threshold})"
         )
     return " <span style='color: #758a7d;'>AND</span> ".join(terms)
 
@@ -23,7 +24,7 @@ class RuleView(flx.Widget):
         border-width: thin;
     }
     .flx-RuleView:hover {
-        background-color: yellow;
+        background-color: #eefafe;
     }"""
 
     precedent = flx.StringProp(settable=True)
@@ -203,11 +204,17 @@ class RuleListComponent(CamvizWindow):
                     text="Classes",
                     style=(
                         'font-weight: bold;'
-                        'font-size: large;'
+                        'font-size: 175%;'
                     )
                 )
                 for class_idx, rule in enumerate(classes):
-                    new_button = ui.Button(text=rule.conclusion)
+                    new_button = ui.Button(
+                        text=rule.conclusion,
+                        style=(
+                            'font-weight: bold;'
+                            'font-size: 150%;'
+                        )
+                    )
                     self._mutate_class_buttons(
                         [new_button],
                         'insert',
