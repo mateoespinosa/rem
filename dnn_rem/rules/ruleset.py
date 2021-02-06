@@ -308,6 +308,12 @@ class Ruleset(object):
             pickle.dump(self, f)
         return self
 
+    def remove_rule(self, delete_rule):
+        for rule in self.rules:
+            if rule.conclusion != delete_rule.conclusion:
+                continue
+            rule.premise = rule.premise.difference(delete_rule.premise)
+
     def from_file(self, path):
         with open(path, 'rb') as f:
             deserialized = pickle.load(f)

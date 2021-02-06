@@ -1,0 +1,40 @@
+@import url(
+    'https://fonts.googleapis.com/css2?family=Inconsolata:wght@200;300&display=swap'
+);
+@import url(
+    'https://fonts.googleapis.com/css2?family=Source+Code+Pro&display=swap'
+);
+@import url('https://fonts.googleapis.com/css2?family=Hanalei&display=swap');
+
+@import url(
+    'https://fonts.googleapis.com/css2?family=Josefin+Sans:ital,wght@0,700;1,600&display=swap'
+);
+
+.camviz_tooltip {
+  position: relative;
+  display: inline-block;
+}
+
+.camviz_tooltip .camviz_tooltiptext {
+  visibility: hidden;
+  width: 120px;
+  background-color: black;
+  color: #fff;
+  text-align: center;
+  border-radius: 6px;
+  padding: 5px 0;
+  position: absolute;
+  z-index: 1;
+  bottom: 100%;
+  left: 50%;
+  margin-left: -60px;
+
+  /* Fade in tooltip - takes 1 second to go from 0% to 100% opaque: */
+  opacity: 0;
+  transition: opacity 1s;
+}
+
+.camviz_tooltip:hover .camviz_tooltiptext {
+  visibility: visible;
+  opacity: 1;
+}
