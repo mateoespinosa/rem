@@ -131,25 +131,26 @@ class ClassRuleList(flx.PyComponent):
     @flx.reaction('rules*.rule_removed')
     def remove_rule(self, *events):
         # Time to remove the rule from our ruleset
-        clause_idx = events[-1]["idx"]
-        self.root.state.ruleset.remove_rule(
-            Rule(
-                premise=set([self.clause_ordering[clause_idx]]),
-                conclusion=self.rule_obj.conclusion,
+        for event in events:
+            clause_idx = event["idx"]
+            self.root.state.ruleset.remove_rule(
+                Rule(
+                    premise=set([self.clause_ordering[clause_idx]]),
+                    conclusion=self.rule_obj.conclusion,
+                )
             )
-        )
 
-        # Remove it from our ordering of the different rules
-        self.clause_ordering.pop(clause_idx)
+            # Remove it from our ordering of the different rules
+            self.clause_ordering.pop(clause_idx)
 
-        # And update the IDs of all entries that came after this one
-        for i, rule in enumerate(self.rules):
-            if i <= clause_idx:
-                continue
-            rule.set_idx(rule.idx - 1)
+            # And update the IDs of all entries that came after this one
+            for i, rule in enumerate(self.rules):
+                if i <= clause_idx:
+                    continue
+                rule.set_idx(rule.idx - 1)
 
-        # Remove the rule entry from our list of rules
-        self._remove_rule(clause_idx)
+            # Remove the rule entry from our list of rules
+            self._remove_rule(clause_idx)
 
         # Update the title
         self.class_group.set_title(
@@ -193,7 +194,7 @@ class RuleListComponent(CamvizWindow):
     def init(self):
         ruleset = self.root.state.ruleset
         classes = sorted(ruleset.rules, key=lambda x: x.conclusion)
-        with ui.HBox(title="Rules") as tab:
+        with ui.HBox(title="Rule Editor") as tab:
             with ui.VBox(
                 style=(
                     'overflow-y: scroll;'

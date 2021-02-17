@@ -94,7 +94,7 @@ class RuleSummaryComponent(CamvizWindow):
 
     def init(self):
         with flx.Widget(
-            title="Summary",
+            title="Rule Summary",
             style='overflow-y: scroll;',
         ):
             ruleset_stats = _get_rules_stats(self.root.state.ruleset)

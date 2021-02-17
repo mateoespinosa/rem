@@ -1,11 +1,13 @@
 import argparse
-import sys
 import os
+import sys
 
-from flexx import flx, ui
 from dnn_rem.rules.ruleset import Ruleset
+from feature_explorer import FeatureExplorerComponent
+from flexx import flx, ui
+from rule_explorer import RuleExplorerComponent
 from rule_list import RuleListComponent
-from rule_summary import RuleSummaryComponent
+from rule_statistics import RuleStatisticsComponent
 
 
 ################################################################################
@@ -33,6 +35,27 @@ def build_parser():
         ),
         metavar="my_rules.rules",
     )
+
+    parser.add_argument(
+        '--show_tools',
+        '-t',
+        action="store_true",
+        help=(
+            "Whether or not we display Bokeh tools in summary plots."
+        ),
+        default=False,
+    )
+
+    parser.add_argument(
+        '--max_entries',
+        '-m',
+        metavar="entries",
+        type=int,
+        help=(
+            "Maximum number of entries to display in a summary histogram."
+        ),
+        default=15,
+    )
     parser.add_argument(
         "-d",
         "--debug",
@@ -50,26 +73,35 @@ def build_parser():
 
 
 class CamRuleState(object):
-    def __init__(self, ruleset):
+    def __init__(self, ruleset, show_tools=False, max_entries=15):
         self.ruleset = ruleset
+        self.show_tools = show_tools
+        self.max_entries = max_entries
 
 
 class CamRuleViz(flx.PyComponent):
     windows = flx.ListProp(settable=True)
 
-    def init(self, ruleset):
-        self.state = CamRuleState(ruleset=ruleset)
+    def init(self, ruleset, show_tools, max_entries):
+        self.state = CamRuleState(
+            ruleset=ruleset,
+            show_tools=show_tools,
+            max_entries=max_entries,
+        )
         with flx.VBox(title="CamRuleViz"):
             with flx.HBox():
                 flx.Label(
                     text="RuleViz",
                     style=(
                         "font-family: 'Josefin Sans', sans-serif;"
-                        "font-size: 400%;"
+                        "font-size: 500%;"
+                        "padding-top: 20px;"
                     ),
                 )
             with ui.TabLayout(flex=1) as self.tabs:
-                self.add_window(RuleSummaryComponent())
+                self.add_window(RuleStatisticsComponent())
+                self.add_window(RuleExplorerComponent())
+                self.add_window(FeatureExplorerComponent())
                 self.add_window(RuleListComponent())
 
     @flx.action
@@ -110,6 +142,8 @@ def main():
     app = flx.App(
         CamRuleViz,
         ruleset,
+        args.show_tools,
+        args.max_entries,
     )
 
     app.launch('browser')  # show it now in a browser
