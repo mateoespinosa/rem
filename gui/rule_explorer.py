@@ -6,6 +6,7 @@ from dnn_rem.rules.ruleset import Ruleset
 from dnn_rem.rules.clause import ConjunctiveClause
 from dnn_rem.rules.rule import Rule
 from collections import defaultdict
+from rule_statistics import _CLASS_PALETTE
 
 
 flx.assets.associate_asset(__name__, 'https://d3js.org/d3.v6.min.js')
@@ -13,6 +14,10 @@ flx.assets.associate_asset(
     __name__,
     'https://d3js.org/d3-scale-chromatic.v1.min.js',
 )
+
+_MAX_RADIUS = 150
+
+_MIN_DX = 10
 
 
 def _htmlify(s):
@@ -105,7 +110,9 @@ def _extract_hierarchy_node(ruleset):
             # on them as it will simply generate a chain
             return [
                 {
-                    "name": _htmlify(" AND ".join(map(str, clause.terms))),
+                    "name": _htmlify(" <b>AND</b> ".join(
+                        map(str, clause.terms))
+                    ),
                     "children": [conclusion_node],
                 },
             ]
@@ -270,7 +277,6 @@ class HierarchicalTreeViz(flx.Widget):
     def _resize(self):
         w, h = self.parent.size
         if len(self.node.children) > 0:
-            print("Reshape to", (w, h))
             x = d3.select('#' + self.id)
             x.attr("align", "center")
             svg = self.node.children[0]
@@ -282,9 +288,15 @@ class HierarchicalTreeViz(flx.Widget):
                 f'translate({w//3}, {h//2})'
             )
             graph = x.select("svg").select("g")
-            RawJS(
-                'function _zoomed({transform}) {graph.attr("transform", transform);}'
-            )
+
+            def _zoomed(e):
+                trans = e.transform
+                graph.attr(
+                    "transform",
+                    f"translate({trans.x + (w//3 * trans.k)}, {trans.y + (trans.k * h//2)}) "
+                    f"scale({trans.k})"
+
+                )
 
             x.select("svg").call(
                 d3.zoom().extent(
@@ -297,7 +309,14 @@ class HierarchicalTreeViz(flx.Widget):
                 )
             )
 
-    def _draw_graph(self, current, svg, dx=None, duration=750):
+    def _draw_graph(
+        self,
+        current,
+        svg,
+        dx=None,
+        duration=750,
+        _show_circles=False,
+    ):
 
         width, height = self.parent.size
 
@@ -307,23 +326,25 @@ class HierarchicalTreeViz(flx.Widget):
 
         visible_depth = _max_visible_depth(self.root_tree)
         max_num_children = self.root_tree.data.num_descendants
-        print("Max num children is", max_num_children)
         _node_radius_descendants = lambda num: num/max_num_children
         _node_radius = lambda d: (
             max(
                 5,
-                100 * _node_radius_descendants(d.data.num_descendants)
-            ) if d.data.depth else 5
+                _MAX_RADIUS * _node_radius_descendants(d.data.num_descendants)
+            ) if d.data.depth else _MAX_RADIUS//2
         )
         if dx:
             self.root_tree.dx = dx
         else:
             expanded_depth = _fully_expanded_depth(self.root_tree)
-            self.root_tree.dx = (
-                len(self.root_tree.children) * 0.75
-                if expanded_depth > 3 else (
-                    len(self.root_tree.children or []) * 4
-                )
+            self.root_tree.dx = max(
+                (
+                    len(self.root_tree.children) * 0.8
+                    if expanded_depth > float("inf") else (
+                        len(self.root_tree.children or []) * 6
+                    )
+                ),
+                _MIN_DX
             )
         self._treemap = d3.tree().nodeSize(
             [self.root_tree.dx, self.root_tree.dy]
@@ -338,6 +359,7 @@ class HierarchicalTreeViz(flx.Widget):
         # Compute the new tree layout.
         nodes = tree_data.descendants()
         links = tree_data.descendants().slice(1)
+
 
         ########################################################################
         ## Draw Nodes
@@ -387,23 +409,104 @@ class HierarchicalTreeViz(flx.Widget):
             lambda d: 'pointer' if d.children or d._children else 'default',
         )
 
-        # Add circles with non-existent radius for now
-        colors = d3.scaleSequential().domain(
-            [1, _max_depth(self.data)]
-        ).interpolator(
-            d3.interpolateViridis
+        # Use the same colors as in the other class plots for consistency
+        colors = lambda i: _CLASS_PALETTE[i % len(_CLASS_PALETTE)]
+
+        # Compute the position of each group on the pie:
+        pie = d3.pie().value(
+            lambda d: d.value
         )
 
-        node_enter.append("circle").attr(
-            "r",
-            _node_radius,
-        ).style(
+        def arc_generator(d):
+            entries = []
+            idx = 0
+            i = 0
+            for (key, val) in d.data.class_counts.items():
+                if key == d.key:
+                    idx = i
+                entries.append({
+                    "key": key,
+                    "value": val,
+                })
+                i += 1
+            chunks = pie(entries)
+            return d3.arc().innerRadius(0).outerRadius(_node_radius(d))(
+                chunks[idx]
+            )
+
+        def _derp(d):
+            entries = []
+            total_sum = 0
+            for key, val in d.data.class_counts.items():
+                total_sum += val
+
+            for key in sorted(d.data.class_counts.keys()):
+                entries.append({
+                    "key": key,
+                    "data": d.data,
+                    "percent": d.data.class_counts[key]/total_sum,
+                    "children": d.children or d._children,
+                })
+            return entries
+
+        _class_to_color = {}
+        for i, cls_name in enumerate(self.root_tree.data.class_counts):
+            _class_to_color[cls_name] = colors(i)
+
+        node_enter.selectAll("g").data(
+            _derp
+        ).enter().append("path").attr(
+            "class",
+            "pie_arc",
+        ).attr(
             "stroke",
-            lambda d: 2 if d._children else 0.5,
+            "black"
+        ).style(
+            "stroke-width",
+            "1px",
         ).style(
             "fill",
-            lambda d: colors(d.data.depth + 1),
+            lambda d: _class_to_color[d.key],
+        ).attr(
+            "d",
+            arc_generator,
+        ).style(
+            "opacity",
+            1,
+        ).on(
+            "mouseover",
+            lambda event, d: self.tooltip.style(
+                "visibility",
+                "visible"
+            ).html(
+                f"<b>{d.key}</b>: {d.percent*100:.3f}%"
+                if d.children else f"<b>score</b>: {d.data.score}",
+            )
+        ).on(
+            "mousemove",
+            lambda event, d: self.tooltip.style(
+                "top",
+                f"{(event.pageY - 10)}px"
+            ).style(
+                "left",
+                f"{(event.pageX + 10)}px",
+            )
+        ).on(
+            "mouseout",
+            lambda event, d: self.tooltip.style("visibility", "hidden")
         )
+
+        if _show_circles:
+            node_enter.append("circle").attr(
+                "r",
+                _node_radius,
+            ).style(
+                "stroke",
+                lambda d: 2 if d._children else 0.5,
+            ).style(
+                "fill",
+                lambda d: colors(d.data.depth + 1),
+            )
 
         # Add text with low opacity for now
         node_enter.append("text").attr(
@@ -419,10 +522,7 @@ class HierarchicalTreeViz(flx.Widget):
             "text-anchor",
             lambda d: "end" if d.children or d._children else "start"
         ).html(
-            lambda d: d.data.name if d.children or d._children else (
-                f'<span style="color: red;">{d.data.name}</span> '
-                f'(score {d.data.score})'
-            ),
+            lambda d: d.data.name,
         ).attr(
             "font-weight",
             lambda d: "normal" if d.children or d._children else "bold",
@@ -440,17 +540,18 @@ class HierarchicalTreeViz(flx.Widget):
             lambda d: f"translate({d.y}, {d.x})",
         )
 
-        # Show circles once transition is over
-        node_update.select("circle.node").attr(
-            "r",
-            _node_radius,
-        ).style(
-            "fill",
-            lambda d: colors(d.data.depth + 1),
-        ).style(
-            "stroke",
-            lambda d: 2 if d._children else 0.5,
-        )
+        if _show_circles:
+            # Show circles once transition is over
+            node_update.select("circle.node").attr(
+                "r",
+                _node_radius,
+            ).style(
+                "fill",
+                lambda d: colors(d.data.depth + 1),
+            ).style(
+                "stroke",
+                lambda d: 2 if d._children else 0.5,
+            )
 
         # And also their text
         node_update.select("text").style(
@@ -467,11 +568,19 @@ class HierarchicalTreeViz(flx.Widget):
             lambda d: f"translate({current.y}, {current.x})",
         ).remove()
 
+        if _show_circles:
+            # Then make the circle transparent
+            node_exit.select("circle").attr(
+                "r",
+                1e-6,
+            )
+
         # Then make the circle transparent
-        node_exit.select("circle").attr(
-            "r",
+        node_exit.select("g.path").attr(
+            "opacity",
             1e-6,
         )
+
         # And the text as well
         node_exit.select("text").style(
             "fill-opacity",
@@ -573,8 +682,19 @@ class HierarchicalTreeViz(flx.Widget):
         )
         x.attr("align", "center")
 
-        # Collapse all children of root
+        # Generate a tooltip for displaying different messages
+        self.tooltip = d3.select("body").append("div").style(
+            "position",
+            "absolute",
+        ).style(
+            "z-index",
+            "10",
+        ).style(
+            "visibility",
+            "hidden",
+        ).text("")
 
+        # Collapse all children of root
         def _collapse_all(root_too=False):
             def _collapse(d):
                 if d.children:
@@ -628,14 +748,18 @@ class RuleExplorerComponent(CamvizWindow):
         return _ruleset_hierarchy_tree(ruleset=self.root.state.ruleset)
 
     def init(self):
-        with ui.VBox(
+        with ui.HBox(
             title="Rule Explorer",
         ):
-            self.expand_button = flx.Button(text='Expand all')
-            self.collapse_button = flx.Button(text='Collapse all')
-            self.tree = HierarchicalTreeViz(
-                data=self._compute_hierarchical_tree()
-            )
+            with ui.VBox(style="background: #fafafa;"):
+                ui.Widget(flex=1)
+                self.expand_button = flx.Button(text='Expand all')
+                self.collapse_button = flx.Button(text='Collapse all')
+                ui.Widget(flex=1)
+            with ui.VBox(flex=1):
+                self.tree = HierarchicalTreeViz(
+                    data=self._compute_hierarchical_tree()
+                )
 
     @flx.reaction('expand_button.pointer_click')
     def _expand_clicked(self, *events):

@@ -5,7 +5,7 @@ from flexx import flx, ui
 from collections import defaultdict
 from gui_window import CamvizWindow
 from bokeh.models import ColumnDataSource, HoverTool, LabelSet
-from bokeh.palettes import Category20, Category20c, Set3
+from bokeh.palettes import Category20, Category20c, Set3, Pastel2
 from bokeh.plotting import figure
 from bokeh.transform import factor_cmap
 from bokeh.models.tickers import AdaptiveTicker
@@ -15,8 +15,9 @@ from bokeh.transform import cumsum
 ## Global Variables
 ################################################################################
 
-_PLOT_WIDTH = 750
-_PLOT_HEIGHT = 360
+_PLOT_WIDTH = 700
+_PLOT_HEIGHT = 325
+_CLASS_PALETTE = Pastel2[8]
 
 ################################################################################
 ## Helper Plot Constructors
@@ -66,7 +67,7 @@ def _plot_rule_distribution(ruleset, show_tools=True, add_labels=False):
         line_color="white",
         fill_color=factor_cmap(
             'Output Classes',
-            palette=Set3[12],
+            palette=_CLASS_PALETTE,
             factors=output_classes,
         ),
         legend_field='Output Classes',
@@ -109,76 +110,93 @@ def _plot_term_distribution(
     show_tools=True,
     max_entries=float("inf"),
 ):
-    num_used_rules_per_term_map = defaultdict(int)
+    num_used_rules_per_term_map = defaultdict(lambda: defaultdict(int))
     all_terms = set()
+    class_names = sorted(ruleset.output_class_map.keys())
     for rule in ruleset.rules:
         for clause in rule.premise:
             for term in clause.terms:
                 all_terms.add(term)
-                num_used_rules_per_term_map[term] += 1
+                num_used_rules_per_term_map[str(term)][rule.conclusion] += 1
 
     all_terms = list(all_terms)
     # Make sure we display most used rules first
-    used_terms = sorted(
+    all_terms = sorted(
         all_terms,
-        key=lambda x: -num_used_rules_per_term_map[x],
+        key=lambda x: -sum(num_used_rules_per_term_map[str(x)].values()),
     )
-    if max_entries != float("inf"):
-        used_terms = used_terms[:max_entries]
-    # And we will pick only the requested top entries
-    num_used_rules_per_term = [
-        num_used_rules_per_term_map[term] for term in used_terms
-    ]
-    used_terms = list(map(str, used_terms))
-    source = ColumnDataSource(
-        data={
-            "Terms": used_terms,
-            "Rules Using that Term": num_used_rules_per_term,
-        }
-    )
-    title = f"Top {min(max_entries, len(used_terms))} used terms"
-    if len(used_terms) != len(all_terms):
-        title += (
-            f" (out of {len(all_terms)} unique terms used in all the ruleset)"
+
+    def _update_rank(num_entries):
+        if num_entries != float("inf"):
+            used_terms = all_terms[:num_entries]
+        else:
+            used_terms = all_terms[:]
+
+        # And we will pick only the requested top entries
+        used_terms = list(map(str, used_terms))
+        data = defaultdict(list)
+        data["Terms"] = used_terms
+        for term in used_terms:
+            class_per_term = num_used_rules_per_term_map[term]
+            for cls_name in class_names:
+                data[cls_name].append(class_per_term.get(cls_name, 0))
+
+        source = ColumnDataSource(data=data)
+        title = f"Top {min(num_entries, len(used_terms))} used terms"
+        if len(used_terms) != len(all_terms):
+            title += (
+                f" (out of {len(all_terms)} unique terms used in all the ruleset)"
+            )
+        result_plot = figure(
+            x_range=used_terms,
+            toolbar_location=None if (not show_tools) else "right",
+            plot_width=_PLOT_WIDTH,
+            plot_height=_PLOT_HEIGHT,
+            background_fill_color="#fafafa",
+            title=title,
         )
-    result_plot = figure(
-        x_range=used_terms,
-        toolbar_location=None if (not show_tools) else "right",
-        plot_width=_PLOT_WIDTH,
-        plot_height=_PLOT_HEIGHT,
-        background_fill_color="#fafafa",
-        title=title,
-    )
-    result_plot.vbar(
-        x='Terms',
-        top='Rules Using that Term',
-        width=0.9,
-        source=source,
-        line_color='white',
-        fill_color=factor_cmap(
-            'Terms',
-            palette=Category20c[20],
-            factors=used_terms,
-        ),
-    )
-    result_plot.xgrid.grid_line_color = None
-    result_plot.y_range.start = 0
-    result_plot.y_range.end = int(max(0, 0, *num_used_rules_per_term) * 1.1)
-    result_plot.xaxis.major_label_orientation = 1.15
-    result_plot.xaxis.axis_label = "Terms"
-    result_plot.toolbar.logo = None
-    for tool in result_plot.toolbar.tools:
-        if isinstance(
-            tool,
-            (bokeh.models.tools.HelpTool)
-        ):
-            result_plot.toolbar.tools.remove(tool)
-    hover = HoverTool(tooltips=[
-        ('Count', '@{Rules Using that Term}'),
-        ('Term', '@{Terms}'),
-    ])
-    result_plot.add_tools(hover)
-    return result_plot
+        result_plot.vbar_stack(
+            stackers=class_names,
+            x='Terms',
+            width=0.9,
+            source=source,
+            line_color='white',
+            color=_CLASS_PALETTE[:len(class_names)],
+        )
+
+        num_used_rules_per_term = np.zeros([len(used_terms)], dtype=np.int32)
+        for data_row, vals in data.items():
+            if data_row == "Terms":
+                continue
+            num_used_rules_per_term += vals
+
+        result_plot.xgrid.grid_line_color = None
+        result_plot.y_range.start = 0
+        result_plot.y_range.end = int(max(0, 0, *num_used_rules_per_term) * 1.1)
+        result_plot.xaxis.major_label_orientation = 1.15
+        result_plot.xaxis.axis_label = "Terms"
+        result_plot.xaxis.axis_label_text_font_size = (
+            f"{10 if num_entries <= 10 else 8}pt"
+        )
+        result_plot.toolbar.logo = None
+        for tool in result_plot.toolbar.tools:
+            if isinstance(
+                tool,
+                (bokeh.models.tools.HelpTool)
+            ):
+                result_plot.toolbar.tools.remove(tool)
+        hover = HoverTool(tooltips=[
+            ('Count', '@$name'),
+            ('Term', '@{Terms}'),
+            ('Class', '$name')
+        ])
+        result_plot.add_tools(hover)
+        print("Before", result_plot.margin)
+        result_plot.margin = (0, 100, 0, 100)
+        print("\tAfter", result_plot.margin)
+        return result_plot
+
+    return _update_rank, len(all_terms)
 
 
 def _plot_feature_distribution(
@@ -186,77 +204,85 @@ def _plot_feature_distribution(
     show_tools=True,
     max_entries=float("inf"),
 ):
-    num_used_rules_per_feat_map = defaultdict(int)
+    num_used_rules_per_feat_map = defaultdict(lambda: defaultdict(int))
     all_features = set()
     for rule in ruleset.rules:
         for clause in rule.premise:
             for term in clause.terms:
                 all_features.add(term.variable)
-                num_used_rules_per_feat_map[term.variable] += 1
+                num_used_rules_per_feat_map[term.variable][rule.conclusion] += 1
 
     all_features = list(all_features)
     # Make sure we display most used rules first
-    used_features = sorted(
+    all_features = sorted(
         all_features,
-        key=lambda x: -num_used_rules_per_feat_map[x],
+        key=lambda x: -sum(num_used_rules_per_feat_map[x].values()),
     )
-    if max_entries != float("inf"):
-        used_features = used_features[:max_entries]
-    # And we will pick only the requested top entries
-    num_used_rules_per_feat = [
-        num_used_rules_per_feat_map[term] for term in used_features
-    ]
-    used_features = list(map(str, used_features))
-    source = ColumnDataSource(
-        data={
-            "Feature": used_features,
-            "Rules Using that Feature": num_used_rules_per_feat,
-        }
-    )
-    title = f"Top {min(max_entries, len(used_features))} used features"
-    if len(used_features) != len(all_features):
-        title += (
-            f" (out of {len(all_features)}/{len(ruleset.feature_names)} "
-            f"features used in all the ruleset)"
+    class_names = sorted(ruleset.output_class_map.keys())
+
+    def _update_rank(num_entries):
+        if num_entries != float("inf"):
+            used_features = all_features[:num_entries]
+        else:
+            used_features = all_features
+
+        # And we will pick only the requested top entries
+        used_features = list(map(str, used_features))
+        data = defaultdict(list)
+        data["Feature"] = used_features
+        for feature in used_features:
+            class_per_feat = num_used_rules_per_feat_map[feature]
+            for cls_name in class_names:
+                data[cls_name].append(class_per_feat.get(cls_name, 0))
+
+        source = ColumnDataSource(data=data)
+        title = f"Top {min(num_entries, len(used_features))} used features"
+        if len(used_features) != len(all_features):
+            title += (
+                f" (out of {len(all_features)}/{len(ruleset.feature_names)} "
+                f"features used in all the ruleset)"
+            )
+        result_plot = figure(
+            x_range=used_features,
+            toolbar_location=None if (not show_tools) else "right",
+            plot_width=_PLOT_WIDTH,
+            plot_height=_PLOT_HEIGHT,
+            background_fill_color="#fafafa",
+            title=title,
         )
-    result_plot = figure(
-        x_range=used_features,
-        toolbar_location=None if (not show_tools) else "right",
-        plot_width=_PLOT_WIDTH,
-        plot_height=_PLOT_HEIGHT,
-        background_fill_color="#fafafa",
-        title=title,
-    )
-    result_plot.vbar(
-        x='Feature',
-        top='Rules Using that Feature',
-        width=0.9,
-        source=source,
-        line_color='white',
-        fill_color=factor_cmap(
-            'Feature',
-            palette=Category20[20],
-            factors=used_features,
-        ),
-    )
-    result_plot.xgrid.grid_line_color = None
-    result_plot.y_range.start = 0
-    result_plot.y_range.end = int(max(0, 0, *num_used_rules_per_feat) * 1.1)
-    result_plot.xaxis.major_label_orientation = 1.15
-    result_plot.xaxis.axis_label = "Feature"
-    result_plot.toolbar.logo = None
-    for tool in result_plot.toolbar.tools:
-        if isinstance(
-            tool,
-            (bokeh.models.tools.HelpTool)
-        ):
-            result_plot.toolbar.tools.remove(tool)
-    hover = HoverTool(tooltips=[
-        ('Count', '@{Rules Using that Feature}'),
-        ('Feature', '@{Feature}'),
-    ])
-    result_plot.add_tools(hover)
-    return result_plot
+        result_plot.vbar_stack(
+            stackers=class_names,
+            x='Feature',
+            width=0.9,
+            source=source,
+            line_color='white',
+            color=_CLASS_PALETTE[:len(class_names)],
+        )
+        result_plot.xgrid.grid_line_color = None
+        result_plot.y_range.start = 0
+        num_used_rules_per_feat = np.zeros([len(used_features)], dtype=np.int32)
+        for data_row, vals in data.items():
+            if data_row == "Feature":
+                continue
+            num_used_rules_per_feat += vals
+        result_plot.y_range.end = int(max(0, 0, *num_used_rules_per_feat) * 1.1)
+        result_plot.xaxis.major_label_orientation = 1.15
+        result_plot.xaxis.axis_label = "Features"
+        result_plot.toolbar.logo = None
+        for tool in result_plot.toolbar.tools:
+            if isinstance(
+                tool,
+                (bokeh.models.tools.HelpTool)
+            ):
+                result_plot.toolbar.tools.remove(tool)
+        hover = HoverTool(tooltips=[
+            ('Count', '@$name'),
+            ('Feature', '@{Feature}'),
+            ('Class', '$name')
+        ])
+        result_plot.add_tools(hover)
+        return result_plot
+    return _update_rank, len(all_features)
 
 
 def _plot_rule_length_distribution(
@@ -278,7 +304,6 @@ def _plot_rule_length_distribution(
                 ruleset.output_class_map[rule.conclusion]
             ].append(len(clause.terms))
 
-    palette = Set3[12]
     result_plot = figure(
         toolbar_location=None if (not show_tools) else "right",
         plot_width=_PLOT_WIDTH,
@@ -296,7 +321,7 @@ def _plot_rule_length_distribution(
             bottom=0,
             left=edges[:-1],
             right=edges[1:],
-            fill_color=palette[ruleset.output_class_map[cls_name]],
+            fill_color=_CLASS_PALETTE[ruleset.output_class_map[cls_name]],
             line_color="black",
             alpha=0.5,
             legend_label=cls_name,
@@ -331,6 +356,7 @@ def _plot_rule_length_distribution(
 class RuleStatisticsComponent(CamvizWindow):
     groups = flx.ListProp(settable=True)
     rows = flx.ListProp(settable=True)
+    plots = flx.ListProp(settable=True)
 
     def init(self):
         self.ruleset = self.root.state.ruleset
@@ -381,7 +407,11 @@ class RuleStatisticsComponent(CamvizWindow):
             ),
             flex=1,
         ) as new_group:
-            new_plot = ui.BokehWidget.from_plot(plot, flex=1)
+            self._mutate_plots(
+                [ui.BokehWidget.from_plot(plot, flex=1)],
+                'insert',
+                len(self.plots)
+            )
             self._mutate_groups(
                 [new_group],
                 'insert',
@@ -392,38 +422,151 @@ class RuleStatisticsComponent(CamvizWindow):
     def _construct_plots(self):
         with self.container:
             with self.rows[0]:
-                self.add_plot(
-                    "Rule Distribution",
-                    _plot_rule_distribution(
-                        ruleset=self.ruleset,
-                        show_tools=self.show_tools,
-                    ),
-                )
-                self.add_plot(
-                    "Rule Length Distribution",
-                    _plot_rule_length_distribution(
-                        ruleset=self.ruleset,
-                        show_tools=self.show_tools,
-                        max_entries=self.max_entries,
-                    ),
-                )
+                with ui.VBox():
+                    flx.Label(
+                        text="Rule Class Distribution",
+                        flex=1,
+                        style=(
+                            'font-size: 150%;'
+                            'font-weight: bold;'
+                            'text-align: center;'
+                        ),
+                    )
+                    self.add_plot(
+                        "Rule Distribution",
+                        _plot_rule_distribution(
+                            ruleset=self.ruleset,
+                            show_tools=self.show_tools,
+                        ),
+                    )
+                with ui.VBox():
+                    flx.Label(
+                        text="Rule Length Distribution",
+                        flex=1,
+                        style=(
+                            'font-size: 150%;'
+                            'font-weight: bold;'
+                            'text-align: center;'
+                        ),
+                    )
+                    self.add_plot(
+                        "Rule Length Distribution",
+                        _plot_rule_length_distribution(
+                            ruleset=self.ruleset,
+                            show_tools=self.show_tools,
+                            max_entries=self.max_entries,
+                        ),
+                    )
             with self.rows[1]:
-                self.add_plot(
-                    "Feature Distribution",
-                    _plot_feature_distribution(
-                        ruleset=self.ruleset,
-                        show_tools=self.show_tools,
-                        max_entries=self.max_entries,
-                    ),
+                with ui.VBox():
+                    new_activation, num_features = \
+                        _plot_feature_distribution(
+                            ruleset=self.ruleset,
+                            show_tools=self.show_tools,
+                            max_entries=self.max_entries,
+                        )
+                    flx.Label(
+                        text="Feature Distribution",
+                        flex=1,
+                        style=(
+                            'font-size: 150%;'
+                            'font-weight: bold;'
+                            'text-align: center;'
+                        ),
+                    )
+                    with ui.HBox():
+                        flx.Label(
+                            text="Number of top features to consider:",
+                            flex=1,
+                            style="text-align: right;"
+                        )
+                        self.feature_combo = flx.ComboBox(
+                            options=list(range(1, num_features + 1)),
+                            selected_index=min(num_features - 1, 15),
+                            style='width: 100%',
+                            flex=0,
+                        )
+                    self.add_plot(
+                        "Feature Distribution",
+                        new_activation(min(num_features - 1, 14)),
+                    )
+                    self._feature_redraw = new_activation
+
+                with ui.VBox():
+                    new_activation, num_terms = \
+                        _plot_term_distribution(
+                            ruleset=self.ruleset,
+                            show_tools=self.show_tools,
+                            max_entries=self.max_entries,
+                        )
+                    flx.Label(
+                        text="Term Distribution",
+                        flex=1,
+                        style=(
+                            'font-size: 150%;'
+                            'font-weight: bold;'
+                            'text-align: center;'
+                        ),
+                    )
+                    with ui.HBox():
+                        flx.Label(
+                            text="Number of top terms to consider:",
+                            flex=1,
+                            style="text-align: right;"
+                        )
+                        self.term_combo = flx.ComboBox(
+                            options=list(range(1, num_terms + 1)),
+                            selected_index=min(num_terms - 1, 15),
+                            style='width: 100%',
+                            flex=0,
+                        )
+                    self.add_plot(
+                        "Term Distribution",
+                        new_activation(min(num_terms - 1, 14)),
+                    )
+                    self._term_redraw = new_activation
+
+    @flx.action
+    def _insert_plot(self, new_plot, ind):
+        self._mutate_plots(
+            [new_plot],
+            'replace',
+            ind,
+        )
+
+    @flx.reaction('term_combo.selected_index')
+    def _update_term_distribution(self, *events):
+        group_ind = 3
+        for event in events:
+            if -1 in [event['new_value'], event['old_value']]:
+                # Then we ignore this event as it is the initial event
+                continue
+            # Detaching old plot from parent!
+            with self.groups[group_ind]:
+                new_plot = ui.BokehWidget.from_plot(
+                    self._term_redraw(event['new_value'] + 1),
+                    flex=1,
                 )
-                self.add_plot(
-                    "Term Distribution",
-                    _plot_term_distribution(
-                        ruleset=self.ruleset,
-                        show_tools=self.show_tools,
-                        max_entries=self.max_entries,
-                    ),
+                old_plot = self.plots[group_ind]
+                self._insert_plot(new_plot, group_ind)
+                old_plot.set_parent(None)
+
+    @flx.reaction('feature_combo.selected_index')
+    def _update_feature_distribution(self, *events):
+        group_ind = 2
+        # Detaching old plot from parent!
+        for event in events:
+            if -1 in [event['new_value'], event['old_value']]:
+                # Then we ignore this event as it is the initial event
+                continue
+            with self.groups[group_ind]:
+                new_plot = ui.BokehWidget.from_plot(
+                    self._feature_redraw(event['new_value'] + 1),
+                    flex=1,
                 )
+                old_plot = self.plots[group_ind]
+                self._insert_plot(new_plot, group_ind)
+                old_plot.set_parent(None)
 
     @flx.action
     def reset(self):

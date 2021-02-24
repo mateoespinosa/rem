@@ -67,6 +67,11 @@ def build_parser():
     return parser
 
 
+class FancyTabLayout(ui.TabLayout):
+    """ Fancy version of the TabLayout with nicer looking aesthetics.
+    """
+    pass
+
 ################################################################################
 ## Main Application
 ################################################################################
@@ -98,7 +103,7 @@ class CamRuleViz(flx.PyComponent):
                         "padding-top: 20px;"
                     ),
                 )
-            with ui.TabLayout(flex=1) as self.tabs:
+            with FancyTabLayout(flex=1) as self.tabs:
                 self.add_window(RuleStatisticsComponent())
                 self.add_window(RuleExplorerComponent())
                 self.add_window(FeatureExplorerComponent())

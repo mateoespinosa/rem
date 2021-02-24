@@ -204,6 +204,20 @@ class Ruleset(object):
                                 f"{score_mechanism}"
                             )
 
+    def break_rules(self):
+        new_rules = set()
+        for rule in self.rules:
+            for clause in rule.premise:
+                new_rules.add(Rule(
+                    premise=set([clause]),
+                    conclusion=rule.conclusion,
+                ))
+        return Ruleset(
+            rules=rules,
+            feature_names=self.feature_names,
+            output_class_names=self.output_class_names,
+        )
+
     def add_rules(self, rules):
         self.rules = self.rules.union(rules)
 
