@@ -1,7 +1,6 @@
 from flexx import flx, ui
 from gui_window import CamvizWindow
-from pscript import RawJS
-from pscript.stubs import Math, d3, window
+from pscript.stubs import d3, window
 from dnn_rem.rules.ruleset import Ruleset
 from dnn_rem.rules.clause import ConjunctiveClause
 from dnn_rem.rules.rule import Rule
@@ -528,7 +527,7 @@ class HierarchicalTreeViz(flx.Widget):
             lambda d: "normal" if d.children or d._children else "bold",
         ).attr(
             "font-size",
-            lambda d: 10 if d.children or d._children else 20,
+            lambda d: 10 if d.children or d._children else 30,
         )
 
         # Transition nodes to their new position

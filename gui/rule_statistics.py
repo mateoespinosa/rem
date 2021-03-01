@@ -191,9 +191,7 @@ def _plot_term_distribution(
             ('Class', '$name')
         ])
         result_plot.add_tools(hover)
-        print("Before", result_plot.margin)
         result_plot.margin = (0, 100, 0, 100)
-        print("\tAfter", result_plot.margin)
         return result_plot
 
     return _update_rank, len(all_terms)
@@ -534,34 +532,28 @@ class RuleStatisticsComponent(CamvizWindow):
             ind,
         )
 
-    @flx.reaction('term_combo.selected_index')
+    @flx.reaction('term_combo.user_selected')
     def _update_term_distribution(self, *events):
         group_ind = 3
         for event in events:
-            if -1 in [event['new_value'], event['old_value']]:
-                # Then we ignore this event as it is the initial event
-                continue
             # Detaching old plot from parent!
             with self.groups[group_ind]:
                 new_plot = ui.BokehWidget.from_plot(
-                    self._term_redraw(event['new_value'] + 1),
+                    self._term_redraw(event['index'] + 1),
                     flex=1,
                 )
                 old_plot = self.plots[group_ind]
                 self._insert_plot(new_plot, group_ind)
                 old_plot.set_parent(None)
 
-    @flx.reaction('feature_combo.selected_index')
+    @flx.reaction('feature_combo.user_selected')
     def _update_feature_distribution(self, *events):
         group_ind = 2
         # Detaching old plot from parent!
         for event in events:
-            if -1 in [event['new_value'], event['old_value']]:
-                # Then we ignore this event as it is the initial event
-                continue
             with self.groups[group_ind]:
                 new_plot = ui.BokehWidget.from_plot(
-                    self._feature_redraw(event['new_value'] + 1),
+                    self._feature_redraw(event['index'] + 1),
                     flex=1,
                 )
                 old_plot = self.plots[group_ind]

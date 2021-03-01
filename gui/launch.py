@@ -8,6 +8,7 @@ from flexx import flx, ui
 from rule_explorer import RuleExplorerComponent
 from rule_list import RuleListComponent
 from rule_statistics import RuleStatisticsComponent
+import pandas as pd
 
 
 ################################################################################
@@ -34,6 +35,17 @@ def build_parser():
             "from some neural network and a given task."
         ),
         metavar="my_rules.rules",
+    )
+
+    parser.add_argument(
+        'data',
+        help=(
+            "Valid .csv file containing the dataset used to generate the "
+            "given rules. Assumes that all but the last column are features "
+            "and the last column itself contains the labels. The first row "
+            "has the feature names."
+        ),
+        metavar="data.csv",
     )
 
     parser.add_argument(
@@ -78,8 +90,9 @@ class FancyTabLayout(ui.TabLayout):
 
 
 class CamRuleState(object):
-    def __init__(self, ruleset, show_tools=False, max_entries=15):
+    def __init__(self, ruleset, dataset, show_tools=False, max_entries=15):
         self.ruleset = ruleset
+        self.dataset = dataset
         self.show_tools = show_tools
         self.max_entries = max_entries
 
@@ -87,9 +100,10 @@ class CamRuleState(object):
 class CamRuleViz(flx.PyComponent):
     windows = flx.ListProp(settable=True)
 
-    def init(self, ruleset, show_tools, max_entries):
+    def init(self, ruleset, dataset, show_tools, max_entries):
         self.state = CamRuleState(
             ruleset=ruleset,
+            dataset=dataset,
             show_tools=show_tools,
             max_entries=max_entries,
         )
@@ -139,6 +153,7 @@ def main():
     args = parser.parse_args()
     ruleset = Ruleset()
     ruleset.from_file(args.rules)
+    dataset = pd.read_csv(args.data, sep=',')
 
     with open(os.path.join(os.path.dirname(__file__), 'style.css')) as f:
         style = f.read()
@@ -147,6 +162,7 @@ def main():
     app = flx.App(
         CamRuleViz,
         ruleset,
+        dataset,
         args.show_tools,
         args.max_entries,
     )

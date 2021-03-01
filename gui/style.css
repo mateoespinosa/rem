@@ -10,6 +10,10 @@
     'https://fonts.googleapis.com/css2?family=Josefin+Sans:ital,wght@0,700;1,600&display=swap'
 );
 
+@import url(
+  'https://fonts.googleapis.com/css2?family=Montserrat:ital,wght@1,500&display=swap'
+);
+
 .camviz_tooltip {
   position: relative;
   display: inline-block;
@@ -37,4 +41,46 @@
 .camviz_tooltip:hover .camviz_tooltiptext {
   visibility: visible;
   opacity: 1;
+}
+
+.flx-Widget.scrollable_group, .scrollable_group {
+  margin: 1%;
+  padding: 5px;
+  border: 2px solid #ccc;
+  border-radius: 3px;
+  overflow-y: scroll;
+  overflow-x: scroll;
+  text-align: center;
+}
+.scrollable_group > .flx-Layout {
+  width: calc(100% - 10px) !important;
+  height: calc(100% - 25px) !important;
+}
+
+/*******************************************************************************
+* Feature Explorer Classes
+*******************************************************************************/
+.select-container {
+  text-align: center;
+}
+
+.select-label {
+  font-size: 150%;
+  font-family: 'Montserrat', sans-serif;
+}
+
+.class-select {
+  font-family: 'Montserrat', sans-serif;
+  font-size: 150%;
+  margin: 1% 2% 1% 2%;
+}
+
+.axis-label {
+  font-family: 'Montserrat', sans-serif;
+  font-size: 200%;
+  font-weight: bold;
+}
+
+.feature-selection-box {
+
 }
