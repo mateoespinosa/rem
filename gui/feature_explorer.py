@@ -8,22 +8,6 @@ from sklearn.neighbors import KernelDensity
 import numpy as np
 from rule_statistics import _CLASS_PALETTE
 
-def _kernel_density_estimator(kernel, x_points):
-    def _result_fn(values):
-        return x_points.map(
-            lambda x: [x, d3.mean(values, lambda v: kernel(x - v))],
-        )
-    return _result_fn
-
-
-def _kernel_epanechnikov(k):
-    def _result_fn(v):
-        v /= k
-        if abs(v) <= 1:
-            return 0.75 * (1 - v * v) / k
-        return 0
-    return _result_fn
-
 
 class FeatureBoundView(flx.Widget):
     CSS = """
@@ -34,14 +18,15 @@ class FeatureBoundView(flx.Widget):
     """
     DEFAULT_MIN_SIZE = 800, 500
 
+    class_name = flx.StringProp("", settable=True)
     feature_name = flx.StringProp(settable=True)
     feature_limits = flx.TupleProp(settable=True)
-    rule_bounds = flx.DictProp(settable=True)
-    num_ticks = flx.IntProp(20, settable=True)
+    rule_bounds = flx.ListProp(settable=True)
     data = flx.ListProp([], settable=True)
-    classes = flx.ListProp([], settable=True)
-    estimated_densities = flx.DictProp({}, settable=True)
+    estimated_density = flx.ListProp([], settable=True)
     plot_density = flx.BoolProp(False, settable=True)
+    num_bins = flx.IntProp(50, settable=True)
+    class_color = flx.StringProp("black", settable=True)
 
     def init(self):
         self.node.id = self.id
@@ -49,32 +34,27 @@ class FeatureBoundView(flx.Widget):
 
     @flx.action
     def load_viz(self):
-        width, height = self.DEFAULT_MIN_SIZE
-        left_margin, right_margin = 50, 50
-        top_margin, bottom_margin = 50, 50
+        self.width, self.height = self.DEFAULT_MIN_SIZE
+        self.left_margin, self.right_margin = 50, 50
+        self.top_margin, self.bottom_margin = 50, 50
+        self.tooltip = d3.select("body").append("div").style(
+            "position",
+            "absolute",
+        ).style(
+            "z-index",
+            "10",
+        ).style(
+            "visibility",
+            "hidden",
+        ).text("")
 
-        x = d3.select('#' + self.id)
-        top_div = x.append("div").attr(
-            "class",
-            "select-container",
-        )
-        top_div.append("div").attr(
-            "class",
-            "select-label",
-        ).html(
-            "Class"
-        )
-        self.class_select = top_div.append("select").attr(
-            "class",
-            "class-select",
-        )
-
+        x = d3.select(f'#{self.id}')
         self.svg = x.append("svg").attr(
             "width",
-            width
+            self.width
         ).attr(
             "height",
-            height,
+            self.height,
         ).attr(
             "xmlns",
             "http://www.w3.org/2000/svg",
@@ -152,46 +132,30 @@ class FeatureBoundView(flx.Widget):
         )
 
         ########################################################################
-        ## Populate the class selection
-        ########################################################################
-
-        x.select(".class-select").selectAll(
-            'myOptions'
-        ).data(
-            self.classes
-        ).enter(
-        ).append(
-            'option'
-        ).text(
-            lambda d: d,
-        ).attr(
-            "value",
-            lambda d: d,
-        )
-
-        ########################################################################
         ## Add x-axis
         ########################################################################
 
-        x_scale = d3.scaleLinear().domain(
+        self.x_scale = d3.scaleLinear().domain(
             [(x * 1.0) for x in self.feature_limits]
         ).range(
-            [left_margin, width - right_margin]
+            [self.left_margin, self.width - self.right_margin]
         )
-        x_axis_y_position = height - bottom_margin - 50
-        x_axis = self.svg.append(
+        x_axis_y_position = self.height - self.bottom_margin - 50
+        self.x_axis = self.svg.append(
             "g"
         ).attr(
             "class",
-            "axis",
+            "x-axis",
         ).attr(
             "transform",
             f"translate({0}, {x_axis_y_position})"
         ).call(
-            d3.axisBottom(x_scale).ticks(min(max(2, width // 20), 25))
+            d3.axisBottom(self.x_scale).ticks(
+                min(max(2, self.width // 15), 25)
+            )
         )
 
-        x_axis.selectAll("path").attr(
+        self.x_axis.selectAll("path").attr(
             "stroke",
             "black",
         ).attr(
@@ -202,7 +166,7 @@ class FeatureBoundView(flx.Widget):
             "round"
         )
 
-        x_axis.selectAll(".tick").attr(
+        self.x_axis.selectAll(".tick").attr(
             "stroke",
             "black",
         ).attr(
@@ -210,14 +174,14 @@ class FeatureBoundView(flx.Widget):
             1,
         )
 
-        x_axis.selectAll(".tick:first-of-type").attr(
+        self.x_axis.selectAll(".tick:first-of-type").attr(
             "stroke",
             "red",
         ).attr(
             "stroke-width",
             2,
         )
-        x_axis.selectAll(".tick:last-of-type").attr(
+        self.x_axis.selectAll(".tick:last-of-type").attr(
             "stroke",
             "red",
         ).attr(
@@ -225,8 +189,11 @@ class FeatureBoundView(flx.Widget):
             2,
         )
 
-        label_x = (width - right_margin - left_margin) // 2 + left_margin
-        x_label = x_axis.append(
+        label_x = (
+            (self.width - self.right_margin - self.left_margin) // 2 +
+            self.left_margin
+        )
+        self.x_label = self.x_axis.append(
             "text"
         ).attr(
             "x",
@@ -247,7 +214,7 @@ class FeatureBoundView(flx.Widget):
             "axis-label",
         )
 
-        x_label.selectAll(
+        self.x_label_clone = self.x_label.selectAll(
             "text"
         ).clone(
             True
@@ -265,50 +232,29 @@ class FeatureBoundView(flx.Widget):
             "white",
         )
 
-        histogram = d3.histogram().value(
-            lambda d: d[self.feature_name]
-        ).domain(
-            x_scale.domain()
-        ).thresholds(
-            x_scale.ticks(50)
-        )
-        self.class_bins = {}
-        max_y = 0
-        for cls_name in self.classes:
-            self.class_bins[cls_name] = histogram(list(filter(
-                lambda d: d["class"] == cls_name,
-                self.data
-            )))
-            normalize_factor = d3.sum(
-                self.class_bins[cls_name],
-                lambda d: d.length
-            )
-            for bin_d in self.class_bins[cls_name]:
-                bin_d.norm_val = bin_d.length / normalize_factor
-            max_y = max(
-                max_y,
-                d3.max(self.class_bins[cls_name], lambda d: d.norm_val)
-            ),
+        max_y = self._compute_class_bins()
 
         ########################################################################
         ## Add y-axis
         ########################################################################
 
-        y_scale = d3.scaleLinear().domain(
+        self.y_scale = d3.scaleLinear().domain(
             [0, max_y]
         ).range(
-            [x_axis_y_position, top_margin]
+            [x_axis_y_position, self.top_margin]
         )
         y_axis = self.svg.append(
             "g"
         ).attr(
             "class",
-            "axis",
+            "y-axis",
         ).attr(
             "transform",
-            f"translate({left_margin}, {0})"
+            f"translate({self.left_margin}, {0})"
         ).call(
-            d3.axisLeft(y_scale).ticks(min(max(2, height // 20), 25))
+            d3.axisLeft(self.y_scale).ticks(
+                min(max(2, self.height // 15), 20)
+            )
         )
         y_axis.selectAll("path").attr(
             "stroke",
@@ -328,55 +274,117 @@ class FeatureBoundView(flx.Widget):
             1,
         )
 
+        self.bar_group = self.svg.append("g").attr(
+            "class",
+            "bar-group",
+        )
+
+        self.interval_group = self.svg.append("g").attr(
+            "class",
+            "interval-group",
+        )
+
+        self.disribution_group = self.svg.append("g").attr(
+            "class",
+            "distribution-group",
+        )
+
+        # And draw everything
+        self.update_plot()
+
+    def _compute_class_bins(self):
+        self.class_bins = []
+        filtered_data = list(filter(
+            lambda d: (
+                (d["class"] == self.class_name) if self.class_name else True
+            ),
+            self.data
+        ))
+        histogram = d3.histogram().value(
+            lambda d: d[self.feature_name]
+        ).domain(
+            self.x_scale.domain()
+        ).thresholds(
+            self.x_scale.ticks(min(self.num_bins, len(filtered_data)))
+        )
+        self.class_bins = histogram(filtered_data)
+        normalize_factor = d3.sum(
+            self.class_bins,
+            lambda d: d.length
+        )
+
+        max_y = 0
+        for bin_d in self.class_bins:
+            bin_d.norm_val = bin_d.length / normalize_factor
+            max_y = max(max_y, bin_d.norm_val)
+        return max_y
+
+    # A function to call whenever the selected class changes
+    @flx.action
+    def update_plot(self):
+
         ########################################################################
-        ## Empirical Distribution
+        ## X-Axis Update
         ########################################################################
 
-        empirical_dist = self.svg.selectAll(
-            "rect",
-        ).data(
-            self.class_bins[self.classes[0]],
-        ).enter(
-        ).append(
-            "rect",
-        ).attr(
-            "x",
-            1,
-        ).attr(
-            "transform",
-            lambda d: f"translate({x_scale(d.x0)}, {y_scale(d.norm_val)})"
-        ).attr(
-            "width",
-            lambda d: max(x_scale(d.x1) - x_scale(d.x0) - 1, 0),
-        ).attr(
-            "height",
-            lambda d: height - top_margin - bottom_margin - y_scale(d.norm_val),
-        ).style(
-            "fill",
-            _CLASS_PALETTE[0],
-        ).attr(
-            "opacity",
-            0.5,
+        self.x_scale.domain(
+            [(x * 1.0) for x in self.feature_limits]
         )
+        self.svg.select(
+            ".x-axis"
+        ).transition(
+        ).duration(
+            1000
+        ).call(
+            d3.axisBottom(self.x_scale).ticks(
+                min(max(2, self.width // 15), 25)
+            )
+        )
+        self.x_label.text(self.feature_name)
+        self.x_label_clone.text(self.feature_name)
+
+        ########################################################################
+        ## Y-Axis Update
+        ########################################################################
+
+        # Set up the y-axis accordingly after recomputing this feature's class
+        # bins
+        max_y = self._compute_class_bins(self.y_scale.domain())
+        self.y_scale.domain(
+            [0, max_y]
+        )
+        self.svg.select(
+            ".y-axis"
+        ).transition(
+        ).duration(
+            1000
+        ).call(
+            d3.axisLeft(self.y_scale).ticks(
+                min(max(2, self.height // 15), 20)
+            )
+        )
+
 
         ########################################################################
         ## Plot data density estimation
         ########################################################################
 
-        # We default to the first class to construct the distribution
+        # Recompute the density here
         if self.plot_density:
-            density = self.estimated_densities[self.classes[0]]
-
+            density = self.estimated_density
             # Time to make a pretty area diagram here!
-            distribution_curve = self.svg.append(
-                'g'
-            ).append(
+            distribution = self.disribution_group.selectAll(
                 "path"
+            ).data(
+                [density],
+            )
+
+            distribution_enter = distribution.enter(
+            ).append(
+                "path",
             ).attr(
                 "class",
                 "mypath",
-            ).datum(
-                density
             ).attr(
                 "fill",
                 "#69b3a2",
@@ -397,219 +405,292 @@ class FeatureBoundView(flx.Widget):
                 d3.line().curve(
                     d3.curveBasis
                 ).x(
-                    lambda d: x_scale(d[0])
+                    lambda d: self.x_scale(d[0])
                 ).y(
-                    lambda d: y_scale(
+                    lambda d: self.y_scale(
                         d[1]
                     )
                 )
             )
 
+            distribution_update = distribution_enter.merge(distribution)
+            distribution_update.transition(
+            ).duration(
+                1000,
+            ).attr(
+                "d",
+                d3.line().curve(
+                    d3.curveBasis
+                ).x(
+                    lambda d: self.x_scale(d[0])
+                ).y(
+                    lambda d: self.y_scale(d[1]),
+                )
+            )
+
+        ########################################################################
+        ## Empirical Distribution
+        ########################################################################
+
+        empirical_distr = self.bar_group.selectAll(
+            "rect",
+        ).data(
+            self.class_bins,
+        )
+
+        empirical_enter = empirical_distr.enter(
+        ).append(
+            "rect",
+        ).attr(
+            "x",
+            1,
+        ).attr(
+            "transform",
+            lambda d: (
+                f"translate({self.x_scale(d.x0)}, {self.y_scale(d.norm_val)})"
+            )
+        ).attr(
+            "width",
+            lambda d: max(self.x_scale(d.x1) - self.x_scale(d.x0) - 1, 0),
+        ).attr(
+            "height",
+            lambda d: (
+                self.height - self.top_margin - self.bottom_margin -
+                self.y_scale(d.norm_val)
+            ),
+        ).style(
+            "fill",
+            self.class_color,
+        ).attr(
+            "opacity",
+            0.5,
+        )
+
+        # And the transition bit
+        empirical_update = empirical_enter.merge(empirical_distr)
+        empirical_update.transition(
+        ).duration(
+            1000,
+        ).attr(
+            "transform",
+            lambda d: (
+                f"translate({self.x_scale(d.x0)}, {self.y_scale(d.norm_val)})"
+            )
+        ).attr(
+            "width",
+            lambda d: max(self.x_scale(d.x1) - self.x_scale(d.x0) - 1, 0)
+        ).attr(
+            "height",
+            lambda d: (
+                self.height - self.top_margin - self.bottom_margin -
+                self.y_scale(d.norm_val)
+            )
+        ).style(
+            "fill",
+            self.class_color,
+        )
+
+        empirical_exit = empirical_distr.exit().transition(
+        ).duration(
+            1000,
+        ).attr(
+            "height",
+            0
+        ).attr(
+            "width",
+            0,
+        ).remove()
+
         ########################################################################
         ## Plot thresholds
         ########################################################################
-        interval_group = self.svg.append("g").attr("class", "interval-group")
-        interval_group.selectAll("rect").data(
-            self.rule_bounds.get(self.classes[0], []),
-        ).enter(
-        ).append(
+
+        # Finally, update the thresholds
+        total_score = (
+            sum(map(lambda x: x["score"], self.rule_bounds))
+            if self.rule_bounds else 0
+        )
+        base_y = self.y_scale(max_y)
+        total_height = self.y_scale(0) - self.y_scale(max_y)
+        heights = [
+            total_height * x["score"] / total_score
+            for x in self.rule_bounds
+        ]
+        cum_heights = [0]
+        for i, val in enumerate(heights):
+            cum_heights.append(cum_heights[i] + val)
+        intervals = self.interval_group.selectAll("rect").data(
+            self.rule_bounds,
+        )
+
+        interval_enter = intervals.enter().append(
             "rect"
         ).attr(
             "class",
             "threshold-shading"
         ).attr(
             "x",
-            lambda d: x_scale(d[0])
+            # Have it "grow" from the middle of the interval by first
+            # placing it in the center and then moving it left while we also
+            # increase its width
+            lambda d: self.x_scale(d["bounds"][0]) + (
+                self.x_scale(d["bounds"][1]) - self.x_scale(d["bounds"][0])
+            ) / 2
         ).attr(
             "y",
-            y_scale(max_y)
+            lambda d, i: base_y + cum_heights[i]
         ).attr(
             "width",
-            lambda d: x_scale(d[1]) - x_scale(d[0]),
+            0,
         ).attr(
             "height",
-            x_axis_y_position - top_margin
+            lambda d, i: heights[i],
         ).attr(
             "opacity",
-            0.25
+            0.4
         ).attr(
             "fill",
-            "#e400ff",  # "url(#crosshatch)",
+            lambda d: d["color"],
         ).attr(
             "stroke",
             "red",
         ).attr(
             "stroke-width",
-            4,
+            2,
         ).attr(
             'stroke-dasharray',
             '1,12',
         ).attr(
             'stroke-linecap',
             'square',
-        )
-
-        ########################################################################
-        ## Update Function
-        ########################################################################
-
-        # A function to call whenever the selected class changes
-        def _update_plot(new_class):
-            # Recompute the density here
-            bins = self.class_bins[new_class]
-            if self.plot_density:
-                density = self.estimated_densities[new_class]
-
-                distribution_curve.datum(
-                    density,
-                ).transition(
-                ).duration(
-                    1000,
-                ).attr(
-                    "d",
-                    d3.line().curve(
-                        d3.curveBasis
-                    ).x(
-                        lambda d: x_scale(d[0])
-                    ).y(
-                        lambda d: y_scale(d[1]),
-                    )
-                )
-
-            # And the empirical distribution as well
-            empirical_dist.data(
-                bins,
-            ).transition(
-            ).duration(
-                1000,
-            ).attr(
-                "transform",
-                lambda d: f"translate({x_scale(d.x0)}, {y_scale(d.norm_val)})"
-            ).attr(
-                "width",
-                lambda d: max(x_scale(d.x1) - x_scale(d.x0) - 1, 0)
-            ).attr(
-                "height",
-                lambda d: height - top_margin - bottom_margin - y_scale(
-                    d.norm_val
-                )
+        ).on(
+            "mouseover",
+            lambda event, d: self.tooltip.style(
+                "visibility",
+                "visible"
+            ).html(
+                f"<b>Threshold</b>: {d['bounds']}<br>"
+                f"<b>Class</b>: {d['class']}<br>"
+                f"<b>Confidence</b>: {d['confidence']}<br>"
+                f"<b>Score</b>: {d['score']}<br>"
+            )
+        ).on(
+            "mousemove",
+            lambda event, d: self.tooltip.style(
+                "top",
+                f"{(event.pageY - 10)}px"
             ).style(
-                "fill",
-                _CLASS_PALETTE[
-                    self.classes.index(new_class) % len(_CLASS_PALETTE)
-                ],
+                "left",
+                f"{(event.pageX + 10)}px",
             )
-
-            # Finally, update the threshold
-            intervals = interval_group.selectAll("rect").data(
-                self.rule_bounds.get(new_class, []),
-            )
-
-            interval_enter = intervals.enter().append(
-                "rect"
-            ).attr(
-                "class",
-                "threshold-shading"
-            ).attr(
-                "x",
-                # Have it "grow" from the middle of the interval by first
-                # placing it in the center and then moving it left while we also
-                # increase its width
-                lambda d: x_scale(d[0]) + (x_scale(d[1]) - x_scale(d[0]))/2,
-            ).attr(
-                "y",
-                y_scale(max_y)
-            ).attr(
-                "width",
-                lambda d: 0,
-            ).attr(
-                "height",
-                lambda d: x_axis_y_position - top_margin,
-            ).attr(
-                "opacity",
-                0.25
-            ).attr(
-                "fill",
-                "#e400ff",  # "url(#crosshatch)",
-            ).attr(
-                "stroke",
-                "red",
-            ).attr(
-                "stroke-width",
-                4,
-            ).attr(
-                'stroke-dasharray',
-                '1,12',
-            ).attr(
-                'stroke-linecap',
-                'square',
-            )
-
-            interval_update = interval_enter.merge(intervals)
-            interval_update.transition().duration(
-                1000,
-            ).attr(
-                "x",
-                lambda d: x_scale(d[0]),
-            ).attr(
-                "width",
-                lambda d: x_scale(d[1]) - x_scale(d[0]),
-            )
-
-            interval_exit = intervals.exit().transition(
-            ).duration(
-                1000,
-            ).attr(
-                "x",
-                lambda d: x_scale(d[0]) + (x_scale(d[1]) - x_scale(d[0]))/2,
-            ).attr(
-                "width",
-                lambda d: 0,
-            ).remove()
-
-        # And make sure our graph gets updated whenever the class selection
-        # is changed
-        def _on_change_selection(sel):
-            global document
-            x = document.getElementById(f'{self.id}')
-            return _update_plot(x.getElementsByTagName("select")[0].value)
-
-        x.select(".class-select").on(
-            "change",
-            _on_change_selection,
+        ).on(
+            "mouseout",
+            lambda event, d: self.tooltip.style("visibility", "hidden")
         )
 
+        interval_update = interval_enter.merge(intervals)
+        interval_update.transition().duration(
+            1000,
+        ).attr(
+            "x",
+            lambda d: self.x_scale(d["bounds"][0]),
+        ).attr(
+            "y",
+            lambda d, i: base_y + cum_heights[i]
+        ).attr(
+            "width",
+            lambda d: (
+                self.x_scale(d["bounds"][1]) - self.x_scale(d["bounds"][0])
+            ),
+        ).attr(
+            "height",
+            lambda d, i: heights[i],
+        ).attr(
+            "fill",
+            lambda d: d["color"],
+        )
 
-def _collapse_intervals(intervals):
+        interval_exit = intervals.exit().transition(
+        ).duration(
+            1000,
+        ).attr(
+            "x",
+            lambda d: self.x_scale(d["bounds"][0]) + (
+                self.x_scale(d["bounds"][1]) - self.x_scale(d["bounds"][0])
+            ) / 2
+        ).attr(
+            "width",
+            0,
+        ).remove()
+
+
+def _collapse_intervals(intervals, fuse_intervals=False):
     result = []
     if not intervals:
         return []
-    intervals = sorted(intervals, key=lambda x: x[0])
-    current_low, current_high = intervals[0]
-    for (next_low, next_high) in intervals:
-        if next_low <= current_high:
+    intervals = sorted(intervals, key=lambda x: x["bounds"][0])
+    current_low, current_high = intervals[0]["bounds"]
+    total_score = 0
+    cls_name = intervals[0]["class"]  # For now assume they all have the same
+                                      # class
+    confidence = intervals[0]["confidence"]
+    color = intervals[0]["color"]
+    for interval in intervals:
+        (next_low, next_high) = interval["bounds"]
+        if ((next_low, next_high) == (current_low, current_high)) or (
+            fuse_intervals and (next_low <= current_high)
+        ):
             # Then merge these two!
+            total_score += interval["score"]
+            confidence = min(confidence, interval["confidence"])
             current_high = max(current_high, next_high)
         else:
             # Else time to add the current interval to our list and move on
             # to form the following one
-            result.append((current_low, current_high))
+            result.append({
+                "class": cls_name,
+                "score": total_score,
+                "color": color,
+                "confidence": confidence,
+                "bounds": (current_low, current_high),
+            })
+            total_score = 0
+            confidence = interval["confidence"]
+            cls_name = interval["class"]
+            color = interval["color"]
             current_low, current_high = next_low, next_high
 
     # And we need to add the current interval here
-    result.append((current_low, current_high))
+    result.append({
+        "class": cls_name,
+        "score": total_score,
+        "color": color,
+        "confidence": confidence,
+        "bounds": (current_low, current_high),
+    })
+    result.sort(key=lambda x: (x["bounds"][1] - x["bounds"][0]))
     return result
 
 
 class FeatureBoundComponent(flx.PyWidget):
     feature = flx.AnyProp(settable=True)
     feature_limits = flx.TupleProp(settable=True)
+    class_name = flx.StringProp(settable=True)
+    fuse_intervals = flx.BoolProp(False, settable=True)
 
-    def init(self, feature, feature_limits):
-        self._mutate_feature(feature)
-        self._mutate_feature_limits(feature_limits)
+    def init(self):
+
+        self.view = FeatureBoundView(
+            feature_name=self.feature,
+            feature_limits=self.feature_limits,
+            class_name=self.class_name,
+        )
+        self.update_feature()
+
+    @flx.action
+    def update_feature(self):
         ruleset = self.root.state.ruleset
-        interval_map = defaultdict(list)
+        self.interval_map = defaultdict(list)
         for rule in ruleset:
             for clause in rule.premise:
                 for term in clause.terms:
@@ -620,10 +701,20 @@ class FeatureBoundComponent(flx.PyWidget):
                         bound = (term.threshold, self.feature_limits[1])
                     else:
                         bound = (self.feature_limits[0], term.threshold)
-                    interval_map[rule.conclusion].append(bound)
+                    self.interval_map[rule.conclusion].append({
+                            "color": "#a45b61",
+                            "bounds": bound,
+                            "class": rule.conclusion,
+                            "score": clause.score,
+                            "confidence": clause.confidence,
+                        }
+                    )
         # Time to collapse intervals
-        for cls_name, intervals in interval_map.items():
-            interval_map[cls_name] = _collapse_intervals(intervals)
+        for cls_name, intervals in self.interval_map.items():
+            self.interval_map[cls_name] = _collapse_intervals(
+                intervals,
+                fuse_intervals=self.fuse_intervals,
+            )
         data = []
         dataset = self.root.state.dataset
         inv_name_map = {}
@@ -644,9 +735,9 @@ class FeatureBoundComponent(flx.PyWidget):
                 self.feature: scaled_val,
             })
 
-        estimated_densities = {}
-        classes = list(ruleset.output_class_map.keys())
-        for cls_name in classes:
+        self.estimated_densities = {}
+        self.classes = list(ruleset.output_class_map.keys())
+        for cls_name in self.classes:
             values = list(map(
                 lambda x: x[self.feature],
                 filter(
@@ -660,24 +751,56 @@ class FeatureBoundComponent(flx.PyWidget):
             )
             x_vals = np.linspace(0, 1, 200).reshape(-1, 1)
             density = np.exp(kernel.score_samples(x_vals))
-            estimated_densities[cls_name] = list(zip(
+            self.estimated_densities[cls_name] = list(zip(
                 x_vals.flatten(),
                 density.flatten(),
             ))
 
-        FeatureBoundView(
-            feature_name=self.feature,
-            feature_limits=self.feature_limits,
-            rule_bounds=dict(interval_map),
-            data=data,
-            classes=classes,
-            estimated_densities=estimated_densities,
+        self.view.set_feature_name(self.feature)
+        self.view.set_feature_limits(self.feature_limits)
+        self.view.set_data(data)
+
+        # And make sure all feature-class dependencies are also handled
+        self.update_class()
+
+    @flx.action
+    def update_class(self):
+        self.view.set_class_name(self.class_name)
+        if self.class_name == "":
+            combined_intervals = []
+            for cls_name, intervals in self.interval_map.items():
+                for interval in intervals:
+                    my_interval = interval.copy()
+                    my_interval["color"] = _CLASS_PALETTE[
+                        self.classes.index(cls_name) % len(_CLASS_PALETTE)
+                    ]
+                    combined_intervals.append(my_interval)
+            combined_intervals.sort(key=lambda x: x["bounds"][0])
+            combined_intervals.sort(
+                key=lambda x: (x["bounds"][1] - x["bounds"][0]),
+            )
+            self.view.set_rule_bounds(combined_intervals)
+        else:
+            self.view.set_rule_bounds(self.interval_map[self.class_name])
+
+        self.view.set_estimated_density(
+            self.estimated_densities.get(self.class_name, [])
         )
+        if self.class_name == "":
+            class_color = "black"
+        else:
+            class_color = _CLASS_PALETTE[
+                self.classes.index(self.class_name) % len(_CLASS_PALETTE)
+            ]
+        self.view.set_class_color(class_color)
+
+    @flx.action
+    def update_view(self):
+        self.view.update_plot()
 
 
 class FeatureExplorerComponent(CamvizWindow):
 
-    feature_views = flx.ListProp(settable=True)
     current_window = flx.IntProp(0, settable=True)
 
     def init(self):
@@ -688,7 +811,7 @@ class FeatureExplorerComponent(CamvizWindow):
             for clause in rule.premise:
                 for term in clause.terms:
                     self.all_features.add(term.variable)
-                    num_used_rules_per_feat_map[term] += 1
+                    num_used_rules_per_feat_map[term.variable] += 1
 
         self.all_features = list(self.all_features)
         # Make sure we display most used rules first
@@ -700,33 +823,64 @@ class FeatureExplorerComponent(CamvizWindow):
         with ui.VBox(
             title="Feature Explorer",
         ):
-            with ui.StackLayout(flex=1) as self.stack:
-                for feature in self.all_features:
-                    self._mutate_feature_views(
-                        # TODO: bounds should come from dataset rather than
-                        # assumed to be [0, 1]
-                        [FeatureBoundComponent(feature, (0.0, 1.0))],
-                        'insert',
-                        len(self.feature_views),
-                    )
-            with ui.HBox() as self.control_panel:
+            ui.Label(
+                text="Threshold Visualization",
+                css_class="feature-explorer-title",
+            )
+
+            # Add the box container our threshold visualizer
+            first_feature = self.all_features[0]
+            feature_limits = self.root.state.get_feature_range(
+                first_feature
+            )
+            self.feature_view = FeatureBoundComponent(
+                feature=first_feature,
+                class_name="",
+                feature_limits=feature_limits,
+                flex=1,
+            )
+
+            # Add the control panel
+            with ui.HBox(
+                css_class='threshold-visualizer-control-panel'
+            ) as self.control_panel:
                 ui.Widget(flex=1)  # filler
+                ui.Label(text="Feature:", css_class="combo-box-label")
                 self.feature_selection = ui.ComboBox(
                     options=self.all_features,
                     selected_index=0,
                     css_class='feature-selection-box',
                 )
                 ui.Widget(flex=1)  # filler
-            ui.Widget(flex=0.25)  # filler
-
-    @flx.action
-    def select_feature(self, feature_ind):
-        self.set_current_window(feature_ind)
-        self.stack.set_current(self.current_window)
+                ui.Label(text="Class:", css_class="combo-box-label")
+                self.class_selection = ui.ComboBox(
+                    options=["all classes"] + (self.class_names),
+                    selected_index=0,
+                    css_class='class-selection-box',
+                )
+                ui.Widget(flex=1)  # filler
+            ui.Widget(flex=0.1)  # filler
 
     @flx.reaction('feature_selection.user_selected')
-    def perform_selection(self, *events):
-        self.select_feature(events[-1]['index'])
+    def select_feature(self, *events):
+        new_feature = events[-1]['key']
+        self.feature_view.set_feature(new_feature)
+        self.feature_view.set_feature_limits(
+            self.root.state.get_feature_range(
+                new_feature
+            )
+        )
+        self.feature_view.update_feature()
+        self.feature_view.update_view()
+
+    @flx.reaction('class_selection.user_selected')
+    def select_class(self, *events):
+        new_cls_name = events[-1]['key']
+        if new_cls_name == "all classes":
+            new_cls_name = ""
+        self.feature_view.set_class_name(new_cls_name)
+        self.feature_view.update_class()
+        self.feature_view.update_view()
 
     @flx.action
     def reset(self):

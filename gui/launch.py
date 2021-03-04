@@ -95,6 +95,16 @@ class CamRuleState(object):
         self.dataset = dataset
         self.show_tools = show_tools
         self.max_entries = max_entries
+        self._feature_ranges = {}
+
+    def get_feature_range(self, feature):
+        if feature in self._feature_ranges:
+            return self._feature_ranges[feature]
+        result = (min(self.dataset[feature]), max(self.dataset[feature]))
+        # TODO: CHANGE THIS!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+        result = (0, 1)
+        self._feature_ranges[feature] = result
+        return result
 
 
 class CamRuleViz(flx.PyComponent):

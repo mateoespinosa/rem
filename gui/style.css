@@ -84,3 +84,12 @@
 .feature-selection-box {
 
 }
+
+.feature-explorer-title {
+  margin-top: 1%;
+  margin-bottom: 2%;
+}
+
+.threshold-visualizer-control-panel {
+  background-color: #e9bdcb
+}
