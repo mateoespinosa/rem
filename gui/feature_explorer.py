@@ -1,9 +1,8 @@
 from flexx import flx, ui
 from gui_window import CamvizWindow
 from collections import defaultdict
-from pscript.stubs import d3, window, Math, Set
+from pscript.stubs import d3, window
 from dnn_rem.rules.term import TermOperator
-from pscript import RawJS
 from sklearn.neighbors import KernelDensity
 import numpy as np
 from rule_statistics import _CLASS_PALETTE
@@ -364,7 +363,6 @@ class FeatureBoundView(flx.Widget):
             )
         )
 
-
         ########################################################################
         ## Plot data density estimation
         ########################################################################
@@ -702,7 +700,7 @@ class FeatureBoundComponent(flx.PyWidget):
                     else:
                         bound = (self.feature_limits[0], term.threshold)
                     self.interval_map[rule.conclusion].append({
-                            "color": "#a45b61",
+                            "color": "#ffb500",
                             "bounds": bound,
                             "class": rule.conclusion,
                             "score": clause.score,
@@ -716,7 +714,7 @@ class FeatureBoundComponent(flx.PyWidget):
                 fuse_intervals=self.fuse_intervals,
             )
         data = []
-        dataset = self.root.state.dataset
+        dataset = self.root.state.dataset.data
         inv_name_map = {}
         for (cls_name, cls_code) in ruleset.output_class_map.items():
             inv_name_map[cls_code] = cls_name
@@ -727,7 +725,7 @@ class FeatureBoundComponent(flx.PyWidget):
         min_val = min(dataset[self.feature])
         for (val, cls_name) in zip(
             dataset[self.feature],
-            dataset[dataset.columns[-1]]
+            dataset[self.root.state.dataset.target_col]
         ):
             scaled_val = (val - min_val) / (max_val - min_val)
             data.append({
@@ -801,8 +799,6 @@ class FeatureBoundComponent(flx.PyWidget):
 
 class FeatureExplorerComponent(CamvizWindow):
 
-    current_window = flx.IntProp(0, settable=True)
-
     def init(self):
         self.ruleset = self.root.state.ruleset
         self.all_features = set()
@@ -820,13 +816,15 @@ class FeatureExplorerComponent(CamvizWindow):
             key=lambda x: -num_used_rules_per_feat_map[x],
         )
         self.class_names = sorted(self.ruleset.output_class_map.keys())
-        with ui.VBox(
+        with ui.VSplit(
             title="Feature Explorer",
         ):
-            ui.Label(
-                text="Threshold Visualization",
-                css_class="feature-explorer-title",
-            )
+            with ui.HBox(flex=0.03):
+                ui.Label(
+                    text="Threshold Visualization",
+                    css_class="feature-explorer-title",
+                    flex=1,
+                )
 
             # Add the box container our threshold visualizer
             first_feature = self.all_features[0]
@@ -837,29 +835,40 @@ class FeatureExplorerComponent(CamvizWindow):
                 feature=first_feature,
                 class_name="",
                 feature_limits=feature_limits,
-                flex=1,
+                flex=0.9,
             )
 
             # Add the control panel
             with ui.HBox(
-                css_class='threshold-visualizer-control-panel'
+                css_class='threshold-visualizer-control-panel',
+                flex=0.07,
             ) as self.control_panel:
                 ui.Widget(flex=1)  # filler
-                ui.Label(text="Feature:", css_class="combo-box-label")
+                ui.Label(
+                    text="Feature:",
+                    css_class="combo-box-label",
+                    flex=0,
+                )
                 self.feature_selection = ui.ComboBox(
                     options=self.all_features,
                     selected_index=0,
                     css_class='feature-selection-box',
+                    flex=0,
                 )
                 ui.Widget(flex=1)  # filler
-                ui.Label(text="Class:", css_class="combo-box-label")
+                ui.Label(
+                    text="Class:",
+                    css_class="combo-box-label",
+                    flex=0,
+                )
                 self.class_selection = ui.ComboBox(
                     options=["all classes"] + (self.class_names),
                     selected_index=0,
                     css_class='class-selection-box',
+                    flex=0,
                 )
                 ui.Widget(flex=1)  # filler
-            ui.Widget(flex=0.1)  # filler
+            ui.Widget(flex=0.01)  # filler
 
     @flx.reaction('feature_selection.user_selected')
     def select_feature(self, *events):

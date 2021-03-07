@@ -8,7 +8,11 @@ from flexx import flx, ui
 from rule_explorer import RuleExplorerComponent
 from rule_list import RuleListComponent
 from rule_statistics import RuleStatisticsComponent
+from prediction_explorer import PredictComponent
 import pandas as pd
+from dnn_rem.experiment_runners.dataset_configs import (
+    get_data_configuration, DatasetDescriptor
+)
 
 
 ################################################################################
@@ -38,14 +42,23 @@ def build_parser():
     )
 
     parser.add_argument(
-        'data',
+        'data_path',
         help=(
             "Valid .csv file containing the dataset used to generate the "
-            "given rules. Assumes that all but the last column are features "
-            "and the last column itself contains the labels. The first row "
-            "has the feature names."
+            "given rules. If no descriptor is given, then it will assume all"
+            "entires are reals and the last column is the target."
         ),
         metavar="data.csv",
+    )
+
+    parser.add_argument(
+        '--data_descriptor',
+        help=(
+            "Valid name of supported dataset descriptor corresponding to the "
+            "loaded data."
+        ),
+        metavar="descriptor_name",
+        default=None,
     )
 
     parser.add_argument(
@@ -100,9 +113,16 @@ class CamRuleState(object):
     def get_feature_range(self, feature):
         if feature in self._feature_ranges:
             return self._feature_ranges[feature]
-        result = (min(self.dataset[feature]), max(self.dataset[feature]))
-        # TODO: CHANGE THIS!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-        result = (0, 1)
+        (min_val, max_val) = self.dataset.get_feature_ranges(feature)
+        if min_val in [float("inf"), -float("inf")]:
+            # Then we will use the empirical limit for visualization
+            # purposes
+            min_val = min(self.dataset.data[feature])
+        if max_val in [float("inf"), -float("inf")]:
+            # Then we will use the empirical limit for visualization
+            # purposes
+            max_val = max(self.dataset.data[feature])
+        result = (min_val, max_val)
         self._feature_ranges[feature] = result
         return result
 
@@ -129,9 +149,14 @@ class CamRuleViz(flx.PyComponent):
                 )
             with FancyTabLayout(flex=1) as self.tabs:
                 self.add_window(RuleStatisticsComponent())
+                self.add_window(PredictComponent(
+                    self.state.ruleset,
+                ))
                 self.add_window(RuleExplorerComponent())
                 self.add_window(FeatureExplorerComponent())
-                self.add_window(RuleListComponent())
+                self.add_window(RuleListComponent(
+                    self.state.ruleset,
+                ))
 
     @flx.action
     def add_window(self, widget):
@@ -163,7 +188,11 @@ def main():
     args = parser.parse_args()
     ruleset = Ruleset()
     ruleset.from_file(args.rules)
-    dataset = pd.read_csv(args.data, sep=',')
+    if args.data_descriptor is not None:
+        dataset = get_data_configuration(args.data_descriptor)
+    else:
+        dataset = DatasetDescriptor()
+    dataset.read_data(args.data_path)
 
     with open(os.path.join(os.path.dirname(__file__), 'style.css')) as f:
         style = f.read()

@@ -14,6 +14,14 @@
   'https://fonts.googleapis.com/css2?family=Montserrat:ital,wght@1,500&display=swap'
 );
 
+@import url(
+    'https://fonts.googleapis.com/css2?family=Montserrat&display=swap'
+);
+
+body {
+    font-family: 'Montserrat', sans-serif;
+}
+
 .camviz_tooltip {
   position: relative;
   display: inline-block;
@@ -44,8 +52,7 @@
 }
 
 .flx-Widget.scrollable_group, .scrollable_group {
-  margin: 1%;
-  padding: 5px;
+  padding: 0;
   border: 2px solid #ccc;
   border-radius: 3px;
   overflow-y: scroll;
@@ -57,9 +64,52 @@
   height: calc(100% - 25px) !important;
 }
 
+fieldset.flx-GroupWidget.flx-Widget.scrollable_group {
+    margin-bottom: 10%;
+}
+
+/*******************************************************************************
+* Rule List Classes
+*******************************************************************************/
+
+
+.flx-Label.flx-Widget.rule-list-counter, .rule-list-counter {
+    margin: auto;
+    font-weight: bold;
+    background-color: #dcfcdc;
+}
+
+
+.flx-Label.flx-Widget.rule-list-rule-text, .rule-list-rule-text {
+    margin: auto;
+    overflow-x: scroll;
+    text-align: left;
+}
+
+
+.flx-Widget.rule-list-delete-button, .rule-list-delete-button {
+    margin: auto;
+    padding: 0.5% 2% 0.5% 2%;
+    background-color: #DEDDDE;
+    border: none;
+    color: black;
+    text-align: center;
+    opacity: 0.75;
+    transition: 0.3s;
+    cursor: pointer;
+}
+
+.rule-list-delete-button:hover {
+    opacity: 1;
+    font-weight: bold;
+    background-color: #DEDDDE;
+}
+
+
 /*******************************************************************************
 * Feature Explorer Classes
 *******************************************************************************/
+
 .select-container {
   text-align: center;
 }
@@ -91,5 +141,125 @@
 }
 
 .threshold-visualizer-control-panel {
-  background-color: #e9bdcb
+}
+
+/*******************************************************************************
+* Feature Selector Classes
+*******************************************************************************/
+
+.flx-Widget.feature-selector-container, .feature-selector-container {
+    border-width: 1px;
+    border-color: black;
+    border-style: solid;
+}
+
+.flx-Label.flx-Widget.feature-selector-label, .feature-selector-label {
+  margin: auto;
+}
+
+.feature-selector-box {
+
+}
+
+.slider-group {
+
+}
+
+.slider-value-label {
+    font-weight: bold;
+    font-size: 75%;
+}
+
+.feature-selector-slider {
+
+}
+
+.feature-selector-edit {
+
+}
+
+.feature-selector {
+
+}
+
+.feature-selector-control-panel {
+
+}
+
+.feature-selector-title {
+  text-align: center;
+  margin: 1%;
+  font-size: 200%;
+}
+
+.feature-selector-subtitle {
+  text-align: left;
+  margin: 0.5%;
+  font-size: 150%;
+}
+
+.predict-button {
+
+}
+
+.upload-button {
+
+}
+
+/*******************************************************************************
+* Graph Predictor Classes
+*******************************************************************************/
+
+.prediction-path-container {
+  border-width: 1px;
+  border-color: black;
+  border-style: solid;
+  padding: 1%;
+}
+
+.prediction-result {
+  font-size: 125%;
+  text-align: center;
+}
+
+.tool-bar-button {
+  margin: auto;
+  padding: 0.5% 2% 0.5% 2%;
+  color: black;
+  text-align: center;
+  opacity: 0.75;
+  transition: 0.3s;
+  cursor: pointer;
+}
+
+.rule-list-delete-button:hover {
+  opacity: 1;
+  font-weight: bold;
+}
+
+.tool-bar-checkbox {
+
+}
+
+.prediction-pane-group {
+  text-align: center;
+}
+
+.prediction-result-container {
+  padding: 2%;
+  background-color: #fceae9;
+  border-width: 1px;
+  border-color: black;
+  border-style: solid;
+}
+
+.big-group {
+  text-align: center;
+  overflow-y: scroll;
+}
+.big-group legend {
+    border: 0;
+    padding: 0;
+    font-size: 150%;
+    font-weight: bold;
 }

@@ -1,6 +1,7 @@
 from flexx import flx, ui
 from dnn_rem.rules.rule import Rule
 from gui_window import CamvizWindow
+from dnn_rem.rules.ruleset import Ruleset
 
 
 def _clause_to_str(clause):
@@ -22,6 +23,7 @@ class RuleView(flx.Widget):
         border-style: dashed;
         border-color: black;
         border-width: thin;
+
     }
     .flx-RuleView:hover {
         background-color: #eefafe;
@@ -30,25 +32,27 @@ class RuleView(flx.Widget):
     precedent = flx.StringProp(settable=True)
     conclusion = flx.StringProp(settable=True)
     score = flx.FloatProp(settable=True)
-    idx = flx.IntProp(settable=True)
+    confidence = flx.FloatProp(settable=True)
+    clause_idx = flx.IntProp(settable=True)
+    rule_idx = flx.IntProp(settable=True)
+    true_idx = flx.IntProp(settable=True)
+    editable = flx.BoolProp(True, settable=True)
+    delete_button = flx.ComponentProp(settable=True)
 
     def init(self):
         with flx.HBox():
             self.index_label = flx.Label(
-                text=lambda: f'{self.idx + 1}. ',
                 flex=0,
-                style=(
-                    "font-weight: bold;"
-                    'background-color: #d4cdc7;'
-                ),
+                css_class="rule-list-counter",
+                minsize=(50, 35),
+            ).set_html(
+                f'<p>{self.true_idx + 1}.</p>'
             )
-            self.label = flx.Label(
+            self.rule_text = flx.Label(
                 flex=(1, 0),
-                style=(
-                    'overflow-x: scroll;'
-                ),
+                css_class="rule-list-rule-text"
             )
-            self.label.set_html(
+            self.rule_text.set_html(
                 "<span class='camviz_tooltip'>"
                 "<b style=\"font-family: 'Source Code Pro', monospace;\"> IF</b>"
                 f'<span style="font-family:\'Inconsolata\';">'
@@ -58,142 +62,215 @@ class RuleView(flx.Widget):
                 f'<span class="camviz_tooltiptext">Score: {self.score}</span>'
                 "</span>"
             )
-            self.delete_button = flx.Button(text="delete", flex=0)
+            if self.editable:
+                self._mutate_delete_button(flx.Button(
+                    text="delete",
+                    flex=0,
+                    css_class="rule-list-delete-button",
+                    minsize=(100, 35),
+                ))
 
     @flx.emitter
     def rule_removed(self):
+        print("Emitting rule_removed", (self.rule_idx, self.clause_idx))
         return {
             'conclusion': self.conclusion,
-            'idx': self.idx,
+            'clause_idx': self.clause_idx,
+            'rule_idx': self.rule_idx,
+            'true_idx': self.true_idx,
             'precedent': self.precedent,
             'score:': self.score,
         }
 
-    @flx.reaction('delete_button.pointer_click')
+    @flx.reaction('!delete_button.pointer_click')
     def delete_rule(self, *events):
         self.rule_removed()
         self.set_parent(None)
 
+    @flx.reaction('true_idx')
+    def _update_labels(self, *events):
+        self.index_label.set_html(
+            f'<p>{self.true_idx + 1}.</p>'
+        )
 
-class ClassRuleList(flx.PyComponent):
-    rules = flx.ListProp(settable=True)
-    class_id = flx.IntProp(settable=True)
+    @flx.reaction('rule_text.pointer_click')
+    def __on_pointer_click(self, e):
+        self.rule_text.node.blur()
 
-    def init(self, rule):
-        self.rule_obj = rule
-        self.clause_ordering = []
-        with ui.GroupWidget(
-            title=(
-                f'Class: {self.rule_obj.conclusion} '
-                f'({len(self.rule_obj.premise)} '
-                f'rule{"" if len(self.rule_obj.premise) == 1 else "s"})'
-            ),
-            style=(
-                'overflow-y: scroll;'
-            )
-        ) as self.class_group:
-            for idx, clause in enumerate(sorted(
-                self.rule_obj.premise,
-                key=lambda x: x.score,
-            )):
-                self.clause_ordering.append(clause)
-                self.add_rule(
-                    idx,
-                    clause,
-                    self.rule_obj.conclusion,
-                    clause.score,
-                )
 
-    @flx.action
-    def _add_rule(self, rule):
-        self._mutate_rules([rule], 'insert', len(self.rules))
+class ClassRuleList(flx.PyWidget):
+    rules = flx.ListProp([], settable=True)
+    editable = flx.BoolProp(True, settable=True)
 
-    @flx.action
-    def add_rule(self, idx, clause, conclusion, score):
+    def init(self, ruleset):
+        self.ruleset = ruleset
+        self.rule_objs = sorted(
+            list(self.ruleset.rules),
+            key=lambda x: x.conclusion,
+        )
+        self.clause_orderings = []
+        with ui.Widget(
+            css_class='scrollable_group',
+        ) as self.container:
+            for rule_idx, rule_obj in enumerate(self.rule_objs):
+                new_ordering = []
+                for clause_idx, clause in enumerate(sorted(
+                    rule_obj.premise,
+                    key=lambda x: x.score,
+                )):
+                    new_ordering.append(clause)
+                    self.add_rule(
+                        rule_idx,
+                        clause_idx,
+                        clause,
+                        rule_obj.conclusion,
+                        clause.score,
+                        clause.confidence,
+                    )
+                self.clause_orderings.append(new_ordering)
+
+    def add_rule(
+        self,
+        rule_idx,
+        clause_idx,
+        clause,
+        conclusion,
+        score,
+        confidence,
+    ):
         new_rule = RuleView(
-            idx=idx,
+            rule_idx=rule_idx,
+            clause_idx=clause_idx,
+            true_idx=len(self.rules),
             precedent=_clause_to_str(clause),
             conclusion=conclusion,
             score=score,
+            confidence=confidence,
+            editable=self.editable,
         )
-        self._add_rule(new_rule)
-
-    @flx.action
-    def _remove_rule(self, idx):
-        self._mutate_rules(1, 'remove', idx)
+        self._mutate_rules(
+            [new_rule],
+            'insert',
+            len(self.rules),
+        )
 
     @flx.emitter
-    def ruleset_update(self):
+    def ruleset_update(self, rule_idx):
         return {
-            'class_id': self.class_id,
+            "rule_idx": rule_idx
         }
+
+    @flx.reaction('rules*.rule_text.pointer_click')
+    def _clicked_rule(self, *events):
+        for e in events:
+            rule = e["source"]
+            self.pointer_click({
+                "class_idx": e.class_idx,
+                "rule_idx": e.rule_idx,
+                "true_idx": e.true_idx,
+                "precedent": e.precedent,
+                "conclusion": e.conclusion,
+                "score": e.score,
+                "confidence": e.confidence,
+            })
+
+    @flx.emitter
+    def pointer_click(self, e):
+        print("Emitting pointer clicking", e)
+        return e
 
     @flx.reaction('rules*.rule_removed')
     def remove_rule(self, *events):
         # Time to remove the rule from our ruleset
         for event in events:
-            clause_idx = event["idx"]
+            print("\tCapturing rule_removed", event)
+            rule_idx = event["rule_idx"]
+            clause_idx = event["clause_idx"]
+            true_idx = event["true_idx"]
+            print("Received remove rule event:", event)
             self.root.state.ruleset.remove_rule(
                 Rule(
-                    premise=set([self.clause_ordering[clause_idx]]),
-                    conclusion=self.rule_obj.conclusion,
+                    premise=set([self.clause_orderings[rule_idx][clause_idx]]),
+                    conclusion=self.rule_objs[rule_idx].conclusion,
                 )
             )
 
             # Remove it from our ordering of the different rules
-            self.clause_ordering.pop(clause_idx)
+            self.clause_orderings[rule_idx].pop(clause_idx)
 
             # And update the IDs of all entries that came after this one
             for i, rule in enumerate(self.rules):
-                if i <= clause_idx:
+                if i <= true_idx:
                     continue
-                rule.set_idx(rule.idx - 1)
+                # Otherwise, time to update it
+                rule.set_true_idx(rule.true_idx - 1)
+                if rule.rule_idx == rule_idx:
+                    # Then also need to decrease the clause number here
+                    rule.set_clause_idx(rule.clause_idx - 1)
 
             # Remove the rule entry from our list of rules
-            self._remove_rule(clause_idx)
+            self.rules.pop(true_idx)
 
-        # Update the title
-        self.class_group.set_title(
-            f'Class: {self.rule_obj.conclusion} '
-            f'({len(self.rule_obj.premise)} '
-            f'rule{"" if len(self.rule_obj.premise) == 1 else "s"})'
-        )
-
-        # Finally, emit an even that will tell all other windows to update
-        # as needed
-        self.ruleset_update()
+            # Finally, emit an even that will tell all other windows to update
+            # as needed
+            self.ruleset_update(rule_idx)
 
     @flx.action
     def reset(self):
-        self.class_group.set_title(
-            f'Class: {self.rule_obj.conclusion} '
-            f'({len(self.rule_obj.premise)} '
-            f'rule{"" if len(self.rule_obj.premise) == 1 else "s"})'
-        )
+        old_rules = self.rules[:]
         self._mutate_rules([])
-        self.clause_ordering = []
+        self.clause_orderings = []
         with self:
-            with self.class_group:
-                for idx, clause in enumerate(sorted(
-                    self.rule_obj.premise,
-                    key=lambda x: x.score,
-                )):
-                    self.clause_ordering.append(clause)
-                    self.add_rule(
-                        idx,
-                        clause,
-                        self.rule_obj.conclusion,
-                        clause.score,
-                    )
+            with self.container:
+                for rule_idx, rule_obj in enumerate(self.rule_objs):
+                    new_ordering = []
+                    for clause_idx, clause in enumerate(sorted(
+                        rule_obj.premise,
+                        key=lambda x: x.score,
+                    )):
+                        new_ordering.append(clause)
+                        self.add_rule(
+                            rule_idx,
+                            clause_idx,
+                            clause,
+                            rule_obj.conclusion,
+                            clause.score,
+                            clause.confidence,
+                        )
+                    self.clause_orderings.append(new_ordering)
+        for rule in old_rules:
+            rule.set_parent(None)
+
+    @flx.action
+    def clear(self):
+        # Detach every rule from its parent
+        for rule in self.rules:
+            rule.set_parent(None)
+
+    @flx.reaction('editable')
+    def update_list(self, *events):
+        self.reset()
+
+    @flx.action
+    def set_ruleset(self, ruleset):
+        self.ruleset = ruleset
+        self.rule_objs = sorted(
+            list(self.ruleset.rules),
+            key=lambda x: x.conclusion,
+        )
+        self.reset()
 
 
 class RuleListComponent(CamvizWindow):
-    class_rulesets = flx.ListProp(settable=True)
     class_buttons = flx.ListProp(settable=True)
 
-    def init(self):
-        ruleset = self.root.state.ruleset
-        classes = sorted(ruleset.rules, key=lambda x: x.conclusion)
+    def init(self, ruleset):
+        self.ruleset = ruleset
+        self.current_rule_idx = 0
+        self.rules = list(sorted(
+            self.ruleset.rules,
+            key=lambda x: x.conclusion
+        ))
         with ui.HBox(title="Rule Editor") as tab:
             with ui.VBox(
                 style=(
@@ -201,6 +278,7 @@ class RuleListComponent(CamvizWindow):
                     'overflow-x: scroll;'
                 )
             ) as self.box_pannel:
+                ui.Widget(flex=1)  # Filler
                 self.pannel_title = flx.Label(
                     text="Classes",
                     style=(
@@ -208,7 +286,7 @@ class RuleListComponent(CamvizWindow):
                         'font-size: 175%;'
                     )
                 )
-                for class_idx, rule in enumerate(classes):
+                for class_idx, rule in enumerate(self.rules):
                     new_button = ui.Button(
                         text=rule.conclusion,
                         style=(
@@ -216,46 +294,92 @@ class RuleListComponent(CamvizWindow):
                             'font-size: 150%;'
                         )
                     )
+                    new_button.rule_idx = class_idx
                     self._mutate_class_buttons(
                         [new_button],
                         'insert',
                         len(self.class_buttons),
                     )
+                ui.Widget(flex=1)  # Filler
 
-                # And add an empty widget as a space filler
-                ui.Widget(flex=1)
-
-            with ui.StackLayout(
+            first_rule = self.rules[self.current_rule_idx]
+            with ui.GroupWidget(
+                title=(
+                    f'Class: {first_rule.conclusion} '
+                    f'({len(first_rule.premise)} '
+                    f'rule{"" if len(first_rule.premise) == 1 else "s"})'
+                ),
+                style='overflow-y: scroll;',
                 flex=1,
-                style=(
-                    'overflow-y: scroll;'
-                    'overflow-x: scroll;'
+            ) as self.class_group:
+                self.class_ruleset = ClassRuleList(
+                    Ruleset(
+                        rules=(
+                            [first_rule]
+                            if self.rules else []
+                        ),
+                        feature_names=self.ruleset.feature_names,
+                        output_class_names=(
+                            self.ruleset.output_class_names()
+                        ),
+                    ),
+                    flex=1,
                 )
-            ) as self.stack:
-                for i, rule in enumerate(classes):
-                    new_set = ClassRuleList(rule)
-                    self.class_buttons[i].window_idx = i
-                    self._mutate_class_rulesets(
-                        [new_set],
-                        'insert',
-                        len(self.class_rulesets),
-                    )
 
     @flx.reaction('class_buttons*.pointer_down')
-    def _stacked_current(self, *events):
+    def _current_view(self, *events):
         button = events[-1].source
-        self.stack.set_current(button.window_idx)
+        rule = self.rules[button.rule_idx]
+        self.current_rule_idx = button.rule_idx
+        self.class_ruleset.set_ruleset(
+            Ruleset(
+                rules=[rule],
+                feature_names=self.ruleset.feature_names,
+                output_class_names=(
+                    self.ruleset.output_class_names()
+                ),
+            )
+        )
+        self.class_group.set_title(
+            f'Class: {rule.conclusion} '
+            f'({len(rule.premise)} '
+            f'rule{"" if len(rule.premise) == 1 else "s"})'
+        )
 
 
-    @flx.reaction('class_rulesets*.ruleset_update')
+
+    @flx.reaction('class_ruleset.ruleset_update')
     def bypass_update(self, *events):
         for event in events:
             event = event.copy()
             event["source_id"] = self.id
-            self.ruleset_update(event)
+            rule = self.rules[self.current_rule_idx]
+            # And the group title
+            self.class_group.set_title(
+                f'Class: {rule.conclusion} '
+                f'({len(rule.premise)} '
+                f'rule{"" if len(rule.premise) == 1 else "s"})'
+            )
 
+            self.ruleset_update(event)
 
     @flx.action
     def reset(self):
-        for class_ruleset in self.class_rulesets:
-            class_ruleset.reset(event)
+        # Reset the class ruleset itself
+        rule = self.rules[self.current_rule_idx]
+        print("Reseting with", self.current_rule_idx, "and label", rule.conclusion)
+        self.class_ruleset.set_ruleset(
+            Ruleset(
+                rules=[rule],
+                feature_names=self.ruleset.feature_names,
+                output_class_names=(
+                    self.ruleset.output_class_names()
+                ),
+            )
+        )
+        # And the group title
+        self.class_group.set_title(
+            f'Class: {rule.conclusion} '
+            f'({len(rule.premise)} '
+            f'rule{"" if len(rule.premise) == 1 else "s"})'
+        )
