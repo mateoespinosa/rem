@@ -5,6 +5,7 @@ from collections import namedtuple
 from sklearn.preprocessing import MinMaxScaler
 import logging
 import numpy as np
+import pandas as pd
 
 ################################################################################
 ## Global Variables
@@ -36,7 +37,119 @@ AVAILABLE_DATASETS = [
     'MB-GE-6Hist',
     'mb_imagevec50_ER',
     'mb_imagevec50_DR',
+    'PARTNER-Genomic',
+    'PARTNER-Clinical',
 ]
+
+################################################################################
+## Feature Descriptor Classes
+################################################################################
+
+
+class FeatureDescriptor(object):
+    def __init__(self):
+        pass
+
+    def transform_to_numeric(self, x):
+        # By default this is the identity value
+        return x
+
+    def transform_from_numeric(self, x):
+        # By default this is the identity value
+        return x
+
+    def is_discrete(self):
+        raise UnimplementedError("is_discrete(self)")
+
+    def default_value(self):
+        raise UnimplementedError("default_value(self)")
+
+    def numeric_bounds(self):
+        return (-float("inf"), float("inf"))
+
+    def is_categorical(self):
+        raise UnimplementedError("is_categorical(self)")
+
+
+class RealDescriptor(FeatureDescriptor):
+    def __init__(self, max_val=float("inf"), min_val=-float("inf")):
+        self.max_val = max_val
+        self.min_val = min_val
+
+    def default_value(self):
+        if self.max_val not in [float("inf"), -float("inf")] and (
+            self.min_val not in [float("inf"), -float("inf")]
+        ):
+            return (self.max_val + self.min_val)/2
+        elif self.max_val not in [float("inf"), -float("inf")]:
+            return self.max_val
+        elif self.min_val not in [float("inf"), -float("inf")]:
+            return self.min_val
+        return 0
+
+    def numeric_bounds(self):
+        return (self.min_val, self.max_val)
+
+    def is_discrete(self):
+        return False
+
+    def is_categorical(self):
+        return False
+
+
+class DiscreteNumericDescriptor(RealDescriptor):
+    def __init__(self, values):
+        self.values = sorted(values)
+        if values:
+            self.max_val = values[0]
+        else:
+            self.max_val = float("inf")
+        if values:
+            self.min_val = values[-1]
+        else:
+            self.min_val = -float("inf")
+
+    def default_value(self):
+        if self.values:
+            return self.values[len(self.values)//2]
+        return 0
+
+    def is_discrete(self):
+        return True
+
+
+class DiscreteEncodingDescriptor(DiscreteNumericDescriptor):
+    def __init__(self, encoding_map):
+        self.encoding_map = encoding_map
+        values = []
+        self.inverse_map = {}
+        self._default_value = None
+        for datum_name, numeric_val in self.encoding_map.items():
+            self._default_value = self._default_value or datum_name
+            values.append(numeric_val)
+            self.inverse_map[numeric_val] = datum_name
+
+        super(DiscreteEncodingDescriptor, self).__init__(values)
+
+    def default_value(self):
+        return self._default_value
+
+    def is_categorical(self):
+        return True
+
+    def transform_to_numeric(self, x):
+        return self.encoding_map[x]
+
+    def transform_from_numeric(self, x):
+        return self.inverse_map[x]
+
+
+class TrivialCatDescriptor(DiscreteEncodingDescriptor):
+    def __init__(self, vals):
+        super(TrivialCatDescriptor, self).__init__(dict(
+            zip(vals, range(len(vals)))
+        ))
+
 
 ################################################################################
 ## Helper Classes
@@ -71,15 +184,16 @@ class OutputClass(object):
 
 # Define a class that can be used to encapsulate all the information we will
 # store from a given dataset.
-class DatasetMetaData(object):
+class DatasetDescriptor(object):
     def __init__(
         self,
-        name,
-        output_classes,
+        name="dataset",
+        output_classes=None,
         n_features=None,
         target_col=None,
         feature_names=None,
         preprocessing=None,
+        feature_descriptors=None,
     ):
         self.name = name
         self.n_features = n_features
@@ -87,7 +201,83 @@ class DatasetMetaData(object):
         self.target_col = target_col
         self.feature_names = feature_names
         self.preprocessing = preprocessing
+        self.feature_descriptors = feature_descriptors
+        self.data = None
+        self.X = None
+        self.y = None
 
+    def read_data(self, data_path):
+        # Read our dataset. This will be the first thing we will do:
+        self.data = pd.read_csv(data_path, sep=',')
+        # Set the target column, number of inputs, and feature names of our
+        # dataset accordingly from the opened file if they were not provided
+        self.target_col = self.target_col or (
+            self.data.columns[-1]
+        )
+        self.n_features = self.n_features or (
+            len(self.data.columns) - 1
+        )
+        self.feature_names = self.feature_names or (
+            self.data.columns[:self.n_features]
+        )
+        if self.feature_descriptors is None:
+            # Then we will assume they are arbitrary real numbers anyone
+            # can set
+            self.feature_descriptors = {
+                None: RealDescriptor(
+                    max_val=float("inf"),
+                    min_val=float("inf"),
+                )
+            }
+
+        self.X = self.data.drop([self.target_col], axis=1).values
+        self.y = self.data[self.target_col].values
+        if self.output_classes is None:
+            out_classes = sorted(list(set(self.y)))
+            self.output_classes = []
+            for out_class in out_classes:
+                self.output_classes.apppend(
+                    OutputClass(name='{out_class}', encoding=out_class)
+                )
+        return self.X, self.y, self.data
+
+    def get_feature_ranges(self, feature_name):
+        if feature_name in self.feature_descriptors:
+            return self.feature_descriptors[feature_name].numeric_bounds()
+        return self.feature_descriptors.get(
+            None,
+            RealDescriptor(),
+        ).numeric_bounds()
+
+    def get_allowed_values(self, feature_name):
+        if feature_name not in self.feature_descriptors and (
+            None in self.feature_descriptors
+        ):
+            feature_name = None
+        if feature_name in self.feature_descriptors:
+            descriptor = self.feature_descriptors[feature_name]
+            if descriptor.is_discrete():
+                return descriptor.values
+            return None
+        return None
+
+    def get_default_value(self, feature_name):
+        if feature_name in self.feature_descriptors:
+            return self.feature_descriptors[feature_name].default_value()
+        return self.feature_descriptors.get(
+            None,
+            RealDescriptor(),
+        ).default_value()
+
+    def transform_to_numeric(self, feature_name, x):
+        if feature_name in self.feature_descriptors:
+            return self.feature_descriptors[feature_name].transform_to_numeric(
+                x
+            )
+        return self.feature_descriptors.get(
+            None,
+            RealDescriptor(),
+        ).transform_to_numeric(x)
 
 ################################################################################
 ## Helper Methods
@@ -172,7 +362,7 @@ def get_data_configuration(dataset_name):
     supported dataset (case insensitive). Otherwise a ValueError is thrown.
 
     :param str dataset_name:  The name of the dataset we want to fetch.
-    :return DatasetMetaData:  The configuration corresponding to the given
+    :return DatasetDescriptor:  The configuration corresponding to the given
                               dataset.
     """
     dataset_name = dataset_name.lower()
@@ -181,7 +371,7 @@ def get_data_configuration(dataset_name):
             OutputClass(name='y0', encoding=0),
             OutputClass(name='y1', encoding=1),
         )
-        return DatasetMetaData(
+        return DatasetDescriptor(
             n_features=5,
             name=dataset_name,
             output_classes=output_classes,
@@ -192,7 +382,7 @@ def get_data_configuration(dataset_name):
             OutputClass(name='y0', encoding=0),
             OutputClass(name='y1', encoding=1),
         )
-        return DatasetMetaData(
+        return DatasetDescriptor(
             n_features=5,
             name=dataset_name,
             output_classes=output_classes,
@@ -200,22 +390,25 @@ def get_data_configuration(dataset_name):
         )
     if dataset_name == 'mb-ge-er':
         output_classes = (
-            OutputClass(name='-', encoding=0),
-            OutputClass(name='+', encoding=1),
+            OutputClass(name='pcr', encoding=0),
+            OutputClass(name='non-pcr', encoding=1),
         )
-        return DatasetMetaData(
+        return DatasetDescriptor(
             n_features=1000,
             name=dataset_name,
             output_classes=output_classes,
             preprocessing=unit_scale_preprocess,
             target_col='ER_Expr',
+            feature_descriptors={
+                None: RealDescriptor(min_val=0, max_val=1),
+            },
         )
     if dataset_name == 'breastcancer':
         output_classes = (
             OutputClass(name='M', encoding=0),
             OutputClass(name='B', encoding=1),
         )
-        return DatasetMetaData(
+        return DatasetDescriptor(
             n_features=30,
             name=dataset_name,
             output_classes=output_classes,
@@ -236,7 +429,7 @@ def get_data_configuration(dataset_name):
                 y_test=y_test,
                 output_classes=output_classes,
             )
-        return DatasetMetaData(
+        return DatasetDescriptor(
             n_features=4,
             name=dataset_name,
             output_classes=output_classes,
@@ -248,7 +441,7 @@ def get_data_configuration(dataset_name):
             OutputClass(name='A', encoding=0),
             OutputClass(name='B-Z', encoding=1),
         )
-        return DatasetMetaData(
+        return DatasetDescriptor(
             n_features=16,
             name=dataset_name,
             output_classes=output_classes,
@@ -259,7 +452,7 @@ def get_data_configuration(dataset_name):
             OutputClass(name='0', encoding=0),
             OutputClass(name='1-9', encoding=1),
         )
-        return DatasetMetaData(
+        return DatasetDescriptor(
             n_features=784,
             name=dataset_name,
             output_classes=output_classes,
@@ -273,7 +466,7 @@ def get_data_configuration(dataset_name):
             OutputClass(name='PRAD', encoding=3),
             OutputClass(name='COAD', encoding=4),
         )
-        return DatasetMetaData(
+        return DatasetDescriptor(
             n_features=20502,
             name=dataset_name,
             output_classes=output_classes,
@@ -284,7 +477,7 @@ def get_data_configuration(dataset_name):
             OutputClass(name='NDR', encoding=0),
             OutputClass(name='DR', encoding=1),
         )
-        return DatasetMetaData(
+        return DatasetDescriptor(
             n_features=1000,
             name=dataset_name,
             output_classes=output_classes,
@@ -296,7 +489,7 @@ def get_data_configuration(dataset_name):
             OutputClass(name='NDR', encoding=0),
             OutputClass(name='DR', encoding=1),
         )
-        return DatasetMetaData(
+        return DatasetDescriptor(
             n_features=350,
             name=dataset_name,
             output_classes=output_classes,
@@ -305,10 +498,10 @@ def get_data_configuration(dataset_name):
 
     if dataset_name == 'mb-clin-er':
         output_classes = (
-            OutputClass(name='-', encoding=0),
-            OutputClass(name='+', encoding=1),
+            OutputClass(name='Negative', encoding=0),
+            OutputClass(name='Positive', encoding=1),
         )
-        return DatasetMetaData(
+        return DatasetDescriptor(
             n_features=350,
             name=dataset_name,
             output_classes=output_classes,
@@ -317,10 +510,10 @@ def get_data_configuration(dataset_name):
 
     if dataset_name == 'mb-clinp-er':
         output_classes = (
-            OutputClass(name='-', encoding=0),
-            OutputClass(name='+', encoding=1),
+            OutputClass(name='Negative', encoding=0),
+            OutputClass(name='Positive', encoding=1),
         )
-        return DatasetMetaData(
+        return DatasetDescriptor(
             n_features=13,
             name=dataset_name,
             output_classes=output_classes,
@@ -329,10 +522,10 @@ def get_data_configuration(dataset_name):
 
     if dataset_name == 'mb-ge-clin-er':
         output_classes = (
-            OutputClass(name='-', encoding=0),
-            OutputClass(name='+', encoding=1),
+            OutputClass(name='Negative', encoding=0),
+            OutputClass(name='Positive', encoding=1),
         )
-        return DatasetMetaData(
+        return DatasetDescriptor(
             n_features=1350,
             name=dataset_name,
             output_classes=output_classes,
@@ -341,10 +534,10 @@ def get_data_configuration(dataset_name):
 
     if dataset_name == 'mb-ge-clinp-er':
         output_classes = (
-            OutputClass(name='-', encoding=0),
-            OutputClass(name='+', encoding=1),
+            OutputClass(name='Negative', encoding=0),
+            OutputClass(name='Positive', encoding=1),
         )
-        return DatasetMetaData(
+        return DatasetDescriptor(
             n_features=1013,
             name=dataset_name,
             output_classes=output_classes,
@@ -356,12 +549,15 @@ def get_data_configuration(dataset_name):
             OutputClass(name='IDC', encoding=0),
             OutputClass(name='ILC', encoding=1),
         )
-        return DatasetMetaData(
+        return DatasetDescriptor(
             n_features=1000,
             name=dataset_name,
             output_classes=output_classes,
             preprocessing=unit_scale_preprocess,
             target_col='Histological_Type',
+            feature_descriptors={
+                None: RealDescriptor(min_val=0, max_val=1),
+            },
         )
 
     if dataset_name == 'mb_ge_cdh1_2hist':
@@ -369,12 +565,15 @@ def get_data_configuration(dataset_name):
             OutputClass(name='IDC', encoding=0),
             OutputClass(name='ILC', encoding=1),
         )
-        return DatasetMetaData(
+        return DatasetDescriptor(
             n_features=1001,
             name=dataset_name,
             output_classes=output_classes,
             preprocessing=unit_scale_preprocess,
             target_col='Histological_Type',
+            feature_descriptors={
+                None: RealDescriptor(min_val=0, max_val=1),
+            },
         )
 
     if dataset_name == 'mb-1004-ge-2hist':
@@ -382,12 +581,15 @@ def get_data_configuration(dataset_name):
             OutputClass(name='IDC', encoding=0),
             OutputClass(name='ILC', encoding=1),
         )
-        return DatasetMetaData(
+        return DatasetDescriptor(
             n_features=1004,
             name=dataset_name,
             output_classes=output_classes,
             preprocessing=unit_scale_preprocess,
             target_col='Histological_Type',
+            feature_descriptors={
+                None: RealDescriptor(min_val=0, max_val=1),
+            },
         )
 
     if dataset_name == 'mb-imagevec5-6hist':
@@ -399,7 +601,7 @@ def get_data_configuration(dataset_name):
             OutputClass(name='IDC-TUB', encoding=4),
             OutputClass(name='IDC-MED', encoding=5),
         )
-        return DatasetMetaData(
+        return DatasetDescriptor(
             n_features=368,
             name=dataset_name,
             output_classes=output_classes,
@@ -415,7 +617,7 @@ def get_data_configuration(dataset_name):
             OutputClass(name='IDC-TUB', encoding=4),
             OutputClass(name='IDC-MED', encoding=5),
         )
-        return DatasetMetaData(
+        return DatasetDescriptor(
             n_features=368,
             name=dataset_name,
             output_classes=output_classes,
@@ -427,7 +629,7 @@ def get_data_configuration(dataset_name):
             OutputClass(name='IDC', encoding=0),
             OutputClass(name='ILC', encoding=1),
         )
-        return DatasetMetaData(
+        return DatasetDescriptor(
             n_features=368,
             name=dataset_name,
             output_classes=output_classes,
@@ -443,20 +645,23 @@ def get_data_configuration(dataset_name):
             OutputClass(name='IDC-TUB', encoding=4),
             OutputClass(name='IDC-MED', encoding=5),
         )
-        return DatasetMetaData(
+        return DatasetDescriptor(
             n_features=1000,
             name=dataset_name,
             output_classes=output_classes,
             preprocessing=unit_scale_preprocess,
             target_col='Histological_Type',
+            feature_descriptors={
+                None: RealDescriptor(min_val=0, max_val=1),
+            },
         )
 
     if dataset_name == 'mb_imagevec50_er':
         output_classes = (
-            OutputClass(name='-', encoding=0),
-            OutputClass(name='+', encoding=1),
+            OutputClass(name='Negative', encoding=0),
+            OutputClass(name='Positive', encoding=1),
         )
-        return DatasetMetaData(
+        return DatasetDescriptor(
             n_features=368,
             name=dataset_name,
             output_classes=output_classes,
@@ -468,11 +673,64 @@ def get_data_configuration(dataset_name):
             OutputClass(name='NDR', encoding=0),
             OutputClass(name='DR', encoding=1),
         )
-        return DatasetMetaData(
+        return DatasetDescriptor(
             n_features=368,
             name=dataset_name,
             output_classes=output_classes,
             target_col='DR',
+        )
+    if dataset_name == "partner-clinical":
+        output_classes = (
+            OutputClass(name='non-pCR', encoding=0),
+            OutputClass(name='pCR', encoding=1),
+        )
+        return DatasetDescriptor(
+            name=dataset_name,
+            output_classes=output_classes,
+            target_col='pCR',
+            preprocessing=unit_scale_preprocess,
+            feature_descriptors={
+                None: RealDescriptor(),
+                "Age": DiscreteNumericDescriptor(list(range(1, 150))),
+                "Receptor Status": TrivialCatDescriptor(
+                    ["Negative", "Positive"]
+                ),
+                "Tumour subtype": DiscreteNumericDescriptor(list(range(5))),
+                "Ductal_subtype": TrivialCatDescriptor(["No Ductal", "Ductal"]),
+                "Grade": DiscreteNumericDescriptor([1, 2, 3]),
+                "Largest Clinical Size": RealDescriptor(min_val=0),
+                "T4 or Inflammatory": TrivialCatDescriptor(["No", "Yes"]),
+                "Clinical Nodal Involvement": TrivialCatDescriptor(
+                    ["No", "Yes"]
+                ),
+                "Clinical Stage": DiscreteNumericDescriptor(list(range(6))),
+                "Smoking category": DiscreteNumericDescriptor(list(range(3))),
+                "BMI": RealDescriptor(min_val=0),
+                "anthracycline": TrivialCatDescriptor(["No", "Yes"]),
+                "PARTNER": TrivialCatDescriptor(["No", "Yes"]),
+                "treatment_group": TrivialCatDescriptor(["Control", "Olaparib"]),
+                "TILs": RealDescriptor(min_val=0, max_val=1),
+                "EGFR": TrivialCatDescriptor(["Negative", "Positive"]),
+                "CK5_6": TrivialCatDescriptor(["Negative", "Positive"]),
+                "ARIHC": RealDescriptor(min_val=0, max_val=1),
+                "pCR": RealDescriptor(["non-pCR", "pCR"]),
+            }
+        )
+
+    if dataset_name == "partner-genomic":
+        output_classes = (
+            OutputClass(name='non-pCR', encoding=0),
+            OutputClass(name='pCR', encoding=1),
+        )
+        return DatasetDescriptor(
+            name=dataset_name,
+            output_classes=output_classes,
+            target_col='pCR',
+            preprocessing=unit_scale_preprocess,
+            feature_descriptors={
+                None: RealDescriptor(min_val=0, max_val=1),
+                "pCR": RealDescriptor(["non-pCR", "pCR"]),
+            }
         )
 
     # Else this is a big no-no

@@ -54,6 +54,27 @@ class Rule(object):
         # average score is always 1.
         return total_correct_score/total if total else 1
 
+    def evaluate_score_and_explain(self, data):
+        """
+        Given a list of input neurons and their values, return the combined
+        score of clauses that satisfy the rule and a list with individual
+        rules that this data point satisfied
+        """
+        total = len(self.premise)
+        total_correct_score = 0
+        explanation = []
+        for clause in self.premise:
+            if clause.evaluate(data):
+                explanation.append(
+                    Rule(premise=[clause], conclusion=self.conclusion)
+                )
+                total_correct_score += clause.score
+
+        # Be careful with the always true clause (i.e. empty). In that case, the
+        # average score is always 1.
+        explanation.sort(key=lambda x: list(x.premise)[0].score)
+        return total_correct_score/total if total else 1, explanation
+
 
     @classmethod
     def from_term_set(cls, premise, conclusion, confidence):

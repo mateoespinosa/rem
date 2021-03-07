@@ -10,7 +10,6 @@ from sklearn.model_selection import StratifiedKFold
 import logging
 import numpy as np
 import os
-import pandas as pd
 import pathlib
 import random
 import shutil
@@ -510,21 +509,8 @@ f
         given experiment.
         """
 
-        # Read our dataset. This will be the first thing we will do:
-        data = pd.read_csv(self.DATA_FP)
-        # Set the target column, number of inputs, and feature names of our
-        # dataset accordingly from the opened file if they were not provided
-        self.DATASET_INFO.target_col = self.DATASET_INFO.target_col or (
-            data.columns[-1]
-        )
-        self.DATASET_INFO.n_features = self.DATASET_INFO.n_features or (
-            len(data.columns) - 1
-        )
-        self.DATASET_INFO.feature_names = self.DATASET_INFO.feature_names or (
-            data.columns[:self.DATASET_INFO.n_features]
-        )
-        self.X = data.drop([self.DATASET_INFO.target_col], axis=1).values
-        self.y = data[self.DATASET_INFO.target_col].values
+        # Read our dataset
+        self.X, self.y, _ = self.DATASET_INFO.read_data(self.DATA_FP)
 
         # Split our data into two groups of train and test data in general
         self.data_split, _ = self.serializable_stage(

@@ -44,6 +44,12 @@ class Ruleset(object):
             range(len(output_class_names or [])),
         ))
 
+    def output_class_names(self):
+        return sorted(
+            list(self.output_class_map.keys()),
+            key=lambda x: self.output_class_map[x],
+        )
+
     def __iter__(self):
         # If we iterate over this guy, it is the same as iterating over
         # its rules
@@ -74,7 +80,10 @@ class Ruleset(object):
             containing our predicted results.
         """
         X = np.atleast_2d(X)
-        y = np.array([])
+        if use_label_names:
+            y = []
+        else:
+            y = np.array([])
 
         if len(X.shape) != 2:
             raise ValueError(
@@ -97,20 +106,109 @@ class Ruleset(object):
 
             # Output class with max score decides the classification of
             # instance. If a tie happens, then choose randomly
-            if len(set(class_ruleset_scores.values())) == 1:
-                max_class = random.choice(list(self.rules)).conclusion
-            else:
-                max_class = max(
-                    class_ruleset_scores,
-                    key=class_ruleset_scores.get
-                ).conclusion
+            max_rule = max(
+                class_ruleset_scores,
+                key=class_ruleset_scores.get
+            )
+            max_score = class_ruleset_scores[max_rule]
+            max_set = [
+                rule for (rule, score) in class_ruleset_scores.items()
+                if score == max_score
+            ]
+            if len(max_set) > 1:
+                # Then select one at random
+                max_rule = random.choice(max_set)
+            max_class = max_rule.conclusion
 
             # Output class encoding is index out output neuron
             if not use_label_names:
                 # Then turn this into its encoding
                 max_class = self.output_class_map.get(max_class, max_class)
-            y = np.append(y, max_class)
+                y = np.append(y, max_class)
+            else:
+                y.append(max_class)
         return y
+
+    def predict_and_explain(
+        self,
+        X,
+        use_label_names=False,
+        only_positive=False,
+    ):
+        """
+        Predicts the labels corresponding to unseen data points X given a set of
+        rules. It also provides a list of rules that were activated for the
+        given input (sorted in terms of their scores) that explain the
+        prediction.
+
+        :param np.array X: 2D matrix of data points of which we want to obtain a
+            prediction for.
+
+        :returns Tuple[np.array, List[List[Rule]]]: A tuple containing (1) a 1D
+            vector with as many entries as data points in X with the predicted
+            results and (2) a list with as many entries as datapoints in X with
+            each entry being a list of Rules that were activated by that
+            datapoint.
+        """
+        X = np.atleast_2d(X)
+        if use_label_names:
+            y = []
+        else:
+            y = np.array([])
+        if len(X.shape) != 2:
+            raise ValueError(
+                "Expected provided data to be 2D but got "
+                "shape {X.shape} instead."
+            )
+
+        explanations = [
+            [] for _ in range(X.shape[0])
+        ]
+
+        for i, instance in enumerate(X):
+            # Map of neuron names to values from input data
+            neuron_to_value_map = self._get_named_dictionary(instance)
+
+            # Each output class given a score based on how many rules x
+            # satisfies
+            class_ruleset_scores = {}
+            for class_rules in self.rules:
+                score, activated_rules = class_rules.evaluate_score_and_explain(
+                    neuron_to_value_map
+                )
+                class_ruleset_scores[class_rules] = (score, activated_rules)
+
+            # Output class with max score decides the classification of
+            # instance. If a tie happens, then choose randomly
+            max_rule = max(
+                class_ruleset_scores,
+                key=lambda x: class_ruleset_scores[x][0]
+            )
+            max_score = class_ruleset_scores[max_rule][0]
+            max_set = [
+                rule for rule, (score, _) in class_ruleset_scores.items()
+                if score == max_score
+            ]
+            if len(max_set) > 1:
+                # Then select one at random
+                max_rule = random.choice(max_set)
+            max_class = max_rule.conclusion
+
+            # Output class encoding is index out output neuron
+            if not use_label_names:
+                # Then turn this into its encoding
+                max_class = self.output_class_map.get(max_class, max_class)
+                y = np.append(y, max_class)
+            else:
+                y.append(max_class)
+            # And add the explanation as well. We will include all the negative
+            # explanations as well as the positive ones
+            if only_positive:
+                explanations[i] = class_ruleset_scores[max_rule][1]
+            else:
+                for rule in self.rules:
+                    explanations[i].extend(class_ruleset_scores[rule][1])
+        return y, explanations
 
     def rank_rules(
         self,

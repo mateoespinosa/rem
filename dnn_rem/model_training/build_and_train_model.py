@@ -24,7 +24,6 @@ class LogitAUC(tf.keras.metrics.AUC):
 
     def update_state(self, y_true, y_pred, sample_weight=None):
         # Simply call the parent function with the argmax of the given tensor
-        # y_true = tf.where(
         y_pred = tf.nn.softmax(y_pred, axis=-1)
         super(LogitAUC, self).update_state(
             y_true=y_true,
