@@ -1,12 +1,24 @@
 from flexx import flx, ui
 from gui_window import CamvizWindow
 from collections import defaultdict
-from pscript.stubs import d3, window
+from pscript.stubs import d3, window, Math
 from dnn_rem.rules.term import TermOperator
 from sklearn.neighbors import KernelDensity
 import numpy as np
 from rule_statistics import _CLASS_PALETTE
 
+def _js_round(x, num=0):
+    mult = 10 ** num
+    return Math.round(x * mult) / mult
+
+def _bound_str(d):
+    return (
+        ("[" if d["left_inclusive"] else "(") +
+        str(_js_round(d["bounds"][0], 4)) +
+        ", " +
+        str(_js_round(d["bounds"][1], 4)) +
+        ("]" if d["right_inclusive"] else ")")
+    )
 
 class FeatureBoundView(flx.Widget):
     CSS = """
@@ -135,7 +147,7 @@ class FeatureBoundView(flx.Widget):
         ########################################################################
 
         self.x_scale = d3.scaleLinear().domain(
-            [(x * 1.0) for x in self.feature_limits]
+            [self.feature_limits[0] * 0.9, self.feature_limits[1] * 1.1]
         ).range(
             [self.left_margin, self.width - self.right_margin]
         )
@@ -318,6 +330,7 @@ class FeatureBoundView(flx.Widget):
             max_y = max(max_y, bin_d.norm_val)
         return max_y
 
+
     # A function to call whenever the selected class changes
     @flx.action
     def update_plot(self):
@@ -325,9 +338,8 @@ class FeatureBoundView(flx.Widget):
         ########################################################################
         ## X-Axis Update
         ########################################################################
-
         self.x_scale.domain(
-            [(x * 1.0) for x in self.feature_limits]
+            [self.feature_limits[0] * 0.9, self.feature_limits[1] * 1.1]
         )
         self.svg.select(
             ".x-axis"
@@ -504,6 +516,10 @@ class FeatureBoundView(flx.Widget):
         ########################################################################
 
         # Finally, update the thresholds
+        max_bin_width = d3.max(
+            self.class_bins,
+            lambda d: max(self.x_scale(d.x1) - self.x_scale(d.x0) - 1, 0),
+        )
         total_score = (
             sum(map(lambda x: x["score"], self.rule_bounds))
             if self.rule_bounds else 0
@@ -549,28 +565,16 @@ class FeatureBoundView(flx.Widget):
         ).attr(
             "fill",
             lambda d: d["color"],
-        ).attr(
-            "stroke",
-            "red",
-        ).attr(
-            "stroke-width",
-            2,
-        ).attr(
-            'stroke-dasharray',
-            '1,12',
-        ).attr(
-            'stroke-linecap',
-            'square',
         ).on(
             "mouseover",
             lambda event, d: self.tooltip.style(
                 "visibility",
                 "visible"
             ).html(
-                f"<b>Threshold</b>: {d['bounds']}<br>"
+                f"<b>Threshold</b>: {_bound_str(d)}<br>"
                 f"<b>Class</b>: {d['class']}<br>"
-                f"<b>Confidence</b>: {d['confidence']}<br>"
-                f"<b>Score</b>: {d['score']}<br>"
+                f"<b>Confidence</b>: {_js_round(d['confidence'], 4)}<br>"
+                f"<b>Score</b>: {_js_round(d['score'], 4)}<br>"
             )
         ).on(
             "mousemove",
@@ -598,7 +602,10 @@ class FeatureBoundView(flx.Widget):
         ).attr(
             "width",
             lambda d: (
-                self.x_scale(d["bounds"][1]) - self.x_scale(d["bounds"][0])
+                max(
+                    self.x_scale(d["bounds"][1]) - self.x_scale(d["bounds"][0]),
+                    max_bin_width,
+                ),
             ),
         ).attr(
             "height",
@@ -633,10 +640,15 @@ def _collapse_intervals(intervals, fuse_intervals=False):
                                       # class
     confidence = intervals[0]["confidence"]
     color = intervals[0]["color"]
+    current_left_inclusive = intervals[0]["left_inclusive"]
+    current_right_inclusive = intervals[0]["right_inclusive"]
     for interval in intervals:
         (next_low, next_high) = interval["bounds"]
         if ((next_low, next_high) == (current_low, current_high)) or (
-            fuse_intervals and (next_low <= current_high)
+            fuse_intervals and (
+                (next_low < current_high) or
+                (next_low == current_high) and (current_right_inclusive)
+            )
         ):
             # Then merge these two!
             total_score += interval["score"]
@@ -665,6 +677,8 @@ def _collapse_intervals(intervals, fuse_intervals=False):
         "color": color,
         "confidence": confidence,
         "bounds": (current_low, current_high),
+        "left_inclusive": current_left_inclusive,
+        "right_inclusive": current_right_inclusive,
     })
     result.sort(key=lambda x: (x["bounds"][1] - x["bounds"][0]))
     return result
@@ -689,6 +703,7 @@ class FeatureBoundComponent(flx.PyWidget):
     def update_feature(self):
         ruleset = self.root.state.ruleset
         self.interval_map = defaultdict(list)
+        self.classes = list(ruleset.output_class_map.keys())
         for rule in ruleset:
             for clause in rule.premise:
                 for term in clause.terms:
@@ -700,8 +715,12 @@ class FeatureBoundComponent(flx.PyWidget):
                     else:
                         bound = (self.feature_limits[0], term.threshold)
                     self.interval_map[rule.conclusion].append({
-                            "color": "#ffb500",
+                            "color": _CLASS_PALETTE[
+                                self.classes.index(rule.conclusion) % len(_CLASS_PALETTE)
+                            ],
                             "bounds": bound,
+                            "left_inclusive": False,
+                            "right_inclusive": True,
                             "class": rule.conclusion,
                             "score": clause.score,
                             "confidence": clause.confidence,
@@ -719,22 +738,26 @@ class FeatureBoundComponent(flx.PyWidget):
         for (cls_name, cls_code) in ruleset.output_class_map.items():
             inv_name_map[cls_code] = cls_name
 
-        # Do some min-max scaling. For that we need to find the max and the
-        # min value of the dataset here
-        max_val = max(dataset[self.feature])
-        min_val = min(dataset[self.feature])
+        is_norm = self.root.state.dataset.is_normalized(self.feature)
+        if is_norm:
+            # Do some min-max scaling. For that we need to find the max and the
+            # min value of the dataset here
+            max_val = max(dataset[self.feature])
+            min_val = min(dataset[self.feature])
         for (val, cls_name) in zip(
             dataset[self.feature],
             dataset[self.root.state.dataset.target_col]
         ):
-            scaled_val = (val - min_val) / (max_val - min_val)
+            if is_norm:
+                scaled_val = (val - min_val) / (max_val - min_val)
+            else:
+                scaled_val = val
             data.append({
                 "class": inv_name_map[cls_name],
                 self.feature: scaled_val,
             })
 
         self.estimated_densities = {}
-        self.classes = list(ruleset.output_class_map.keys())
         for cls_name in self.classes:
             values = list(map(
                 lambda x: x[self.feature],
@@ -784,12 +807,13 @@ class FeatureBoundComponent(flx.PyWidget):
         self.view.set_estimated_density(
             self.estimated_densities.get(self.class_name, [])
         )
-        if self.class_name == "":
-            class_color = "black"
-        else:
-            class_color = _CLASS_PALETTE[
-                self.classes.index(self.class_name) % len(_CLASS_PALETTE)
-            ]
+        # if self.class_name == "":
+        #     class_color = "black"
+        # else:
+        #     class_color = _CLASS_PALETTE[
+        #         self.classes.index(self.class_name) % len(_CLASS_PALETTE)
+        #     ]
+        class_color = "black"
         self.view.set_class_color(class_color)
 
     @flx.action
@@ -802,29 +826,26 @@ class FeatureExplorerComponent(CamvizWindow):
     def init(self):
         self.ruleset = self.root.state.ruleset
         self.all_features = set()
-        num_used_rules_per_feat_map = defaultdict(int)
         for rule in self.ruleset.rules:
             for clause in rule.premise:
                 for term in clause.terms:
                     self.all_features.add(term.variable)
-                    num_used_rules_per_feat_map[term.variable] += 1
 
         self.all_features = list(self.all_features)
         # Make sure we display most used rules first
-        self.all_features = sorted(
-            self.all_features,
-            key=lambda x: -num_used_rules_per_feat_map[x],
-        )
+        self.all_features = sorted(self.all_features)
         self.class_names = sorted(self.ruleset.output_class_map.keys())
-        with ui.VSplit(
+        with ui.VBox(
             title="Feature Explorer",
         ):
-            with ui.HBox(flex=0.03):
+            with ui.HBox(0.15):
+                ui.Widget(flex=1)  # filler
                 ui.Label(
                     text="Threshold Visualization",
                     css_class="feature-explorer-title",
                     flex=1,
                 )
+                ui.Widget(flex=1)  # filler
 
             # Add the box container our threshold visualizer
             first_feature = self.all_features[0]
@@ -835,40 +856,42 @@ class FeatureExplorerComponent(CamvizWindow):
                 feature=first_feature,
                 class_name="",
                 feature_limits=feature_limits,
-                flex=0.9,
+                flex=0.7,
             )
 
             # Add the control panel
             with ui.HBox(
                 css_class='threshold-visualizer-control-panel',
-                flex=0.07,
+                flex=0.05,
             ) as self.control_panel:
                 ui.Widget(flex=1)  # filler
-                ui.Label(
-                    text="Feature:",
-                    css_class="combo-box-label",
-                    flex=0,
-                )
-                self.feature_selection = ui.ComboBox(
-                    options=self.all_features,
-                    selected_index=0,
-                    css_class='feature-selection-box',
-                    flex=0,
-                )
+                with ui.VBox():
+                    ui.Label(
+                        text="Feature",
+                        css_class="combo-box-label",
+                        flex=0,
+                    )
+                    self.feature_selection = ui.ComboBox(
+                        options=self.all_features,
+                        selected_index=0,
+                        css_class='explorer-selection-box',
+                        flex=0,
+                    )
+                ui.Widget(flex=0.25)  # filler
+                with ui.VBox():
+                    ui.Label(
+                        text="Class",
+                        css_class="combo-box-label",
+                        flex=0,
+                    )
+                    self.class_selection = ui.ComboBox(
+                        options=["all classes"] + (self.class_names),
+                        selected_index=0,
+                        css_class='explorer-selection-box',
+                        flex=0,
+                    )
                 ui.Widget(flex=1)  # filler
-                ui.Label(
-                    text="Class:",
-                    css_class="combo-box-label",
-                    flex=0,
-                )
-                self.class_selection = ui.ComboBox(
-                    options=["all classes"] + (self.class_names),
-                    selected_index=0,
-                    css_class='class-selection-box',
-                    flex=0,
-                )
-                ui.Widget(flex=1)  # filler
-            ui.Widget(flex=0.01)  # filler
+            ui.Widget(flex=0.15)  # filler
 
     @flx.reaction('feature_selection.user_selected')
     def select_feature(self, *events):

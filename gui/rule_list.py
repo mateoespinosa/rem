@@ -23,7 +23,7 @@ class RuleView(flx.Widget):
         border-style: dashed;
         border-color: black;
         border-width: thin;
-
+        margin: 1px;
     }
     .flx-RuleView:hover {
         background-color: #eefafe;
@@ -38,18 +38,18 @@ class RuleView(flx.Widget):
     true_idx = flx.IntProp(settable=True)
     editable = flx.BoolProp(True, settable=True)
     delete_button = flx.ComponentProp(settable=True)
+    edit_button = flx.ComponentProp(settable=True)
+    rank_button = flx.ComponentProp(settable=True)
 
     def init(self):
-        with flx.HBox():
+        with flx.HFix(style="margin: auto;"):
             self.index_label = flx.Label(
-                flex=0,
+                flex=0.03,
                 css_class="rule-list-counter",
-                minsize=(50, 35),
-            ).set_html(
-                f'<p>{self.true_idx + 1}.</p>'
+                html=f'{self.true_idx + 1}.',
             )
             self.rule_text = flx.Label(
-                flex=(1, 0),
+                flex=0.9,
                 css_class="rule-list-rule-text"
             )
             self.rule_text.set_html(
@@ -63,16 +63,21 @@ class RuleView(flx.Widget):
                 "</span>"
             )
             if self.editable:
+                self._mutate_edit_button(flx.Button(
+                    text="edit",
+                    flex=0.07,
+                    css_class="rule-list-delete-button",
+                    style="padding: 0;",
+                ))
                 self._mutate_delete_button(flx.Button(
                     text="delete",
-                    flex=0,
+                    flex=0.07,
                     css_class="rule-list-delete-button",
-                    minsize=(100, 35),
+                    style="padding: 0;",
                 ))
 
     @flx.emitter
     def rule_removed(self):
-        print("Emitting rule_removed", (self.rule_idx, self.clause_idx))
         return {
             'conclusion': self.conclusion,
             'clause_idx': self.clause_idx,
@@ -90,12 +95,20 @@ class RuleView(flx.Widget):
     @flx.reaction('true_idx')
     def _update_labels(self, *events):
         self.index_label.set_html(
-            f'<p>{self.true_idx + 1}.</p>'
+            f'{self.true_idx + 1}.'
         )
 
+    @flx.emitter
+    def pointer_click(self, e):
+        return e
+
     @flx.reaction('rule_text.pointer_click')
-    def __on_pointer_click(self, e):
+    def __on_pointer_click(self, *events):
         self.rule_text.node.blur()
+        for event in events:
+            self.pointer_click({
+                "isTrusted": event.isTrusted,
+            })
 
 
 class ClassRuleList(flx.PyWidget):
@@ -176,18 +189,15 @@ class ClassRuleList(flx.PyWidget):
 
     @flx.emitter
     def pointer_click(self, e):
-        print("Emitting pointer clicking", e)
         return e
 
     @flx.reaction('rules*.rule_removed')
     def remove_rule(self, *events):
         # Time to remove the rule from our ruleset
         for event in events:
-            print("\tCapturing rule_removed", event)
             rule_idx = event["rule_idx"]
             clause_idx = event["clause_idx"]
             true_idx = event["true_idx"]
-            print("Received remove rule event:", event)
             self.root.state.ruleset.remove_rule(
                 Rule(
                     premise=set([self.clause_orderings[rule_idx][clause_idx]]),
@@ -262,8 +272,6 @@ class ClassRuleList(flx.PyWidget):
 
 
 class RuleListComponent(CamvizWindow):
-    class_buttons = flx.ListProp(settable=True)
-
     def init(self, ruleset):
         self.ruleset = ruleset
         self.current_rule_idx = 0
@@ -272,34 +280,49 @@ class RuleListComponent(CamvizWindow):
             key=lambda x: x.conclusion
         ))
         with ui.HBox(title="Rule Editor") as tab:
-            with ui.VBox(
-                style=(
-                    'overflow-y: scroll;'
-                    'overflow-x: scroll;'
-                )
-            ) as self.box_pannel:
+            with ui.VBox(flex=0.075) as self.box_pannel:
                 ui.Widget(flex=1)  # Filler
-                self.pannel_title = flx.Label(
-                    text="Classes",
-                    style=(
-                        'font-weight: bold;'
-                        'font-size: 175%;'
-                    )
-                )
-                for class_idx, rule in enumerate(self.rules):
-                    new_button = ui.Button(
-                        text=rule.conclusion,
-                        style=(
-                            'font-weight: bold;'
-                            'font-size: 150%;'
+                with ui.GroupWidget(
+                    title="Class",
+                    css_class="file-edit-group",
+                    style="padding-bottom: 20%;",
+                ):
+                    with ui.VBox(flex=1):
+                        self.class_selector = ui.ComboBox(
+                            options=[
+                                rule.conclusion for rule in self.rules
+                            ],
+                            selected_index=0,
+                            css_class='class-selector-box',
+                            flex=1,
                         )
-                    )
-                    new_button.rule_idx = class_idx
-                    self._mutate_class_buttons(
-                        [new_button],
-                        'insert',
-                        len(self.class_buttons),
-                    )
+                ui.Widget(flex=0.25)  # Filler
+                with ui.GroupWidget(
+                    title="File",
+                    css_class="file-edit-group",
+                    flex=0.25,
+                    style="padding-bottom: 20%;",
+                ):
+                    with ui.VBox(flex=1):
+                        self.export_button = ui.Button(
+                            text="Export Model",
+                            css_class='tool-bar-button',
+                        )
+                        self.reset_button = ui.Button(
+                            text="Reset Model",
+                            css_class='tool-bar-button',
+                        )
+                ui.Widget(flex=0.25)  # Filler
+                with ui.GroupWidget(
+                    title="Ruleset",
+                    css_class="file-edit-group",
+                    flex=0.25,
+                ):
+                    with ui.VBox(flex=1):
+                        self.add_rule_button = ui.Button(
+                            text="Add Rule",
+                            css_class='tool-bar-button',
+                        )
                 ui.Widget(flex=1)  # Filler
 
             first_rule = self.rules[self.current_rule_idx]
@@ -310,7 +333,7 @@ class RuleListComponent(CamvizWindow):
                     f'rule{"" if len(first_rule.premise) == 1 else "s"})'
                 ),
                 style='overflow-y: scroll;',
-                flex=1,
+                flex=0.925,
             ) as self.class_group:
                 self.class_ruleset = ClassRuleList(
                     Ruleset(
@@ -326,11 +349,10 @@ class RuleListComponent(CamvizWindow):
                     flex=1,
                 )
 
-    @flx.reaction('class_buttons*.pointer_down')
+    @flx.reaction('class_selector.user_selected')
     def _current_view(self, *events):
-        button = events[-1].source
-        rule = self.rules[button.rule_idx]
-        self.current_rule_idx = button.rule_idx
+        rule = self.rules[events[-1]['index']]
+        self.current_rule_idx = events[-1]['index']
         self.class_ruleset.set_ruleset(
             Ruleset(
                 rules=[rule],
@@ -367,7 +389,6 @@ class RuleListComponent(CamvizWindow):
     def reset(self):
         # Reset the class ruleset itself
         rule = self.rules[self.current_rule_idx]
-        print("Reseting with", self.current_rule_idx, "and label", rule.conclusion)
         self.class_ruleset.set_ruleset(
             Ruleset(
                 rules=[rule],

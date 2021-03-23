@@ -274,6 +274,7 @@ class HierarchicalTreeViz(flx.Widget):
             self._init_viz()
             self._load_viz()
         window.setTimeout(_startup, 500)
+        window.setTimeout(lambda: self.expand_tree(), 750)
 
     @flx.action
     def expand_tree(self):
@@ -396,6 +397,9 @@ class HierarchicalTreeViz(flx.Widget):
             )
             x.select("svg").call(self.zoom)
 
+            # And time to redraw our graph
+            self._draw_graph(self.root_tree)
+
     def _draw_graph(
         self,
         current,
@@ -420,6 +424,9 @@ class HierarchicalTreeViz(flx.Widget):
                     )
                 ) if d.data.depth else _MAX_RADIUS//2
             )
+        if node_size == (0, 0):
+            # Then we do not draw this just yet
+            return
 
         self._treemap = d3.tree().size(self.size)
         if node_size:
@@ -497,6 +504,9 @@ class HierarchicalTreeViz(flx.Widget):
         ).attr(
             "transform",
             lambda d: f"translate({current.y0}, {current.x0})",
+        ).style(
+            "opacity",
+            1,
         ).on(
             "click",
             _node_click,
@@ -576,8 +586,10 @@ class HierarchicalTreeViz(flx.Widget):
                 "visibility",
                 "visible"
             ).html(
-                f"<b>{d.key}</b>: {d.percent*100:.3f}%"
-                if d.children else f"<b>score</b>: {d.data.score}",
+                (
+                    f"<b>{d.key}</b>: {d.percent*100:.3f}% "
+                    f"(count {d.data.class_counts[d.key]})"
+                ) if d.children else f"<b>score</b>: {d.data.score}",
             )
         ).on(
             "mousemove",
@@ -664,7 +676,7 @@ class HierarchicalTreeViz(flx.Widget):
             lambda d: "normal" if d.children or d._children else "bold",
         ).attr(
             "font-size",
-            lambda d: 10 if d.children or d._children else 30,
+            lambda d: 10 if d.children or d._children else 20,
         ).attr(
             "x",
             lambda d: (
@@ -830,7 +842,6 @@ class HierarchicalTreeViz(flx.Widget):
         self._collapse_tree()
 
     def _collapse_tree(self, root_too=False):
-        print("Calling Collapse tree")
         def _collapse(d):
             if d.children:
                 d._children = d.children
@@ -847,7 +858,6 @@ class HierarchicalTreeViz(flx.Widget):
         self._draw_graph(self.root_tree)
 
     def _expand_tree(self):
-        print("Calling Expand tree")
         def _expand_node(d):
             if hasattr(d, "_children") and (d._children):
                 d.children = d._children
@@ -904,10 +914,12 @@ class RuleExplorerComponent(CamvizWindow):
     @flx.reaction('expand_button.pointer_click')
     def _expand_clicked(self, *events):
         self.tree.expand_tree()
+        self.tree.zoom_fit()
 
     @flx.reaction('collapse_button.pointer_click')
     def _collapse_clicked(self, *events):
         self.tree.collapse_tree()
+        self.tree.zoom_fit()
 
     @flx.reaction('fit_button.pointer_click')
     def _fit_clicked(self, *events):

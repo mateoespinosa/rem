@@ -310,20 +310,22 @@ def _plot_rule_length_distribution(
         title="Rule length distribution (click legend to hide classes)",
     )
     for cls_name, rule_lengths in zip(output_classes, class_rule_lengths):
-        hist, edges = np.histogram(
-            rule_lengths,
-            bins=min(num_bins, len(rule_lengths)),
-        )
-        result_plot.quad(
-            top=hist,
-            bottom=0,
-            left=edges[:-1],
-            right=edges[1:],
-            fill_color=_CLASS_PALETTE[ruleset.output_class_map[cls_name]],
-            line_color="black",
-            alpha=0.5,
-            legend_label=cls_name,
-        )
+        bins = min(num_bins, len(rule_lengths))
+        if bins:
+            hist, edges = np.histogram(
+                rule_lengths,
+                bins=bins,
+            )
+            result_plot.quad(
+                top=hist,
+                bottom=0,
+                left=edges[:-1],
+                right=edges[1:],
+                fill_color=_CLASS_PALETTE[ruleset.output_class_map[cls_name]],
+                line_color="black",
+                alpha=0.5,
+                legend_label=cls_name,
+            )
     result_plot.y_range.start = 0
     result_plot.legend.location = "center_right"
     result_plot.legend.background_fill_color = "#fefefe"
@@ -472,21 +474,21 @@ class RuleStatisticsComponent(CamvizWindow):
                             'text-align: center;'
                         ),
                     )
-                    with ui.HBox():
+                    with ui.HSplit():
                         flx.Label(
                             text="Number of top features to consider:",
-                            flex=1,
+                            flex=0.95,
                             style="text-align: right;"
                         )
                         self.feature_combo = flx.ComboBox(
                             options=list(range(1, num_features + 1)),
-                            selected_index=min(num_features - 1, 15),
+                            selected_index=min(num_features - 1, 14),
                             style='width: 100%',
-                            flex=0,
+                            flex=0.05,
                         )
                     self.add_plot(
                         "Feature Distribution",
-                        new_activation(min(num_features - 1, 14)),
+                        new_activation(min(num_features - 1, 14) + 1),
                     )
                     self._feature_redraw = new_activation
 
@@ -506,21 +508,21 @@ class RuleStatisticsComponent(CamvizWindow):
                             'text-align: center;'
                         ),
                     )
-                    with ui.HBox():
+                    with ui.HSplit():
                         flx.Label(
                             text="Number of top terms to consider:",
-                            flex=1,
+                            flex=0.95,
                             style="text-align: right;"
                         )
                         self.term_combo = flx.ComboBox(
                             options=list(range(1, num_terms + 1)),
-                            selected_index=min(num_terms - 1, 15),
+                            selected_index=min(num_terms - 1, 14),
                             style='width: 100%',
-                            flex=0,
+                            flex=0.05,
                         )
                     self.add_plot(
                         "Term Distribution",
-                        new_activation(min(num_terms - 1, 14)),
+                        new_activation(min(num_terms - 1, 14) + 1),
                     )
                     self._term_redraw = new_activation
 

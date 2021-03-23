@@ -76,7 +76,9 @@ fieldset.flx-GroupWidget.flx-Widget.scrollable_group {
 .flx-Label.flx-Widget.rule-list-counter, .rule-list-counter {
     margin: auto;
     font-weight: bold;
-    background-color: #dcfcdc;
+    /*background-color: #dcfcdc;*/
+    text-align: center;
+    vertical-align: middle;
 }
 
 
@@ -135,12 +137,29 @@ fieldset.flx-GroupWidget.flx-Widget.scrollable_group {
 
 }
 
+.combo-box-label {
+  font-weight: bold;
+  font-size: 125%;
+}
+
 .feature-explorer-title {
   margin-top: 1%;
   margin-bottom: 2%;
+  font-weight: bold;
+  font-size: 175%;
+  text-align: center;
 }
 
 .threshold-visualizer-control-panel {
+}
+
+.file-edit-group legend {
+  font-size: 130%;
+  font-weight: bold;
+}
+
+.explorer-selection-box {
+
 }
 
 /*******************************************************************************
@@ -168,6 +187,7 @@ fieldset.flx-GroupWidget.flx-Widget.scrollable_group {
 .slider-value-label {
     font-weight: bold;
     font-size: 75%;
+    text-align: center;
 }
 
 .feature-selector-slider {

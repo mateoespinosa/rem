@@ -9,10 +9,10 @@ from rule_explorer import RuleExplorerComponent
 from rule_list import RuleListComponent
 from rule_statistics import RuleStatisticsComponent
 from prediction_explorer import PredictComponent
-import pandas as pd
 from dnn_rem.experiment_runners.dataset_configs import (
     get_data_configuration, DatasetDescriptor
 )
+from pscript.stubs import window
 
 
 ################################################################################
@@ -93,8 +93,6 @@ def build_parser():
 
 
 class FancyTabLayout(ui.TabLayout):
-    """ Fancy version of the TabLayout with nicer looking aesthetics.
-    """
     pass
 
 ################################################################################
@@ -110,20 +108,21 @@ class CamRuleState(object):
         self.max_entries = max_entries
         self._feature_ranges = {}
 
-    def get_feature_range(self, feature):
-        if feature in self._feature_ranges:
+    def get_feature_range(self, feature, empirical=True):
+        if empirical and (feature in self._feature_ranges):
             return self._feature_ranges[feature]
         (min_val, max_val) = self.dataset.get_feature_ranges(feature)
-        if min_val in [float("inf"), -float("inf")]:
+        if empirical and (min_val in [float("inf"), -float("inf")]):
             # Then we will use the empirical limit for visualization
             # purposes
             min_val = min(self.dataset.data[feature])
-        if max_val in [float("inf"), -float("inf")]:
+        if empirical and (max_val in [float("inf"), -float("inf")]):
             # Then we will use the empirical limit for visualization
             # purposes
             max_val = max(self.dataset.data[feature])
         result = (min_val, max_val)
-        self._feature_ranges[feature] = result
+        if empirical:
+            self._feature_ranges[feature] = result
         return result
 
 
