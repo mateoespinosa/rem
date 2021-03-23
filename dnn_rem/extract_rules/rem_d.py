@@ -200,7 +200,6 @@ def extract_rules(
 
     :returns Ruleset: the set of rules extracted from the given model.
     """
-
     # First we will instantiate a cache of our given keras model to obtain all
     # intermediate activations
     cache_model = ModelCache(

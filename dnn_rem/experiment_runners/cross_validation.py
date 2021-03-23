@@ -7,6 +7,7 @@ import tensorflow as tf
 
 from dnn_rem.evaluate_rules.evaluate import evaluate
 from dnn_rem.model_training.build_and_train_model import load_model
+from dnn_rem.utils.resources import resource_compute
 
 
 def _deserialize_rules(path):
@@ -77,7 +78,7 @@ def cross_validate_re(manager):
         # through a sequential checkpoint
         (ruleset, re_time, re_memory), _ = manager.serializable_stage(
             target_file=extracted_rules_file_path,
-            execute_fn=lambda: manager.resource_compute(
+            execute_fn=lambda: resource_compute(
                 function=manager.RULE_EXTRACTOR.run,
                 model=nn_model,
                 train_data=X_train,

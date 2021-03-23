@@ -15,6 +15,7 @@ import tensorflow as tf
 from tqdm import tqdm
 
 from dnn_rem.evaluate_rules.evaluate import evaluate
+from dnn_rem.utils.resources import resource_compute
 from .build_and_train_model import run_train_loop, load_model
 
 
@@ -77,7 +78,7 @@ def run(manager):
             ## RULE EXTRACTION + EVALUATION
             ####################################################################
 
-            rules, re_time, _ = manager.resource_compute(
+            rules, re_time, _ = resource_compute(
                 function=manager.RULE_EXTRACTOR.run,
                 model=model,
                 train_data=X_train,
