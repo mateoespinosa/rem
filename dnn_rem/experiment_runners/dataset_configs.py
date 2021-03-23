@@ -50,6 +50,9 @@ class FeatureDescriptor(object):
     def __init__(self):
         pass
 
+    def is_normalized(self):
+        return False
+
     def transform_to_numeric(self, x):
         # By default this is the identity value
         return x
@@ -72,7 +75,14 @@ class FeatureDescriptor(object):
 
 
 class RealDescriptor(FeatureDescriptor):
-    def __init__(self, max_val=float("inf"), min_val=-float("inf")):
+    def __init__(
+        self,
+        max_val=float("inf"),
+        min_val=-float("inf"),
+        normalized=False,
+    ):
+        super(RealDescriptor, self).__init__()
+        self.normalized = normalized
         self.max_val = max_val
         self.min_val = min_val
 
@@ -96,16 +106,20 @@ class RealDescriptor(FeatureDescriptor):
     def is_categorical(self):
         return False
 
+    def is_normalized(self):
+        return self.normalized
+
 
 class DiscreteNumericDescriptor(RealDescriptor):
     def __init__(self, values):
+        super(DiscreteNumericDescriptor, self).__init__()
         self.values = sorted(values)
         if values:
-            self.max_val = values[0]
+            self.max_val = values[-1]
         else:
             self.max_val = float("inf")
         if values:
-            self.min_val = values[-1]
+            self.min_val = values[0]
         else:
             self.min_val = -float("inf")
 
@@ -226,7 +240,7 @@ class DatasetDescriptor(object):
             self.feature_descriptors = {
                 None: RealDescriptor(
                     max_val=float("inf"),
-                    min_val=float("inf"),
+                    min_val=-float("inf"),
                 )
             }
 
@@ -236,7 +250,7 @@ class DatasetDescriptor(object):
             out_classes = sorted(list(set(self.y)))
             self.output_classes = []
             for out_class in out_classes:
-                self.output_classes.apppend(
+                self.output_classes.append(
                     OutputClass(name='{out_class}', encoding=out_class)
                 )
         return self.X, self.y, self.data
@@ -278,6 +292,24 @@ class DatasetDescriptor(object):
             None,
             RealDescriptor(),
         ).transform_to_numeric(x)
+
+    def transform_from_numeric(self, feature_name, x):
+        if feature_name in self.feature_descriptors:
+            return self.feature_descriptors[feature_name].transform_from_numeric(
+                x
+            )
+        return self.feature_descriptors.get(
+            None,
+            RealDescriptor(),
+        ).transform_from_numeric(x)
+
+    def is_normalized(self, feature_name):
+        if feature_name in self.feature_descriptors:
+            return self.feature_descriptors[feature_name].is_normalized()
+        return self.feature_descriptors.get(
+            None,
+            RealDescriptor(),
+        ).is_normalized()
 
 ################################################################################
 ## Helper Methods
@@ -390,8 +422,8 @@ def get_data_configuration(dataset_name):
         )
     if dataset_name == 'mb-ge-er':
         output_classes = (
-            OutputClass(name='pcr', encoding=0),
-            OutputClass(name='non-pcr', encoding=1),
+            OutputClass(name='negative', encoding=0),
+            OutputClass(name='positive', encoding=1),
         )
         return DatasetDescriptor(
             n_features=1000,
@@ -400,7 +432,7 @@ def get_data_configuration(dataset_name):
             preprocessing=unit_scale_preprocess,
             target_col='ER_Expr',
             feature_descriptors={
-                None: RealDescriptor(min_val=0, max_val=1),
+                None: RealDescriptor(min_val=0, max_val=1, normalized=True),
             },
         )
     if dataset_name == 'breastcancer':
@@ -556,7 +588,7 @@ def get_data_configuration(dataset_name):
             preprocessing=unit_scale_preprocess,
             target_col='Histological_Type',
             feature_descriptors={
-                None: RealDescriptor(min_val=0, max_val=1),
+                None: RealDescriptor(min_val=0, max_val=1, normalized=True),
             },
         )
 
@@ -572,7 +604,7 @@ def get_data_configuration(dataset_name):
             preprocessing=unit_scale_preprocess,
             target_col='Histological_Type',
             feature_descriptors={
-                None: RealDescriptor(min_val=0, max_val=1),
+                None: RealDescriptor(min_val=0, max_val=1, normalized=True),
             },
         )
 
@@ -588,7 +620,7 @@ def get_data_configuration(dataset_name):
             preprocessing=unit_scale_preprocess,
             target_col='Histological_Type',
             feature_descriptors={
-                None: RealDescriptor(min_val=0, max_val=1),
+                None: RealDescriptor(min_val=0, max_val=1, normalized=True),
             },
         )
 
@@ -652,14 +684,14 @@ def get_data_configuration(dataset_name):
             preprocessing=unit_scale_preprocess,
             target_col='Histological_Type',
             feature_descriptors={
-                None: RealDescriptor(min_val=0, max_val=1),
+                None: RealDescriptor(min_val=0, max_val=1, normalized=True),
             },
         )
 
     if dataset_name == 'mb_imagevec50_er':
         output_classes = (
-            OutputClass(name='Negative', encoding=0),
-            OutputClass(name='Positive', encoding=1),
+            OutputClass(name='ER Negative', encoding=0),
+            OutputClass(name='ER Positive', encoding=1),
         )
         return DatasetDescriptor(
             n_features=368,
@@ -688,23 +720,22 @@ def get_data_configuration(dataset_name):
             name=dataset_name,
             output_classes=output_classes,
             target_col='pCR',
-            preprocessing=unit_scale_preprocess,
             feature_descriptors={
                 None: RealDescriptor(),
-                "Age": DiscreteNumericDescriptor(list(range(1, 150))),
-                "Receptor Status": TrivialCatDescriptor(
+                "Age": DiscreteNumericDescriptor(list(range(1, 100))),
+                "Receptor_Status": TrivialCatDescriptor(
                     ["Negative", "Positive"]
                 ),
-                "Tumour subtype": DiscreteNumericDescriptor(list(range(5))),
+                "Tumour_subtype": DiscreteNumericDescriptor(list(range(5))),
                 "Ductal_subtype": TrivialCatDescriptor(["No Ductal", "Ductal"]),
                 "Grade": DiscreteNumericDescriptor([1, 2, 3]),
-                "Largest Clinical Size": RealDescriptor(min_val=0),
-                "T4 or Inflammatory": TrivialCatDescriptor(["No", "Yes"]),
-                "Clinical Nodal Involvement": TrivialCatDescriptor(
+                "Largest_Clinical_Size": RealDescriptor(min_val=0),
+                "T4_or_Inflammatory": TrivialCatDescriptor(["No", "Yes"]),
+                "Clinical_Nodal_Involvement": TrivialCatDescriptor(
                     ["No", "Yes"]
                 ),
-                "Clinical Stage": DiscreteNumericDescriptor(list(range(6))),
-                "Smoking category": DiscreteNumericDescriptor(list(range(3))),
+                "Clinical_Stage": DiscreteNumericDescriptor(list(range(6))),
+                "Smoking_category": DiscreteNumericDescriptor(list(range(3))),
                 "BMI": RealDescriptor(min_val=0),
                 "anthracycline": TrivialCatDescriptor(["No", "Yes"]),
                 "PARTNER": TrivialCatDescriptor(["No", "Yes"]),
@@ -712,7 +743,7 @@ def get_data_configuration(dataset_name):
                 "TILs": RealDescriptor(min_val=0, max_val=1),
                 "EGFR": TrivialCatDescriptor(["Negative", "Positive"]),
                 "CK5_6": TrivialCatDescriptor(["Negative", "Positive"]),
-                "ARIHC": RealDescriptor(min_val=0, max_val=1),
+                "ARIHC": RealDescriptor(min_val=0, max_val=100),
                 "pCR": RealDescriptor(["non-pCR", "pCR"]),
             }
         )
@@ -728,7 +759,7 @@ def get_data_configuration(dataset_name):
             target_col='pCR',
             preprocessing=unit_scale_preprocess,
             feature_descriptors={
-                None: RealDescriptor(min_val=0, max_val=1),
+                None: RealDescriptor(min_val=0, max_val=1, normalized=True),
                 "pCR": RealDescriptor(["non-pCR", "pCR"]),
             }
         )

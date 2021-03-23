@@ -5,10 +5,35 @@ of another term or class conclusion
 
 from collections import defaultdict
 
+from enum import Enum
 from .clause import ConjunctiveClause
 from .term import Term
 from dnn_rem.logic_manipulator.satisfiability import \
     remove_unsatisfiable_clauses
+
+
+class RulePredictMechanism(Enum):
+    """
+    This class encapsulates the different rule prediction mechanisms we have
+    given a set of scores for each rule,
+    """
+
+    # Max Prediction: returns the rule with the maximum score. If multiple,
+    #                 then ties are break arbitrarily
+    Max = 0
+    # Min Prediction: returns the rule with the minimum score. If multiple,
+    #                 then ties are break arbitrarily
+    Min = 1
+    # Aggregate Prediction: returns the rule with the maximum aggregated score
+    #                       of all activated rules.
+    Aggregate = 2
+    # Aggregate Average Prediction: same as above but all scores of activating
+    #                               rules are averaged.
+    AggregateAvg = 3
+    # Count Prediction: simply returns counts of all activated rules (equivalent
+    #                   to aggregating rules when they all have scores 1)
+    Count = 4
+
 
 
 class Rule(object):
@@ -54,7 +79,12 @@ class Rule(object):
         # average score is always 1.
         return total_correct_score/total if total else 1
 
-    def evaluate_score_and_explain(self, data):
+    def evaluate_score_and_explain(
+        self,
+        data,
+        use_confidence=False,
+        aggregator=RulePredictMechanism.AggregateAvg,
+    ):
         """
         Given a list of input neurons and their values, return the combined
         score of clauses that satisfy the rule and a list with individual
@@ -62,18 +92,50 @@ class Rule(object):
         """
         total = len(self.premise)
         total_correct_score = 0
+        if aggregator == RulePredictMechanism.Min:
+            total_correct_score = float("inf")
         explanation = []
         for clause in self.premise:
             if clause.evaluate(data):
-                explanation.append(
-                    Rule(premise=[clause], conclusion=self.conclusion)
-                )
-                total_correct_score += clause.score
+                weight = clause.confidence if use_confidence else clause.score
+                if (aggregator == RulePredictMechanism.Max) and (
+                    total_correct_score < weight
+                ):
+                    total_correct_score = weight
+                    explanation = [Rule(
+                        premise=[clause],
+                        conclusion=self.conclusion,
+                    )]
+                elif (aggregator == RulePredictMechanism.Min) and (
+                    total_correct_score > weight
+                ):
+                    total_correct_score = weight
+                    explanation = [Rule(
+                        premise=[clause],
+                        conclusion=self.conclusion,
+                    )]
+                elif aggregator in [
+                    RulePredictMechanism.Aggregate,
+                    RulePredictMechanism.AggregateAvg,
+                ]:
+                    explanation.append(
+                        Rule(premise=[clause], conclusion=self.conclusion)
+                    )
+                    total_correct_score += clause.score
+                elif aggregator == RulePredictMechanism.Count:
+                    explanation.append(
+                        Rule(premise=[clause], conclusion=self.conclusion)
+                    )
+                    total_correct_score += clause.score
 
-        # Be careful with the always true clause (i.e. empty). In that case, the
-        # average score is always 1.
-        explanation.sort(key=lambda x: list(x.premise)[0].score)
-        return total_correct_score/total if total else 1, explanation
+        explanation.sort(
+            key=lambda x: list(x.premise)[0].score,
+        )
+        if aggregator == RulePredictMechanism.AggregateAvg:
+            # Be careful with the always true clause (i.e. empty). In that case, the
+            # average score is always 1.
+            total_correct_score = total_correct_score/total if total else 1
+        return total_correct_score, explanation
 
 
     @classmethod

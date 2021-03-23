@@ -7,7 +7,7 @@ import numpy as np
 import random
 import pickle
 
-from .rule import Rule
+from .rule import Rule, RulePredictMechanism
 
 ################################################################################
 ## Exposed Classes
@@ -134,6 +134,8 @@ class Ruleset(object):
         X,
         use_label_names=False,
         only_positive=False,
+        use_confidence=False,
+        aggregator=RulePredictMechanism.AggregateAvg,
     ):
         """
         Predicts the labels corresponding to unseen data points X given a set of
@@ -164,6 +166,7 @@ class Ruleset(object):
         explanations = [
             [] for _ in range(X.shape[0])
         ]
+        scores = [None for _ in range(X.shape[0])]
 
         for i, instance in enumerate(X):
             # Map of neuron names to values from input data
@@ -174,7 +177,9 @@ class Ruleset(object):
             class_ruleset_scores = {}
             for class_rules in self.rules:
                 score, activated_rules = class_rules.evaluate_score_and_explain(
-                    neuron_to_value_map
+                    neuron_to_value_map,
+                    aggregator=aggregator,
+                    use_confidence=use_confidence,
                 )
                 class_ruleset_scores[class_rules] = (score, activated_rules)
 
@@ -203,12 +208,19 @@ class Ruleset(object):
                 y.append(max_class)
             # And add the explanation as well. We will include all the negative
             # explanations as well as the positive ones
-            if only_positive:
+            if only_positive or (aggregator in [
+                RulePredictMechanism.Max,
+                RulePredictMechanism.Min,
+                RulePredictMechanism.Count,
+            ]):
+                # Then we only sow the positive classes as those are the only
+                # valid explanations for the result when no aggregation happens
                 explanations[i] = class_ruleset_scores[max_rule][1]
             else:
                 for rule in self.rules:
                     explanations[i].extend(class_ruleset_scores[rule][1])
-        return y, explanations
+            scores[i] = max_score
+        return y, explanations, scores
 
     def rank_rules(
         self,

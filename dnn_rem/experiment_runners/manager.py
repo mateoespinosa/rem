@@ -21,6 +21,7 @@ import yaml
 
 from . import dataset_configs
 from dnn_rem.extract_rules.pedagogical import extract_rules as pedagogical
+from dnn_rem.extract_rules.rem_t import extract_rules as rem_t
 from dnn_rem.extract_rules.rem_d import extract_rules as rem_d
 from dnn_rem.rules.ruleset import RuleScoreMechanism
 
@@ -416,9 +417,12 @@ f
         if name == "rem-d":
             loss_function = self.HYPERPARAMS.get(
                 "loss_function",
-                "sigmoid_xentr",
+                "softmax_xentr",
             )
-            last_activation = self.HYPERPARAMS.get("last_activation", "sigmoid")
+            last_activation = self.HYPERPARAMS.get(
+                "last_activation",
+                "softmax",
+            )
             # We set the last activation to None here if it is going to be
             # be included in the network itself. Otherwise, we request our
             # rule extractor to explicitly perform the activation on the last
@@ -426,9 +430,10 @@ f
             last_activation = (
                 last_activation if last_activation in loss_function else None
             )
-            return RuleExMode(
-                mode='REM-D',
-                run=lambda *args, **kwargs: rem_d(
+
+            def _run(*args, **kwargs):
+                kwargs.pop("train_labels", None)
+                return rem_d(
                     *args,
                     **kwargs,
                     **extractor_params,
@@ -439,15 +444,41 @@ f
                         self.DATASET_INFO.output_classes,
                     )),
                 )
+            return RuleExMode(
+                mode='REM-D',
+                run=_run,
             )
 
         if name == "pedagogical":
-            return RuleExMode(
-                mode='pedagogical',
-                run=lambda *args, **kwargs: pedagogical(
+            def _run(*args, **kwargs):
+                kwargs.pop("train_labels", None)
+                return pedagogical(
                     *args,
                     **kwargs,
                     **extractor_params,
+                    feature_names=self.DATASET_INFO.feature_names,
+                    output_class_names=list(map(
+                        lambda x: x.name,
+                        self.DATASET_INFO.output_classes,
+                    )),
+                )
+            return RuleExMode(
+                mode='pedagogical',
+                run=_run,
+            )
+
+        if name == "rem-t":
+            return RuleExMode(
+                mode='REM-T',
+                run=lambda *args, **kwargs: rem_t(
+                    *args,
+                    **kwargs,
+                    **extractor_params,
+                    feature_names=self.DATASET_INFO.feature_names,
+                    output_class_names=list(map(
+                        lambda x: x.name,
+                        self.DATASET_INFO.output_classes,
+                    )),
                 ),
             )
 

@@ -177,6 +177,7 @@ def extract_rules(
     num_workers=1,
     feature_names=None,
     output_class_names=None,
+    **kwargs,
 ):
     """
     Extracts a set of rules which imitates given the provided model using the

@@ -81,6 +81,7 @@ def cross_validate_re(manager):
                 function=manager.RULE_EXTRACTOR.run,
                 model=nn_model,
                 train_data=X_train,
+                train_labels=y_train,
             ),
             serializing_fn=_serialize_rules,
             deserializing_fn=_deserialize_rules,

@@ -1,5 +1,6 @@
 """
-Baseline implementation of an algorithm to extract rules from a DNN.
+Baseline implementation of an algorithm to extract rules while ignoring the
+given DNN's predictions. It simply uses a vanilla C5 extractor.
 """
 
 import numpy as np
@@ -18,6 +19,7 @@ from dnn_rem.rules.ruleset import Ruleset
 def extract_rules(
     model,
     train_data,
+    train_labels,
     verbosity=logging.INFO,
     winnow=True,
     threshold_decimals=None,
@@ -27,8 +29,7 @@ def extract_rules(
     **kwargs,
 ):
     """
-    Extracts a set of rules which imitates given the provided model in a
-    pedagogical manner using C5 on the outputs and inputs of the network.
+    Extracts a set of rules C5.0 and ignoring the provided model.
 
     :param tf.keras.Model model: The model we want to imitate using our ruleset.
     :param np.array train_data: 2D data matrix containing all the training
@@ -41,11 +42,8 @@ def extract_rules(
     :param int min_cases: minimum number of cases for a split to happen in C5.0
     :returns Set[Rule]: the set of rules extracted from the given model.
     """
-
-    # y = output classifications of neural network. C5 requires y to be a
-    # pd.Series
-    nn_model_predictions = np.argmax(model.predict(train_data), axis=-1)
-    y = pd.Series(nn_model_predictions)
+    # C5 requires y to be a pd.Series
+    y = pd.Series(train_labels)
 
     assert len(train_data) == len(y), \
         'Unequal number of data instances and predictions'
@@ -62,7 +60,6 @@ def extract_rules(
             for i in range(train_data.shape[-1])
         ],
     )
-
     rule_conclusion_map = {}
     for i in range(num_classes):
         if output_class_names is not None:
@@ -88,4 +85,8 @@ def extract_rules(
     assert len(dnf_rules) == num_classes, \
         f'Should only exist 1 DNF rule per class: {rules} vs {dnf_rules}'
 
-    return Ruleset(dnf_rules)
+    return Ruleset(
+        dnf_rules,
+        feature_names=feature_names,
+        output_class_names=output_class_names,
+    )
