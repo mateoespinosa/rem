@@ -119,7 +119,7 @@ def build_parser():
 
     )
     parser.add_argument(
-        '--rule_drop_precent',
+        '--rule_drop_prcrent',
         default=0,
         type=float,
         help=(
@@ -378,7 +378,7 @@ def main():
     )
 
     # Drop any rules if we are interested in dropping them
-    ruleset.eliminate_rules(args.rule_drop_precent)
+    ruleset.eliminate_rules(args.rule_drop_percent)
 
     # Serialize the generated rules
     with open(args.output_file, 'wb') as f:
@@ -426,7 +426,6 @@ def main():
                 axis=1
             ),
         )
-        print("re_test_results", re_test_results)
         test_maj_class, test_maj_acc = get_majority_class(y_test)
         data_table.add_row([
             f'{args.dataset_name} (test)',  # Name

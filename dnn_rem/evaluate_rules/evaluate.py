@@ -12,7 +12,7 @@ def evaluate(
     ruleset,
     X_test,
     y_test,
-    high_fidelity_predictions,
+    high_fidelity_predictions=None,
 ):
     """
     Evaluates the performance of the given set of rules given the provided
@@ -39,7 +39,10 @@ def evaluate(
     acc = sklearn.metrics.accuracy_score(predicted_labels, y_test)
 
     # Compute Fidelity
-    fid = metrics.fidelity(predicted_labels, high_fidelity_predictions)
+    if high_fidelity_predictions:
+        fid = metrics.fidelity(predicted_labels, high_fidelity_predictions)
+    else:
+        fid = None
 
     # Compute Comprehensibility
     comprehensibility_results = metrics.comprehensibility(ruleset)
