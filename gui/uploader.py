@@ -1,30 +1,31 @@
 from flexx import flx, app
 
-
 class FileUploader(flx.BaseButton):
-    CSSS = """
-
+    CSS = """
     .flx-FileUploader {
-        background: #e8e8e8;
-        border: 1px solid #ccc;
-        transition: background 0.3s;
-        padding: 0;
-    }
-    .flx-FileUploader:hover {
-        background: #e8eaff;
+       padding: 0;
+       box-sizing: border-box;
     }
     """
 
     DEFAULT_MIN_SIZE = 10, 28
     file_name = flx.StringProp('', settable=True)
+    binary = flx.BoolProp(False, settable=True)
 
     def _render_dom(self):
         global document, FileReader
-        self.action_but = document.createElement('input')
+        self.action_but = document.createElement(
+            'input'
+        )
+        self.action_but.className = "flx-Button flx-BaseButton"
         self.file = document.createElement('input')
 
         self.action_but.type = 'button'
-        self.action_but.style = "width: 100%; height: 100%; display: block;"
+        self.action_but.style = (
+            "min-width: 10px; max-width: 1e+09px; min-height: 28px;"
+            "max-height: 1e+09px;flex-grow: 1; flex-shrink: 1;"
+            "margin-left: 0px; margin: 0; box-sizing: border-box; width: 100%;"
+        )
         self.action_but.value = self.text
         self._addEventListener(
             self.action_but,
@@ -42,10 +43,13 @@ class FileUploader(flx.BaseButton):
 
         self.reader = FileReader()
         self.reader.onload = self.file_loaded
+        self.reader.onloadstart = self.load_started
+        self.reader.onloadend = self.load_ended
+        self.reader.onerror = self.reading_error
+
         return [self.action_but, self.file]
 
     def __start_loading(self, *events):
-        print("Reacting to click!")
         self.file.click()
 
     @flx.reaction('disabled')
@@ -56,13 +60,13 @@ class FileUploader(flx.BaseButton):
             self.action_but.removeAttribute("disabled")
 
     def _handle_file(self):
-        print("In handle file with", self.file.files.length, "options")
         if self.file.files.length > 0:
             self.set_file_name(self.file.files[0].name)
-            print("Selected filename")
             self.file_selected()
-            print("Reading it now")
-            self.reader.readAsText(self.file.files[0])
+            if self.binary:
+                self.reader.readAsArrayBuffer(self.file.files[0])
+            else:
+                self.reader.readAsText(self.file.files[0])
 
     @flx.emitter
     def file_loaded(self, event):
@@ -70,6 +74,18 @@ class FileUploader(flx.BaseButton):
             'filedata': event.target.result,
             'filename': self.file_name,
         }
+
+    @flx.emitter
+    def load_started(self, event):
+        return {}
+
+    @flx.emitter
+    def load_ended(self, event):
+        return {}
+
+    @flx.emitter
+    def reading_error(self, event):
+        return event
 
     @flx.emitter
     def file_selected(self):
@@ -81,7 +97,6 @@ class FileUploader(flx.BaseButton):
 if __name__ == '__main__':
 
     class App(flx.PyComponent):
-
         def init(self):
             with flx.VBox():
                 self.uploader = FileUploader(text="Try me")
@@ -90,7 +105,6 @@ if __name__ == '__main__':
         @flx.reaction('uploader.file_loaded')
         def handle_file_upload(self, *events):
             self.text_box.set_html(events[-1]['filedata'])
-
 
     app.serve(App)
     app.start()

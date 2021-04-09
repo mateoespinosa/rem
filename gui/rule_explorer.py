@@ -90,7 +90,7 @@ def _partition_ruleset(ruleset, term):
     return contain_ruleset, disjoint_ruleset
 
 
-def _extract_hierarchy_node(ruleset):
+def _extract_hierarchy_node(ruleset, dataset=None, merge=False):
     if not len(ruleset):
         return []
     if len(ruleset) == 1:
@@ -105,16 +105,48 @@ def _extract_hierarchy_node(ruleset):
             "score": clause.score if clause is not None else 0,
         }
         if (clause is not None) and len(clause.terms):
-            # Then we still have some terms left but we will not partition
-            # on them as it will simply generate a chain
-            return [
-                {
-                    "name": _htmlify(" AND ".join(
-                        map(str, clause.terms))
-                    ),
-                    "children": [conclusion_node],
-                },
-            ]
+            if merge:
+                # Then we still have some terms left but we will not partition
+                # on them as it will simply generate a chain
+                return [
+                    {
+                        "name": _htmlify(" AND ".join(
+                            map(
+                                lambda x: x.to_cat_str(dataset)
+                                if dataset is not None else str(x),
+                                clause.terms
+                            )
+                        )),
+                        "children": [conclusion_node],
+                    },
+                ]
+            else:
+                first = None
+                current = None
+                for term in clause.terms:
+                    if current is None:
+                        current = {
+                            "name": _htmlify(
+                                term.to_cat_str(dataset)
+                                if dataset is not None else str(term)
+                            ),
+                            "children": [],
+                        }
+                        first = current
+                    else:
+                        next_elem = {
+                            "name": _htmlify(
+                                term.to_cat_str(dataset)
+                                if dataset is not None else str(term)
+                            ),
+                            "children": [],
+                        }
+                        current["children"].append(next_elem)
+                        current = next_elem
+                # Finally add the conclusion
+                current["children"].append(conclusion_node)
+                return [first]
+
         # Else this is our terminal case and we add the conclusion node and
         # nothing else
         return [conclusion_node]
@@ -138,16 +170,27 @@ def _extract_hierarchy_node(ruleset):
     # Construct the node for this term recursively by including it
     # in the exclude list
     next_node = {
-        "name": _htmlify(str(next_term)),
-        "children": _extract_hierarchy_node(ruleset=contain_ruleset),
+        "name": _htmlify(
+            next_term.to_cat_str(dataset)
+            if dataset is not None else str(next_term)
+        ),
+        "children": _extract_hierarchy_node(
+            ruleset=contain_ruleset,
+            dataset=dataset,
+            merge=merge,
+        ),
     }
 
     # And return the result of adding this guy to our list and the
     # children resulting from the rules that do not contain it
-    return [next_node] + _extract_hierarchy_node(ruleset=disjoint_ruleset)
+    return [next_node] + _extract_hierarchy_node(
+        ruleset=disjoint_ruleset,
+        dataset=dataset,
+        merge=merge,
+    )
 
 
-def _compute_tree_properties(tree, depth=0):
+def _compute_tree_properties(tree, depth=0, merge=False):
     tree["depth"] = depth
     if len(tree["children"]) == 0:
         # Then this is a leaf!
@@ -156,7 +199,7 @@ def _compute_tree_properties(tree, depth=0):
             tree["name"]: 1,
         }
         return tree
-    if (depth != 0) and len(tree["children"]) == 1 and (
+    if (depth != 0) and len(tree["children"]) == 1 and merge and (
         len(tree["children"][0]["children"]) != 0
     ):
         # Then we can collapse this into a single node for ease of visibility
@@ -180,12 +223,16 @@ def _compute_tree_properties(tree, depth=0):
     return tree
 
 
-def ruleset_hierarchy_tree(ruleset):
+def ruleset_hierarchy_tree(ruleset, dataset=None, merge=False):
     tree = {
         "name": "ruleset",
-        "children": _extract_hierarchy_node(ruleset=ruleset),
+        "children": _extract_hierarchy_node(
+            ruleset=ruleset,
+            dataset=dataset,
+            merge=merge,
+        ),
     }
-    return _compute_tree_properties(tree)
+    return _compute_tree_properties(tree, merge=merge)
 
 
 def _max_depth(tree):
@@ -673,16 +720,22 @@ class HierarchicalTreeViz(flx.Widget):
             lambda d: d.data.name,
         ).attr(
             "font-weight",
-            lambda d: "normal" if d.children or d._children else "bold",
+            lambda d: "normal" if d.children or d._children else "bolder",
         ).attr(
             "font-size",
-            lambda d: 10 if d.children or d._children else 20,
+            lambda d: 10 if d.children or d._children else 19,
         ).attr(
             "x",
             lambda d: (
                 -(_node_radius(d) + 3) if d.children or d._children
                 else (_node_radius(d) + 3)
             ),
+        ).attr(
+            "fill",
+            lambda d: (
+                "black" if d.children or d._children
+                else _class_to_color[d.data.name]
+            )
         )
 
         if node_size is None:
@@ -839,7 +892,7 @@ class HierarchicalTreeViz(flx.Widget):
         )
         self.root_tree.x0 = height/2
         self.root_tree.y0 = 0
-        self._collapse_tree()
+        self._expand_tree()
 
     def _collapse_tree(self, root_too=False):
         def _collapse(d):
@@ -879,7 +932,11 @@ class HierarchicalTreeViz(flx.Widget):
 class RuleExplorerComponent(CamvizWindow):
 
     def _compute_hierarchical_tree(self):
-        return ruleset_hierarchy_tree(ruleset=self.root.state.ruleset)
+        return ruleset_hierarchy_tree(
+            ruleset=self.root.state.ruleset,
+            dataset=self.root.state.dataset,
+            merge=self.root.state.merge_branches,
+        )
 
     def init(self):
         with ui.VSplit(

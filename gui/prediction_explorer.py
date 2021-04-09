@@ -18,7 +18,7 @@ import pandas as pd
 ## Graphical Path Visualization Component
 ###############################################################################
 
-def _get_activated_ruleset(ruleset, activations, mode="weighted"):
+def _get_activated_ruleset(ruleset, activations, mode="weighted majority"):
     vector = np.zeros([len(ruleset.feature_names)])
     for i, feature_name in enumerate(ruleset.feature_names):
         vector[i] = activations.get(feature_name, 0)
@@ -77,9 +77,17 @@ class PredictionPathComponent(flx.PyWidget):
 
     def init(self, ruleset):
         self.ruleset = ruleset
+        used_ruleset = _filter_ruleset(
+            ruleset=self.ruleset,
+            cls_name=self.predicted_val,
+        )
         with ui.VSplit(flex=1, css_class='prediction-path-container'):
             self.tree_view = HierarchicalTreeViz(
-                data=ruleset_hierarchy_tree(self.ruleset),
+                data=ruleset_hierarchy_tree(
+                    ruleset=used_ruleset,
+                    dataset=self.root.state.dataset,
+                    merge=self.root.state.merge_branches,
+                ),
                 fixed_node_radius=5,
                 class_names=self.ruleset.output_class_names(),
                 flex=0.75,
@@ -108,7 +116,7 @@ class PredictionPathComponent(flx.PyWidget):
                 self.only_positive = flx.CheckBox(
                     text="Only Predicted Class",
                     css_class='tool-bar-checkbox',
-                    checked=False,
+                    checked=True,
                 )
                 ui.Widget(flex=1)  # Filler
             ui.Widget(flex=0.15)  # Filler
@@ -133,7 +141,11 @@ class PredictionPathComponent(flx.PyWidget):
         else:
             ruleset = self.ruleset
         self.tree_view.set_data(
-            ruleset_hierarchy_tree(ruleset)
+            ruleset_hierarchy_tree(
+                ruleset=ruleset,
+                dataset=self.root.state.dataset,
+                merge=self.root.state.merge_branches,
+            )
         )
 
     @flx.reaction('expand_button.pointer_click')
@@ -312,17 +324,21 @@ class FeatureSelectorBox(flx.Widget):
     DEFAULT_MIN_SIZE = 370, 60
 
     name = flx.StringProp("", settable=True)
+    units = flx.StringProp("", settable=True)
     limits = flx.TupleProp(settable=True)
     discrete_vals = flx.ListProp([], settable=True)
     value = flx.AnyProp(settable=True)
     slider_label = flx.ComponentProp(settable=True)
 
     def init(self):
-        with ui.HSplit(css_class='feature-selector-container'):
+        with ui.HFix(css_class='feature-selector-container'):
             self.label = flx.Label(
-                html=f"<p>{self.name}</p>",
+                html=(
+                    f"<p>{self.name} ({self.units})</p>" if self.units
+                    else f"<p>{self.name}</p>"
+                ),
                 css_class='feature-selector-label',
-                flex=2,
+                flex=1.5,
             )
             with ui.VBox(flex=1):
                 ui.Widget(flex=1)  # filler
@@ -357,12 +373,14 @@ class FeatureSelectorBox(flx.Widget):
                                 ) / 10000,
                                 css_class='slider-value-label',
                                 placeholder_num=str(self.value),
+                                flex=1,
                             ))
                             self.feature_selector = flx.Slider(
                                 min=self.low_limit,
                                 max=self.high_limit,
                                 value=self.value,
                                 css_class="feature-selector-slider",
+                                flex=1,
                             )
                     else:
                         # Else we will simply use a numeric input box
@@ -402,7 +420,7 @@ class FeatureSelectorBox(flx.Widget):
     @flx.action
     def set_feat_val(self, value):
         if self.discrete_vals:
-            self.feature_selector.set_selected_index(int(value) - 1)
+            self.feature_selector.set_selected_index(int(value))
         else:
             # Then its continuous so we may use a slider or an actual
             # input box as last resource
@@ -431,7 +449,10 @@ class FeatureSelectorComponent(flx.PyWidget):
         dataset = self.root.state.dataset
         self.feature_to_box_map = {}
         for feature in self.features:
-            discrete_vals = dataset.get_allowed_values(feature)
+            discrete_vals = (
+                dataset.get_allowed_values(feature) if dataset is not None
+                else None
+            )
             for i, val in enumerate(discrete_vals or []):
                 discrete_vals[i] = \
                     self.root.state.dataset.transform_from_numeric(
@@ -445,7 +466,14 @@ class FeatureSelectorComponent(flx.PyWidget):
                     empirical=False,
                 ),
                 discrete_vals=(discrete_vals or []),
-                value=dataset.get_default_value(feature),
+                value=(
+                    dataset.get_default_value(feature) if dataset is not None
+                    else 0
+                ),
+                units=(
+                    (dataset.get_units(feature) or "") if dataset is not None
+                    else ""
+                ),
             )
             self.feature_to_box_map[feature] = feat_box
             self._mutate_feature_boxes(
@@ -461,6 +489,16 @@ class FeatureSelectorComponent(flx.PyWidget):
     def set_feature_val(self, feat_name, feat_val):
         if feat_name in self.feature_to_box_map:
             feat_box = self.feature_to_box_map[feat_name]
+            dataset = self.root.state.dataset
+            if dataset is not None:
+                feat_val = dataset.transform_from_numeric(feat_name, feat_val)
+                if dataset.is_discrete(feat_name) and (
+                    not dataset.is_categorical(feat_name)
+                ):
+                    # Then we need to move this guy one tick to the left
+                    # due to zero indexing in combo boxes
+                    feat_val -= 1
+                print("Setting", feat_name, "to", feat_val)
             feat_box.set_feat_val(feat_val)
 
     def get_values(self):
@@ -475,8 +513,7 @@ class FeatureSelectorComponent(flx.PyWidget):
 
 class PredictComponent(CamvizWindow):
 
-    def init(self, ruleset):
-        self.ruleset = ruleset
+    def _get_all_features(self):
         self.all_features = set()
         for rule in self.ruleset.rules:
             for clause in rule.premise:
@@ -487,11 +524,18 @@ class PredictComponent(CamvizWindow):
         # Make sure we display most used rules first
         self.all_features = sorted(self.all_features)
         self.class_names = sorted(self.ruleset.output_class_map.keys())
+
+    def init(self, ruleset, show_score=False):
+        self.show_score = show_score
+        self.ruleset = ruleset
+        self.true_label = None
+        self._get_all_features()
         self.mode = "weighted majority"
 
         # Figure out the initial prediction for the default values
         init_vals = self._get_feature_map([
             self.root.state.dataset.get_default_value(feature)
+            if self.root.state.dataset is not None else 0
             for feature in self.all_features
         ])
         self.predicted_val, activated_ruleset, score = _get_activated_ruleset(
@@ -524,7 +568,7 @@ class PredictComponent(CamvizWindow):
 
             with ui.VSplit(
                 css_class='feature-selector',
-                flex=(0.25, 1),
+                flex=(0.35, 1),
                 style='overflow-y: scroll;',
             ):
                 with ui.GroupWidget(
@@ -554,15 +598,23 @@ class PredictComponent(CamvizWindow):
                         style="font-size: 80%;",
                         flex=0.25,
                     )
-                    self.score_label = flx.Label(
+                    self.given_label_match = flx.Label(
                         css_class='prediction-result',
-                        html=(
-                            f"Score "
-                            f"{round(self.score_val, 2)}"
-                        ),
+                        html="",
                         style="font-size: 80%;",
-                        flex=0.25,
+                        flex=0.15,
                     )
+
+                    if self.show_score:
+                        self.score_label = flx.Label(
+                            css_class='prediction-result',
+                            html=(
+                                f"Score "
+                                f"{round(self.score_val, 2)}"
+                            ),
+                            style="font-size: 80%;",
+                            flex=0.25,
+                        )
                 with ui.HBox(
                     css_class='feature-selector-control-panel',
                     flex=0.01
@@ -592,9 +644,9 @@ class PredictComponent(CamvizWindow):
                     flx.Widget(flex=0.03)  # filler
                     self.prediction_mode = flx.ComboBox(
                         options=[
-                            "weighted majority",
                             "majority class",
                             "highest confidence",
+                            "weighted majority",
                             "highest score",
                         ],
                         selected_index=0,
@@ -621,8 +673,14 @@ class PredictComponent(CamvizWindow):
         real_vector = {}
         values = values or self.feature_selection.get_values()
         for feature_name, val in zip(self.all_features, values):
-            real_vector[feature_name] = \
-                self.root.state.dataset.transform_to_numeric(feature_name, val)
+            if self.root.state.dataset is not None:
+                real_vector[feature_name] = \
+                    self.root.state.dataset.transform_to_numeric(
+                        feature_name,
+                        val,
+                    )
+            else:
+                real_vector[feature_name] = val
         return real_vector
 
     @flx.emitter
@@ -632,7 +690,7 @@ class PredictComponent(CamvizWindow):
         }
     @flx.reaction('predict_button.pointer_click')
     def _predict_action(self, *events):
-        self._act_on_prediction()
+        self._act_on_prediction(true_label=self.true_label)
 
     @flx.reaction('upload_data.file_loaded')
     def _open_file_path(self, *events):
@@ -640,9 +698,13 @@ class PredictComponent(CamvizWindow):
         # CSV file
         # TODO: add error correction!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
         data_str = events[-1]['filedata']
+        self.true_label = None
+        dataset = self.root.state.dataset
         df = pd.read_csv(StringIO(data_str), sep=",")
         for feat_name in df.columns:
             feat_name = str(feat_name)
+            if (dataset) and (feat_name == dataset.target_col):
+                self.true_label = df[feat_name][0]
             if self.feature_selection.is_feature(feat_name):
                 self.feature_selection.set_feature_val(
                     feat_name,
@@ -650,46 +712,63 @@ class PredictComponent(CamvizWindow):
                 )
         # TODO!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
         # And now perform a prediction
-        self._act_on_prediction()
+        self._act_on_prediction(true_label=self.true_label)
 
     @flx.reaction('prediction_mode.user_selected')
     def _selected_mode(self, *events):
         self.mode = events[-1]["text"]
-        self._act_on_prediction()
+        self._act_on_prediction(true_label=self.true_label)
 
-    def _act_on_prediction(self):
+    def _act_on_prediction(self, true_label=None):
         real_vector = self._get_feature_map()
         self.predicted_val, activated_ruleset, score = _get_activated_ruleset(
             ruleset=self.ruleset,
             activations=real_vector,
-            mode=self.mode,
         )
+        used_val = self.predicted_val if true_label is None else true_label
         self.confidence_level = _get_prediction_confidence(
             ruleset=activated_ruleset,
-            cls_name=self.predicted_val,
+            cls_name=used_val,
         )
+        if true_label is not None:
+            # Then filter ruleset to only contain rules that match this label
+            activated_ruleset = _filter_ruleset(activated_ruleset, true_label)
         self.score_val = score
-        self._update_result()
-        self.graph_path.set_predicted_val(self.predicted_val)
+        self._update_result(true_label=true_label)
+        self.graph_path.set_predicted_val(used_val)
         self.graph_path.set_ruleset(activated_ruleset)
         self.rule_list.set_ruleset(activated_ruleset)
 
     @flx.action
     def reset(self):
         self.ruleset = self.root.state.ruleset
+        self.true_label = None
         self._act_on_prediction()
 
-    def _update_result(self):
-        self.prediction_label.set_html(
-            f"{self.predicted_val}"
-        )
+    def _update_result(self, true_label=None):
+
         self.confidence_label.set_html(
             f"Confidence {round(self.confidence_level * 100, 2)}%"
         )
-        self.score_label.set_html(
-            f"Score {round(self.score_val, 2)}"
-        )
+        if true_label is not None:
+            self.prediction_label.set_html(
+                f"True label: {true_label}"
+            )
+            self.given_label_match.set_html(
+                f"Predicted result: {self.predicted_val}"
+            )
+        else:
+            self.prediction_label.set_html(
+                f"{self.predicted_val}"
+            )
+            self.given_label_match.set_html("")
 
+        if self.show_score:
+            self.score_label.set_html(
+                f"Score {round(self.score_val, 2)}"
+            )
+
+        used_val = self.predicted_val if true_label is None else true_label
         self.prediction_container.apply_style(
-            f"background-color: {self._get_color(self.predicted_val)};"
+            f"background-color: {self._get_color(used_val)};"
         )

@@ -109,6 +109,7 @@ def _plot_term_distribution(
     ruleset,
     show_tools=True,
     max_entries=float("inf"),
+    dataset=None,
 ):
     num_used_rules_per_term_map = defaultdict(lambda: defaultdict(int))
     all_terms = set()
@@ -117,13 +118,20 @@ def _plot_term_distribution(
         for clause in rule.premise:
             for term in clause.terms:
                 all_terms.add(term)
-                num_used_rules_per_term_map[str(term)][rule.conclusion] += 1
+                term_str = (
+                    term.to_cat_str(dataset=dataset) if dataset is not None
+                    else str(term)
+                )
+                num_used_rules_per_term_map[term_str][rule.conclusion] += 1
 
     all_terms = list(all_terms)
     # Make sure we display most used rules first
     all_terms = sorted(
         all_terms,
-        key=lambda x: -sum(num_used_rules_per_term_map[str(x)].values()),
+        key=lambda x: -sum(num_used_rules_per_term_map[
+            x.to_cat_str(dataset=dataset) if dataset is not None
+            else str(x)
+        ].values()),
     )
 
     def _update_rank(num_entries):
@@ -133,7 +141,11 @@ def _plot_term_distribution(
             used_terms = all_terms[:]
 
         # And we will pick only the requested top entries
-        used_terms = list(map(str, used_terms))
+        used_terms = list(map(
+            lambda x: x.to_cat_str(dataset=dataset) if dataset is not None
+            else str(x),
+            used_terms
+        ))
         data = defaultdict(list)
         data["Terms"] = used_terms
         for term in used_terms:
@@ -363,7 +375,7 @@ class RuleStatisticsComponent(CamvizWindow):
         self.show_tools = self.root.state.show_tools
         self.max_entries = self.root.state.max_entries
         with ui.VSplit(
-            title="Ruleset Summary",
+            title="Cohort Summary",
             style=(
                 'overflow-y: scroll;'
                 'overflow-x: scroll;'
@@ -498,6 +510,7 @@ class RuleStatisticsComponent(CamvizWindow):
                             ruleset=self.ruleset,
                             show_tools=self.show_tools,
                             max_entries=self.max_entries,
+                            dataset=self.root.state.dataset,
                         )
                     flx.Label(
                         text="Term Distribution",

@@ -2,18 +2,22 @@ from flexx import flx, ui
 from dnn_rem.rules.rule import Rule
 from gui_window import CamvizWindow
 from dnn_rem.rules.ruleset import Ruleset
+from ruleset_loader import RulesetUploader
 
-
-def _clause_to_str(clause):
+def _clause_to_str(clause, dataset=None):
     result = ""
     terms = []
     for term in clause.terms:
-        op = '&leq;' if term.operator == '<=' else term.operator
-        terms.append(
-            f"(<span style='font-weight: bold; color: #ff6666;'>"
-            f"{term.variable}"
-            f"</span> {op} {term.threshold})"
+        new_term_str = term.to_cat_str(
+            dataset=dataset,
+            var_transform=lambda x: (
+                f"<span style='font-weight: bold; color: #ff6666;'>"
+                f"{x}"
+                f"</span>"
+            ),
         )
+        new_term_str = new_term_str.replace("<=", "&leq;")
+        terms.append(new_term_str)
     return " <span style='color: #758a7d;'>AND</span> ".join(terms)
 
 
@@ -155,7 +159,10 @@ class ClassRuleList(flx.PyWidget):
             rule_idx=rule_idx,
             clause_idx=clause_idx,
             true_idx=len(self.rules),
-            precedent=_clause_to_str(clause),
+            precedent=_clause_to_str(
+                clause=clause,
+                dataset=self.root.state.dataset,
+            ),
             conclusion=conclusion,
             score=score,
             confidence=confidence,
@@ -301,15 +308,19 @@ class RuleListComponent(CamvizWindow):
                     title="File",
                     css_class="file-edit-group",
                     flex=0.25,
-                    style="padding-bottom: 20%;",
+                    style="padding-bottom: 30%;",
                 ):
                     with ui.VBox(flex=1):
                         self.export_button = ui.Button(
-                            text="Export Model",
+                            text="Export Ruleset",
+                            css_class='tool-bar-button',
+                        )
+                        self.merge_button = RulesetUploader(
+                            text="Merge Ruleset",
                             css_class='tool-bar-button',
                         )
                         self.reset_button = ui.Button(
-                            text="Reset Model",
+                            text="Reset Ruleset",
                             css_class='tool-bar-button',
                         )
                 ui.Widget(flex=0.25)  # Filler
@@ -368,7 +379,20 @@ class RuleListComponent(CamvizWindow):
             f'rule{"" if len(rule.premise) == 1 else "s"})'
         )
 
+    @flx.reaction('reset_button.pointer_click')
+    def _reset_ruleset(self, *events):
+        print("Reseting ruleset...")
+        self.root.state.reset_ruleset()
+        # And propagate this reset everywhere
+        self.ruleset_update({"source_id": self.id})
+        self.reset()
 
+    @flx.reaction('merge_button.ruleset_load_ended')
+    def _merge_ruleset(self, *events):
+        for event in events:
+            self.root.state.merge_ruleset(event['ruleset'])
+        self.ruleset_update({"source_id": None})
+        self.reset()
 
     @flx.reaction('class_ruleset.ruleset_update')
     def bypass_update(self, *events):
