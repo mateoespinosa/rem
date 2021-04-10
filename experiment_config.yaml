@@ -55,14 +55,38 @@ hyperparameters:
     # Dropout rate to use in layer in between last hidden layer and last layer
     # If 0, then no dropout is done. This is the probability that a given
     # activation will be dropped.
-    dropout_rate: 0
+    dropout_rate: 0.0
 
-# How many trials we will attempt for finding our best initialisation. If not
-# provided or less than or equal to 1, then we will use a random initialisation
+    ###########################################
+    # Compression Parameters
+    ###########################################
+
+    # The algorithm used for compressing this model. If not compression required
+    # then set this to null.
+    # Needs to be one of: ["weight-magnitude", "unit-magnitude", null]
+    compress_mechanism: null
+
+    # Parameters specific to the selected compression algorithm. Only relevant
+    # if compress_mechanism is not null.
+    compression_params:
+        # How many prune->retraining epochs we will run for the given algorithm
+        pruning_epochs: 20
+
+        # What is the desired target sparsity? Sparsity can be weight sparsity
+        # or activation sparsity depending on the used compression mechanism
+        target_sparsity: 0.75
+
+        # We will perform compression using annealing which will enable us to
+        # have a starting sparsity target and build up towards the required
+        # end sparsity
+        initial_sparsity: 0.0
+
+# How many trials we will attempt for finding our best initialization. If not
+# provided or less than or equal to 1, then we will use a random initialization
 # at train time.
 initialisation_trials: 1
 
-# If we are looking for a best initialisation, then we also need to provide
+# If we are looking for a best initialization, then we also need to provide
 # a metric to optimize over. This can be one of [accuracy", "auc"]
 initialisation_trial_metric: "accuracy"
 
@@ -74,15 +98,70 @@ rule_extractor: "REM-D"
 extractor_params:
     # An integer indicating how many decimals should we truncate our thresholds
     # to. If null, then no truncation will happen.
-    threshold_decimals: 6
-    # The winnow parameter to use for C5. Must be a boolean.
-    winnow: True
+    # For original REM-D: set to null
+    threshold_decimals: null
+    # The winnow parameter to use for C5 for intermediate rulesets.
+    # Must be a boolean.
+    # For original REM-D: set to True
+    winnow_intermediate: True
+
+    # The winnow parameter to use for C5 for the last ruleset generation (which
+    # depends on the actual features)
+    # Must be a boolean.
+    # For original REM-D: set to True
+    winnow_features: True
+
     # The minimum number of cases for a split in C5. Must be a positive integer
     min_cases: 15
+
+    ###########################################
+    # Scalable REM-D Parameters
+    ###########################################
+
     # The number of processes (i.e. workers) to use when extracting rules from
     # our ruleset. Make sure to pick a reasonable number depending on the number
     # of cores you have
-    num_workers: 4
+    # For original REM-D: set to 1
+    num_workers: 6
+
+    # Number of blocks to partition our network in when performing intermediate
+    # rule extraction
+    # For original REM-D: set to 1
+    block_size: 1
+
+    # Bagging trials for reducing the variance in our ruleset generation
+    # Must be an integer greater than or equal to 1
+    # For original REM-D: set to 1
+    trials: 1
+
+    # Whether or not we preemptively remove redundant clauses
+    # For original REM-D: set to False
+    preemptive_redundant_removal: False
+
+    # Fraction of lowest-activating activations we will drop when building up
+    # our predictors using an intermediate layer's activations
+    # For original REM-D: set to 1
+    top_k_activations: 1
+
+    # What percent of intermediate rules we will drop using our the given
+    # ranking mechanism
+    # For original REM-D: set to 0
+    intermediate_drop_percent: 0
+
+    # We can anneal the dropping rate so that later layers drop less terms than
+    # those in the start. We do this using a linear schedule starting with
+    # initial_drop_percent and ending with intermediate_drop_percent
+    # If null and intermediate_drop_percent is greater than zero, then we will
+    # set this to intermediate_drop_percent as well.
+    # For original REM-D: set to null
+    initial_drop_percent: null
+
+    # Rule scoring mechanism to be used for dropping intermediate ruleset
+    # activations. Only relevant if intermediate_drop_percent is greater than
+    # zero.
+    # Has to be one of ["Majority", "Accuracy", "HillClimb", "Confidence"]
+    rule_score_mechanism: "Accuracy"
+
 
 # We can specify which mechanism we will obtain a score a given rule given our
 # training data and its class. When classifying a new point, we will assign

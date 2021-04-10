@@ -3,9 +3,8 @@ Code base for the experimentation and methods for REM: Rule Extraction Methods, 
 
 ## Credits
 
-TODO: link to paper and authors
-
-A lot of the code and structure of the project is strongly based on the work in this repository: https://github.com/sumaiyah/DNN-RE.
+A lot of the code and structure of the project is strongly based on the work in this repository: https://github.com/sumaiyah/DNN-RE. This has been summarized in the publication ["REM: An Integrative Rule Extraction Methodology for Explainable Data Analysis in Healthcare
+"](https://www.medrxiv.org/content/10.1101/2021.01.25.21250459v1.full) by Shams et al.
 
 
 ## Setup
