@@ -7,6 +7,9 @@ import numpy as np
 import os
 import sklearn
 import tensorflow as tf
+from dnn_rem.compression.vanilla_magnitude_compress import \
+    weight_magnitude_compress, neuron_magnitude_compress
+
 
 ################################################################################
 ## Metric Functions
@@ -277,6 +280,78 @@ def run_train_loop(
             1 if logging.getLogger().getEffectiveLevel() == logging.DEBUG else 0
         ),
     )
+
+    compress_mechanism = hyperparams["compress_mechanism"]
+    if compress_mechanism == "weight-magnitude":
+        # Then perform a magnitude-based compression in here
+        logging.debug(
+            f"Compressing model using {compress_mechanism} algorithm."
+        )
+        model = weight_magnitude_compress(
+            model,
+            X_train=X_train,
+            y_train=y_train,
+            batch_size=hyperparams.get("batch_size", 16),
+            metrics=[
+                LogitAUC(
+                    name='auc',
+                    multi_label=isinstance(
+                        model.loss,
+                        tf.keras.losses.BinaryCrossentropy
+                    ),
+                ),
+                'accuracy',
+                majority_classifier_acc,
+            ],
+            ignore_layer_fn=lambda l: "output_dense" in l.name,
+            **hyperparams.get("compression_params", {}),
+        )
+    elif compress_mechanism == "unit-magnitude":
+        # Then perform a magnitude-based compression in here
+        logging.debug(
+            f"Compressing model using {compress_mechanism} algorithm."
+        )
+        model = neuron_magnitude_compress(
+            model,
+            X_train=X_train,
+            y_train=y_train,
+            batch_size=hyperparams.get("batch_size", 16),
+            metrics=[
+                LogitAUC(
+                    name='auc',
+                    multi_label=isinstance(
+                        model.loss,
+                        tf.keras.losses.BinaryCrossentropy
+                    ),
+                ),
+                'accuracy',
+                majority_classifier_acc,
+            ],
+            ignore_layer_fn=lambda l: "output_dense" in l.name,
+            **hyperparams.get("compression_params", {}),
+        )
+    elif compress_mechanism is not None:
+        # Then time to error as we found a mechanism we don't truly support
+        raise ValueError(
+            f"Provided compression mechanism {compress_mechanism} is not a "
+            f"valid supported compression algorithm."
+        )
+
+    if compress_mechanism is not None:
+        # Then time to reevaluate the model
+        prev_nn_accuracy = nn_accuracy
+        _, nn_auc, nn_accuracy, _ = model.evaluate(
+            X_test,
+            y_test,
+            verbose=(
+                1 if logging.getLogger().getEffectiveLevel() == logging.DEBUG
+                else 0
+            ),
+        )
+        logging.info(
+            f"Uncompressed model accuracy was {prev_nn_accuracy:.4f} compared "
+            f"to compressed model {nn_accuracy:.4f}"
+        )
 
     predicted_labels = model.predict(X_test)
     auc = sklearn.metrics.roc_auc_score(
