@@ -12,6 +12,7 @@ import sys
 import time
 import warnings
 import yaml
+import cProfile
 
 
 from dnn_rem.model_training import generate_data
@@ -136,7 +137,15 @@ def build_parser():
             "experiment) and redo all computations. Otherwise, we will "
             "attempt to use as much as we can from the previous run."
         ),
-
+    )
+    parser.add_argument(
+        '--profile',
+        help=(
+            "prints out profiling statistics of the rule-extraction in terms "
+            "of low-level calls used for the extraction method."
+        ),
+        action="store_true",
+        default=False,
     )
     parser.add_argument(
         "-d",
@@ -249,8 +258,15 @@ def main():
             use_grid_search=manager.GRID_SEARCH_PARAMS.get("enable", False),
         )
 
+        if args.profile:
+            pr = cProfile.Profile()
+            pr.enable()
         # Perform n fold cross validated rule extraction on the dataset
         cross_validate_re(manager=manager)
+        # And turn off our profiler if we were using it
+        if args.profile:
+            pr.disable()
+            pr.print_stats()
 
     # And that's all folks
     return 0
