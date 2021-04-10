@@ -19,7 +19,10 @@ class ConjunctiveClause(object):
 
     def __str__(self):
         terms_str = [str(term) for term in sorted(self.terms, key=str)]
-        return f"{self.confidence}[{' AND '.join(terms_str)}]"
+        return (
+            f"({self.confidence:.4f} | {self.score:.4f})"
+            f"[{' AND '.join(terms_str)}]"
+        )
 
     def __eq__(self, other):
         return (

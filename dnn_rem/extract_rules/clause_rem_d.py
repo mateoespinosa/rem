@@ -1,175 +1,26 @@
 """
-Main implementation of the vanilla REM-D rule extraction algorithm for DNNs.
+Implementation of clause-wise REM-D algorithm. This algorithm acts in a
+similar manner to vanilla REM-D but extracts rules at a clause-wise level rather
+than at a term-wise level. This helps the model avoiding the exponential
+explosion of terms that arises from distribution term-wise clauses during
+substitution. It also helps reducing the variance in the ruleset sizes while
+also capturing correlations between terms when extracting a ruleset for the
+overall clause.
 """
-from collections import defaultdict
+
 from multiprocessing import Pool
 from tqdm import tqdm  # Loading bar for rule generation
 import dill
 import logging
 import numpy as np
-import pandas as pd
-import scipy.special as activation_fns
-import tensorflow.keras.models as keras
 
+from .rem_d import ModelCache, _serialized_function_execute
 from dnn_rem.rules.rule import Rule
 from dnn_rem.rules.ruleset import Ruleset, RuleScoreMechanism
 from dnn_rem.rules.C5 import C5
 from dnn_rem.logic_manipulator.substitute_rules import \
-    substitute
-from dnn_rem.logic_manipulator.delete_redundant_terms import \
-    global_most_general_replacement, remove_redundant_terms
+    clausewise_substitute
 from dnn_rem.logic_manipulator.merge import merge
-
-################################################################################
-## Helper Classes
-################################################################################
-
-
-class ModelCache(object):
-    """
-    Represents trained neural network model. Used as a cache mechanism for
-    storing intermediate activation values of an executed model.
-    """
-
-    def __init__(
-        self,
-        keras_model,
-        train_data,
-        activations_path=None,
-        last_activation=None,
-        feature_names=None,
-        output_class_names=None,
-    ):
-        self._model = keras_model
-        # We will dump intermediate activations into this path if and only
-        # if it is provided
-        self._activations_path = activations_path
-
-        # Keeps in memory a map between layer ID and the activations it
-        # generated when we processed the given training data
-        self._activation_map = {}
-        self._feature_names = feature_names
-        self._output_class_names = output_class_names
-
-        self._compute_layerwise_activations(
-            train_data=train_data,
-            last_activation=last_activation,
-        )
-
-    def __len__(self):
-        """
-        Returns the number of layers in this cache.
-        """
-        return len(self._model.layers)
-
-    def _compute_layerwise_activations(self, train_data, last_activation=None):
-        """
-        Store sampled activations for each layer in CSV files
-        """
-        # Run the network once with the whole data, and pick up intermediate
-        # activations
-
-        feature_extractor = keras.Model(
-            inputs=self._model.inputs,
-            outputs=[layer.output for layer in self._model.layers]
-        )
-        # Run this model which will output all intermediate activations
-        all_features = feature_extractor.predict(train_data)
-
-        # And now label each intermediate activation using our
-        # h_{layer}_{activation} notation
-        for layer_index, (layer, activation) in enumerate(zip(
-            self._model.layers,
-            all_features,
-        )):
-            # e.g. h_1_0, h_1_1, ..
-            out_shape = layer.output_shape
-            if isinstance(out_shape, list):
-                if len(out_shape) == 1:
-                    # Then we will allow degenerate singleton inputs
-                    [out_shape] = out_shape
-                else:
-                    # Else this is not a sequential model!!
-                    raise ValueError(
-                        f"We encountered some branding in input model with "
-                        f"layer at index {layer_index}"
-                    )
-            neuron_labels = []
-            for i in range(out_shape[-1]):
-                if (layer_index == 0) and (self._feature_names is not None):
-                    neuron_labels.append(self._feature_names[i])
-                elif (layer_index == (len(self) - 1)) and (
-                    self._output_class_names is not None
-                ):
-                    neuron_labels.append(self._output_class_names[i])
-                else:
-                    neuron_labels.append(f'h_{layer_index}_{i}')
-
-            # For the last layer, let's make sure it is turned into a
-            # probability distribution in case the operation was merged into
-            # the loss function. This is needed when the last activation (
-            # e.g., softmax) is merged into the loss function (
-            # e.g., softmax_cross_entropy).
-            if last_activation and (layer_index == (len(self) - 1)):
-                if last_activation == "softmax":
-                    activation = activation_fns.softmax(activation, axis=-1)
-                elif last_activation == "sigmoid":
-                    # Else time to use sigmoid function here instead
-                    activation = activation_fns.expit(activation)
-                else:
-                    raise ValueError(
-                        f"We do not support last activation {last_activation}"
-                    )
-
-            self._activation_map[layer_index] = pd.DataFrame(
-                data=activation,
-                columns=neuron_labels,
-            )
-
-            if self._activations_path is not None:
-                self._activation_map[layer_index].to_csv(
-                    f'{self._activations_path}{layer_index}.csv',
-                    index=False,
-                )
-        logging.debug('Computed layerwise activations.')
-
-    def get_layer_activations(self, layer_index, top_k=1):
-        """
-        Return activation values given layer index
-        """
-        result = self._activation_map[layer_index]
-        if (top_k != 1):
-            np_preds = result.to_numpy()
-            top_inds = np.argsort(np.mean(np.abs(np_preds), axis=0))
-            top_k = 0.1
-            top_k_indices = top_inds[-int(np.ceil(len(top_inds) * top_k)):]
-            result = result.iloc[:, top_k_indices]
-        return result
-
-    def get_layer_activations_of_neuron(self, layer_index, neuron_index):
-        """
-        Return activation values given layer index, only return the column for
-        a given neuron index
-        """
-        neuron_key = f'h_{layer_index}_{neuron_index}'
-        if (layer_index == 0) and self._feature_names:
-            neuron_key = self._feature_names[neuron_index]
-        if (layer_index == (len(self) - 1)) and self._output_class_names:
-            neuron_key = self._output_class_names[neuron_index]
-
-        return self.get_layer_activations(layer_index)[neuron_key]
-
-
-def _serialized_function_execute(serialized):
-    """
-    Helper function to execute a serialized serialized (using dill)
-
-    :param str serialized: The string containing a serialized tuple
-        (function, args) which was generated using dill.
-    :returns X: the result of executing function(*args)
-    """
-    function, args = dill.loads(serialized)
-    return function(*args)
 
 
 ################################################################################
@@ -189,7 +40,6 @@ def extract_rules(
     num_workers=1,  # 1 for original
     feature_names=None,
     output_class_names=None,
-    preemptive_redundant_removal=False,  # False for original
     top_k_activations=1,  # 1 for original
     intermediate_drop_percent=0,  # 0.0 for original
     initial_drop_percent=None,  # None for original
@@ -199,8 +49,14 @@ def extract_rules(
     **kwargs,
 ):
     """
-    Extracts a set of rules which imitates given the provided model using the
-    algorithm described in the paper.
+    Extracts a ruleset model that approximates the given Keras model.
+
+    This algorithm acts in a similar manner to vanilla REM-D but extracts rules
+    at a clause-wise level rather than at a term-wise level. This helps the
+    model avoiding the exponential explosion of terms that arises from
+    distribution term-wise clauses during substitution. It also helps reducing
+    the variance in the ruleset sizes while also capturing correlations between
+    terms when extracting a ruleset for the overall clause.
 
     :param tf.keras.Model model: The model we want to imitate using our ruleset.
     :param np.array train_data: 2D data matrix containing all the training
@@ -271,8 +127,8 @@ def extract_rules(
                     (1 / num_classes) if (last_activation == "softmax") else 0.5
                 ),
             )
-            # Extract layer-wise rules
 
+            # Extract layer-wise rules
             for hidden_layer, next_hidden_layer in zip(
                 reversed(input_hidden_acts),
                 reversed(output_hidden_acts),
@@ -289,62 +145,49 @@ def extract_rules(
                     feature_names=list(predictors.columns)
                 )
 
-                # And time to call C5.0 for each term
-                term_confidences = \
-                    class_rule.get_terms_with_conf_from_rule_premises()
-                partial_terms = list(term_confidences.keys())
-                # And get rid of terms that are negations of each other
-                terms = set()
-                for term in partial_terms:
-                    if term.negate() in terms:
-                        # Then no need to add this guy
-                        continue
-                    terms.add(term)
-                terms = list(terms)
-
-                if preemptive_redundant_removal:
-                    terms = remove_redundant_terms(terms)
-                num_terms = len(terms)
-
-                # We preemptively extract all the activations of the next layer
                 # so that we can serialize the function below using dill.
                 # Otherwise, we will hit issues due to Pandas dataframes not
                 # being compatible with dill/pickle
                 next_layer_activations = cache_model.get_layer_activations(
                     layer_index=next_hidden_layer,
                 )
+                clauses = sorted(class_rule.premise,  key=str)
+                num_clauses = len(clauses)
 
                 # Helper method to extract rules from the terms coming from a
                 # hidden layer and a given label. We encapsulate it as an
                 # anonymous function for it to be able to be used in a
                 # multi-process fashion.
-                def _extract_rules_from_term(term, i=None, pbar=None):
+                def _extract_rules_from_clause(clause, i, pbar=None):
                     if pbar and (i is not None):
                         pbar.set_description(
-                            f'Extracting rules for term {i}/'
-                            f'{num_terms} {term} of layer '
-                            f'{hidden_layer} for class {output_class_name}'
+                            f'Extracting ruleset for clause {i + 1}/'
+                            f'{num_clauses} of layer {hidden_layer} for '
+                            f'class {output_class_name}'
                         )
 
                     #  y1', y2', ...ym' = t(h(x1)), t(h(x2)), ..., t(h(xm))
-                    target = term.apply(
-                        next_layer_activations[str(term.variable)]
-                    )
+                    target = [True for _ in range(predictors.shape[0])]
+                    for term in clause.terms:
+                        target = np.logical_and(
+                            target,
+                            term.apply(
+                                next_layer_activations[str(term.variable)]
+                            )
+                        )
                     logging.debug(
                         f"\tA total of {np.count_nonzero(target)}/"
-                        f"{len(target)} training samples satisfied {term}."
+                        f"{len(target)} training samples satisfied {clause}."
                     )
-
-                    prior_rule_confidence = term_confidences[term]
                     rule_conclusion_map = {
-                        True: term,
-                        False: term.negate(),
+                        True: clause,
+                        False: f"not_{clause}",
                     }
                     new_rules = C5(
                         x=predictors,
                         y=target,
                         rule_conclusion_map=rule_conclusion_map,
-                        prior_rule_confidence=prior_rule_confidence,
+                        prior_rule_confidence=clause.confidence,
                         winnow=(
                             winnow_intermediate if hidden_layer
                             else winnow_features
@@ -354,19 +197,19 @@ def extract_rules(
                         trials=trials,
                     )
                     if pbar:
-                        pbar.update(1/num_terms)
+                        pbar.update(1/num_clauses)
                     return new_rules
 
                 # Now compute the effective number of workers we've got as
                 # it can be less than the provided ones if we have less terms
-                effective_workers = min(num_workers, num_terms)
+                effective_workers = min(num_workers, num_clauses)
                 if effective_workers > 1:
                     # Them time to do this the multi-process way
                     pbar.set_description(
                         f"Extracting rules for layer {hidden_layer} of with "
                         f"output class {output_class_name} using "
-                        f"{effective_workers} new processes for {num_terms} "
-                        f"terms"
+                        f"{effective_workers} new processes for {num_clauses} "
+                        f"clauses"
                     )
                     with Pool(processes=effective_workers) as pool:
                         # Now time to do a multiprocess map call. Because this
@@ -376,17 +219,17 @@ def extract_rules(
                         # into a tuple using dill and then the map operation
                         # will deserialize each entry using dill and execute
                         # the provided method
-                        serialized_terms = [None for _ in range(len(terms))]
-                        for j, term in enumerate(sorted(terms, key=str)):
+                        serialized_clauses = [None for _ in range(len(clauses))]
+                        for j, clause in enumerate(clauses):
                             # Let's serialize our (function, args) tuple
-                            serialized_terms[j] = dill.dumps(
-                                (_extract_rules_from_term, (term,))
+                            serialized_clauses[j] = dill.dumps(
+                                (_extract_rules_from_clause, (clause, j))
                             )
 
                         # And do the multi-process pooling call
                         new_rulesets = pool.map(
                             _serialized_function_execute,
-                            serialized_terms,
+                            serialized_clauses,
                         )
 
                     # And update our bar with only one step as we do not have
@@ -395,12 +238,12 @@ def extract_rules(
                 else:
                     # Else we will do it in this same process in one jump
                     new_rulesets = list(map(
-                        lambda x: _extract_rules_from_term(
-                            term=x[1],
+                        lambda x: _extract_rules_from_clause(
+                            clause=x[1],
                             i=x[0],
                             pbar=pbar
                         ),
-                        enumerate(sorted(terms, key=str), start=1),
+                        enumerate(clauses),
                     ))
 
                 # Time to do our simple reduction from our map above by
@@ -408,6 +251,7 @@ def extract_rules(
                 for ruleset in new_rulesets:
                     intermediate_rules.add_rules(ruleset)
 
+                intermediate_rules.rules = merge(intermediate_rules.rules)
                 logging.debug(
                     f'\tGenerated intermediate ruleset for layer '
                     f'{hidden_layer} and output class {output_class_name} has '
@@ -419,11 +263,10 @@ def extract_rules(
                     f"Substituting rules for layer {hidden_layer} with output "
                     f"class {output_class_name}"
                 )
-                class_rule = substitute(
+                class_rule = clausewise_substitute(
                     total_rule=class_rule,
                     intermediate_rules=intermediate_rules,
                 )
-
                 if not len(class_rule.premise):
                     pbar.write(
                         f"[WARNING] Found rule with empty premise of for "
@@ -436,6 +279,7 @@ def extract_rules(
                     feature_names=list(predictors.columns),
                     output_class_names=[output_class_name, None],
                 )
+
                 if (
                     (train_labels is not None) and
                     (intermediate_drop_percent) and
@@ -444,9 +288,6 @@ def extract_rules(
                     # Then let's do some rule dropping for compressing our
                     # generated ruleset and improving the complexity of the
                     # resulting algorithm
-
-
-
                     term_target = []
                     for label in train_labels:
                         if label == output_class_idx:
@@ -478,4 +319,3 @@ def extract_rules(
         feature_names=feature_names,
         output_class_names=output_class_names,
     )
-

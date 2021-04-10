@@ -20,7 +20,7 @@ C50 = importr('C50')
 C5_0 = robjects.r('C5.0')
 
 
-def _truncate(x, decimals):
+def truncate(x, decimals):
     """
     Truncates a given number x to contain at most `decimals`.
 
@@ -100,12 +100,12 @@ def _parse_C5_rule_str(
                     # Then we will truncate it in a way that we can be sure
                     # any element that was less to this one before this
                     # operation, is still  kept that way
-                    threshold = _truncate(
+                    threshold = truncate(
                         round(threshold, threshold_decimals + 1),
                         threshold_decimals
                     )
                 else:
-                    threshold = _truncate(threshold, threshold_decimals)
+                    threshold = truncate(threshold, threshold_decimals)
             rule_terms.add(Term(
                 variable=term_variables['att'],
                 operator=term_operator,
@@ -129,6 +129,10 @@ def C5(
     winnow=True,
     min_cases=15,
     threshold_decimals=None,
+    fuzzy_threshold=False,
+    seed=42,
+    sample_fraction=0,
+    trials=1,
 ):
     y = robjects.vectors.FactorVector(
         y.map(str),
@@ -136,11 +140,33 @@ def C5(
             list(map(str, rule_conclusion_map.keys()))
         ),
     )
+    if not isinstance(min_cases, int):
+        # Then this can be a fraction of training points to be including
+        # at a minimum as part of each leaf
+        if not isinstance(min_cases, float):
+            raise ValueError(
+                f"min_cases need to be an integer greater than or equal to 1 "
+                f"or a float in [0, 1]. Instead we got {min_cases}"
+            )
+        # Then let's take a fraction from the total number of points
+        # in our training data
+        min_cases = int(np.ceil(len(y) * min_cases))
+
     C5_model = C50.C5_0(
         x=x,
         y=y,
         rules=True,
-        control=C50.C5_0Control(winnow=winnow, minCases=min_cases),
+        control=C50.C5_0Control(
+            winnow=winnow,
+            minCases=min_cases,
+            seed=seed,
+            fuzzyThreshold=fuzzy_threshold,
+            sample=sample_fraction,
+            earlyStopping=True,  # Make bagging stop if it is
+                                 # not helpful
+        ),
+        trials=trials,
+
     )
     C5_rules_str = C5_model.rx2('rules')[0]
     C5_rules = _parse_C5_rule_str(

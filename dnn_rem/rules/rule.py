@@ -77,7 +77,7 @@ class Rule(object):
 
         # Be careful with the always true clause (i.e. empty). In that case, the
         # average score is always 1.
-        return total_correct_score/total if total else 1
+        return total_correct_score/total if total else 0
 
     def evaluate_score_and_explain(
         self,
@@ -132,9 +132,9 @@ class Rule(object):
             key=lambda x: list(x.premise)[0].score,
         )
         if aggregator == RulePredictMechanism.AggregateAvg:
-            # Be careful with the always true clause (i.e. empty). In that case, the
-            # average score is always 1.
-            total_correct_score = total_correct_score/total if total else 1
+            # Be careful with the always true clause (i.e. empty). In that case,
+            # the average score is always 1.
+            total_correct_score = total_correct_score/total if total else 0
         return total_correct_score, explanation
 
 

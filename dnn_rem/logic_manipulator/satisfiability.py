@@ -20,7 +20,7 @@ def is_satisfiable(clause):
 
     # Empty Clause
     if len(clause.terms) == 0:
-        return False
+        return True
 
     # Check if neurons min value >= max value
     neuron_conditions = terms_set_to_variable_dict(clause.terms)

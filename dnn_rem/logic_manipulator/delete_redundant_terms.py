@@ -30,3 +30,27 @@ def remove_redundant_terms(terms):
                 )
 
     return necessary_terms
+
+
+def global_most_general_replacement(rule):
+    """
+    Removes redundant terms in a "global" fashion (i.e., across clauses rather
+    than on a single clause basis). This means that by the end, all clauses in
+    the rule can split on a feature at most twice (i.e., one lower and one upper
+    bound)
+
+    :param Rule rule:  The rule which we will do the replacement in.
+    """
+    global_terms = set()
+    for clause in rule.premise:
+        global_terms |= clause.terms
+
+    variable_conditions = terms_set_to_variable_dict(global_terms)
+    for clause in rule.premise:
+        for term in clause.terms:
+            op = term.operator
+            new_threshold = op.most_general_value(
+                variable_conditions[term.variable][op]
+            )
+            if term.threshold != new_threshold:
+                term.threshold = new_threshold

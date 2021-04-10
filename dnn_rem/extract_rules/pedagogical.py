@@ -1,5 +1,7 @@
 """
-Baseline implementation of an algorithm to extract rules from a DNN.
+Baseline implementation of an algorithm to extract rules from a DNN using a
+simple pedagogical algorithm: we extract a decision tree that maps input
+features with the model's outputs.
 """
 
 import numpy as np
@@ -88,4 +90,8 @@ def extract_rules(
     assert len(dnf_rules) == num_classes, \
         f'Should only exist 1 DNF rule per class: {rules} vs {dnf_rules}'
 
-    return Ruleset(dnf_rules)
+    return Ruleset(
+        dnf_rules,
+        feature_names=feature_names,
+        output_class_names=output_class_names,
+    )
