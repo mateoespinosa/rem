@@ -39,13 +39,13 @@ def cross_validate_re(manager):
         f"{manager.RULE_EXTRACTOR.mode} Fidelity",
         "Extraction Time (sec)",
         "Extraction Memory (MB)",
-        "Rulset Size",
+        "Ruleset Size",
         "Average Rule Length",
     ]
-    averages = np.array([0.0] * (len(table.field_names) - 1))
     results_df = pd.DataFrame(data=[], columns=['fold'])
 
     # Extract rules from model from each fold
+    table_rows = None
     for fold in range(1, manager.N_FOLDS + 1):
 
         ########################################################################
@@ -179,10 +179,14 @@ def cross_validate_re(manager):
             num_rules,
             round(avg_rule_length, manager.ROUNDING_DECIMALS),
         ]
+        if table_rows is None:
+            table_rows = np.expand_dims(np.array(new_row), axis=0)
+        else:
+            table_rows = np.concatenate(
+                [table_rows, np.expand_dims(new_row, axis=0)],
+                axis=0,
+            )
         table.add_row([fold] + new_row)
-
-        # And accumulate this last row unto our average
-        averages += np.array(new_row) / manager.N_FOLDS
 
         # Finally, log this int the progress bar if not on quiet mode to get
         # some feedback
@@ -196,10 +200,22 @@ def cross_validate_re(manager):
     # Now that we are done, let's serialize our dataframe for further analysis
     results_df.to_csv(manager.N_FOLD_RESULTS_FP, index=False)
 
-    # Finally, let's include an average column:
+    # Finally, let's include an average column that also has a standard
+    # deviation included in it
+    avgs = list(map(
+        lambda x: round(x,  manager.ROUNDING_DECIMALS),
+        np.mean(table_rows, axis=0)
+    ))
+    stds = list(map(
+        lambda x: round(x,  manager.ROUNDING_DECIMALS),
+        np.std(table_rows, axis=0)
+    ))
+    avgs = [
+        f'{avg} ± {std}' for (avg, std) in zip(avgs, stds)
+    ]
     table.add_row(
         ["avg"] +
-        list(map(lambda x: round(x,  manager.ROUNDING_DECIMALS), averages))
+        avgs
     )
 
     # And display our results as a pretty table for the user to inspect quickly
