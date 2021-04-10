@@ -6,16 +6,17 @@ file.
 """
 
 from sklearn.metrics import accuracy_score
-from sklearn.model_selection import ShuffleSplit
+from sklearn.model_selection import StratifiedShuffleSplit
+from prettytable import PrettyTable
 import argparse
 import logging
 import numpy as np
 import os
 import pickle
+import random
 import sys
 import tensorflow as tf
 import warnings
-from prettytable import PrettyTable
 
 from dnn_rem.evaluate_rules.evaluate import evaluate as ruleset_evaluate
 from dnn_rem.experiment_runners import dataset_configs
@@ -27,6 +28,7 @@ from dnn_rem.model_training.build_and_train_model import load_model
 from dnn_rem.rules.ruleset import RuleScoreMechanism
 from dnn_rem.utils.resources import resource_compute
 
+_RANDOM_SEED = 42
 
 ################################################################################
 ## HELPER METHODS
@@ -119,7 +121,7 @@ def build_parser():
 
     )
     parser.add_argument(
-        '--rule_drop_prcrent',
+        '--rule_drop_percent',
         default=0,
         type=float,
         help=(
@@ -159,7 +161,6 @@ def get_rule_extractor(
     name = extractor_name.lower()
     if name == "rem-d":
         def _run(*args, **kwargs):
-            kwargs.pop("train_labels", None)
             return rem_d(
                 *args,
                 **kwargs,
@@ -301,10 +302,10 @@ def main():
 
     # Obtain our test and train datasets
     if args.test_percent:
-        split_gen = ShuffleSplit(
+        split_gen = StratifiedShuffleSplit(
             n_splits=1,
             test_size=args.test_percent,
-            random_state=42,
+            random_state=_RANDOM_SEED,
         )
         [(train_indices, test_indices)] = split_gen.split(X, y)
         X_train, y_train = X[train_indices], y[train_indices]
@@ -443,7 +444,6 @@ def main():
             "N/A",  # Rule extracted average length
         ])
 
-
     # Finally print out the results
     print()
     print(data_table)
@@ -455,6 +455,10 @@ def main():
 ################################################################################
 
 if __name__ == '__main__':
+    os.environ['PYTHONHASHSEED'] = str(_RANDOM_SEED)
+    tf.random.set_seed(_RANDOM_SEED)
+    np.random.seed(_RANDOM_SEED)
+    random.seed(_RANDOM_SEED)
     prev_tf_log_level = os.environ.get('TF_CPP_MIN_LOG_LEVEL', '0')
     os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
     try:

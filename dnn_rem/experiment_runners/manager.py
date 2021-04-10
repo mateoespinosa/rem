@@ -22,6 +22,9 @@ from . import dataset_configs
 from dnn_rem.extract_rules.pedagogical import extract_rules as pedagogical
 from dnn_rem.extract_rules.rem_t import extract_rules as rem_t
 from dnn_rem.extract_rules.rem_d import extract_rules as rem_d
+from dnn_rem.extract_rules.srem_d import extract_rules as srem_d
+from dnn_rem.extract_rules.crem_d import extract_rules as crem_d
+from dnn_rem.extract_rules.clause_rem_d import extract_rules as clause_rem_d
 from dnn_rem.rules.ruleset import RuleScoreMechanism
 
 
@@ -150,18 +153,10 @@ class ExperimentManager(object):
         self.validate_config_object(config)
 
         # Obtain our rule score mode
-        self.RULE_SCORE_MECHANISM = None
         mechanism_name = config.get("rule_score_mechanism", "majority")
-        search_name = mechanism_name.lower()
-        for enum_entry in RuleScoreMechanism:
-            if enum_entry.name.lower() == search_name:
-                self.RULE_SCORE_MECHANISM = enum_entry
-        if self.RULE_SCORE_MECHANISM is None:
-            raise ValueError(
-                f'We do not support score mode "{mechanism_name}" as a rule '
-                f'scoring mechanism. We support the following rule scoring '
-                f'mechanisms: {list(map(lambda x: x.name, RuleScoreMechanism))}'
-            )
+        self.RULE_SCORE_MECHANISM = RuleScoreMechanism.from_string(
+            mechanism_name
+        )
         self.RULE_DROP_PRECENT = config.get("rule_elimination_percent", 0)
 
         # Now time to build all the directory variables we will need to
@@ -379,7 +374,7 @@ f
 
     def get_rule_extractor(self, extractor_name, **extractor_params):
         name = extractor_name.lower()
-        if name == "rem-d":
+        if name in ["rem-d", "srem-d", "crem-d", "clause-rem-d"]:
             loss_function = self.HYPERPARAMS.get(
                 "loss_function",
                 "softmax_xentr",
@@ -388,6 +383,19 @@ f
                 "last_activation",
                 "softmax",
             )
+            if name == "rem-d":
+                run_fn = rem_d
+                real_name = "REM-D"
+            elif name == "srem-d":
+                run_fn = srem_d
+                real_name = "sREM-D"
+            elif name == "crem-d":
+                run_fn = crem_d
+                real_name = "cREM-D"
+            elif name == "clause-rem-d":
+                run_fn = clause_rem_d
+                real_name = "Clause-REM-D"
+
             # We set the last activation to None here if it is going to be
             # be included in the network itself. Otherwise, we request our
             # rule extractor to explicitly perform the activation on the last
@@ -397,8 +405,7 @@ f
             )
 
             def _run(*args, **kwargs):
-                kwargs.pop("train_labels", None)
-                return rem_d(
+                return run_fn(
                     *args,
                     **kwargs,
                     **extractor_params,
@@ -410,7 +417,7 @@ f
                     )),
                 )
             return RuleExMode(
-                mode='REM-D',
+                mode=real_name,
                 run=_run,
             )
 

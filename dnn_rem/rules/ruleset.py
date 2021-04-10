@@ -7,7 +7,9 @@ import numpy as np
 import random
 import pickle
 
+from dnn_rem.logic_manipulator.merge import merge
 from .rule import Rule, RulePredictMechanism
+from .clause import ConjunctiveClause
 
 ################################################################################
 ## Exposed Classes
@@ -31,18 +33,47 @@ class RuleScoreMechanism(Enum):
     Confidence = 3
 
 
+    @staticmethod
+    def from_string(mechanism_name):
+        search_name = mechanism_name.lower()
+        for enum_entry in RuleScoreMechanism:
+            if enum_entry.name.lower() == search_name:
+                return enum_entry
+        raise ValueError(
+            f'We do not support score mode "{mechanism_name}" as a rule '
+            f'scoring mechanism. We support the following rule scoring '
+            f'mechanisms: {list(map(lambda x: x.name, RuleScoreMechanism))}'
+        )
+
+
 class Ruleset(object):
     """
     Represents a set of disjunctive rules, one with its own conclusion.
     """
 
-    def __init__(self, rules=None, feature_names=None, output_class_names=None):
+    def __init__(
+        self,
+        rules=None,
+        feature_names=None,
+        output_class_names=None,
+        default_class=None,
+    ):
         self.rules = rules or set()
         self.feature_names = feature_names
         self.output_class_map = dict(zip(
             output_class_names or [],
             range(len(output_class_names or [])),
         ))
+        self.default_class = default_class
+
+    def copy(self):
+        # Perform a deep copy using pickle serialization
+        pickled = pickle.dumps(self)
+        return pickle.loads(pickled)
+
+    def merge(self, other_ruleset):
+        self.rules.update(other_ruleset.rules)
+        self.rules = merge(self.rules)
 
     def output_class_names(self):
         return sorted(
@@ -111,14 +142,19 @@ class Ruleset(object):
                 key=class_ruleset_scores.get
             )
             max_score = class_ruleset_scores[max_rule]
-            max_set = [
-                rule for (rule, score) in class_ruleset_scores.items()
-                if score == max_score
-            ]
-            if len(max_set) > 1:
-                # Then select one at random
-                max_rule = random.choice(max_set)
-            max_class = max_rule.conclusion
+            if (max_score == 0) and (self.default_class is not None):
+                # Then time to use the default class as the output given
+                # that no other rule got activated
+                max_class = self.default_class
+            else:
+                max_set = [
+                    rule for (rule, score) in class_ruleset_scores.items()
+                    if score == max_score
+                ]
+                if len(max_set) > 1:
+                    # Then select one at random
+                    max_rule = random.choice(max_set)
+                max_class = max_rule.conclusion
 
             # Output class encoding is index out output neuron
             if not use_label_names:
@@ -190,14 +226,19 @@ class Ruleset(object):
                 key=lambda x: class_ruleset_scores[x][0]
             )
             max_score = class_ruleset_scores[max_rule][0]
-            max_set = [
-                rule for rule, (score, _) in class_ruleset_scores.items()
-                if score == max_score
-            ]
-            if len(max_set) > 1:
-                # Then select one at random
-                max_rule = random.choice(max_set)
-            max_class = max_rule.conclusion
+            if (max_score == 0) and (self.default_class is not None):
+                # Then time to use the default class as the output given
+                # that no other rule got activated
+                max_class = self.default_class
+            else:
+                max_set = [
+                    rule for (score, rule) in class_ruleset_scores.items()
+                    if score == max_score
+                ]
+                if len(max_set) > 1:
+                    # Then select one at random
+                    max_rule = random.choice(max_set)
+                max_class = max_rule.conclusion
 
             # Output class encoding is index out output neuron
             if not use_label_names:
@@ -208,11 +249,15 @@ class Ruleset(object):
                 y.append(max_class)
             # And add the explanation as well. We will include all the negative
             # explanations as well as the positive ones
-            if only_positive or (aggregator in [
-                RulePredictMechanism.Max,
-                RulePredictMechanism.Min,
-                RulePredictMechanism.Count,
-            ]):
+            if (max_score != 0) and (
+                only_positive or (
+                    aggregator in [
+                        RulePredictMechanism.Max,
+                        RulePredictMechanism.Min,
+                        RulePredictMechanism.Count,
+                    ]
+                )
+            ):
                 # Then we only sow the positive classes as those are the only
                 # valid explanations for the result when no aggregation happens
                 explanations[i] = class_ruleset_scores[max_rule][1]
@@ -227,6 +272,7 @@ class Ruleset(object):
         X,
         y,
         score_mechanism=RuleScoreMechanism.Majority,
+        use_label_names=False,
         k=4,
     ):
         """
@@ -257,6 +303,12 @@ class Ruleset(object):
             # Each run of rule extraction return a DNF rule for each output
             # class
             rule_output = class_rule.conclusion
+            if not use_label_names:
+                # Then turn this into its encoding
+                rule_output = self.output_class_map.get(
+                    rule_output,
+                    rule_output,
+                )
 
             # Each clause in the DBF rule is considered a rule for this output
             # class
@@ -307,7 +359,6 @@ class Ruleset(object):
                             # Then we include the extra correction term from
                             # the length of the ruleset
                             clause.score += correct / len(clause.terms)
-
                         else:
                             raise ValueError(
                                 f"Unsupported scoring mechanism "
@@ -325,8 +376,23 @@ class Ruleset(object):
         return Ruleset(
             rules=rules,
             feature_names=self.feature_names,
-            output_class_names=self.output_class_names,
+            output_class_names=self.output_class_names(),
+            default_class=self.default_class,
         )
+
+    def num_clauses(self):
+        result = 0
+        for rule in self.rules:
+            result += len(rule.premise)
+        return result
+
+    def num_terms(self):
+        seen_terms = set()
+        for rule in self.rules:
+            for clause in rule.premise:
+                for term in clause.terms:
+                    seen_terms.add(term)
+        return len(seen_terms)
 
     def add_rules(self, rules):
         self.rules = self.rules.union(rules)
@@ -360,8 +426,13 @@ class Ruleset(object):
             premise = sorted(list(class_rule.premise), key=lambda x: x.score)
 
             # 2. Eliminate the lowest `percent` percent of the rules
-            to_eliminate = int(len(premise) * percent)
-            premise = premise[:-to_eliminate]
+            # PS: make sure we leave at least one rule in here....
+            to_eliminate = min(
+                int(round(len(premise) * percent)),
+                len(premise) - 1,
+            )
+            if to_eliminate:
+                premise = premise[:-to_eliminate]
 
             # 3. And update this class's premise
             class_rule.premise = set(premise)
@@ -374,6 +445,58 @@ class Ruleset(object):
         for rule in self.rules:
             if conclusion == rule.conclusion:
                 premises = premises.union(rule.premise)
+
+        return premises
+
+    def get_conditional_rule_premises_by_conclusion(
+        self,
+        conclusion,
+        condition,
+        condition_variables,
+    ):
+        """
+        Return a set of conjunctive clauses that all imply a given conclusion
+        while conditioned on the truth value of the given condition variable.
+        """
+        premises = set()
+        condition = condition or {}
+        for rule in self.rules:
+            if conclusion != rule.conclusion:
+                # Then we are not even interested in this guy
+                continue
+            # Else, let's only add the clauses that satisfy the given condition
+            # while also deleting those terms with extra features which we are
+            # not conditioning on
+            new_clauses = []
+            for clause in rule.premise:
+                new_terms = set()
+                to_include = True
+                for term in clause.terms:
+                    if term.variable in condition_variables:
+                        # Then this is one of the variable we can condition on
+                        # Let's check whether or not we are conditioning
+                        # on it
+                        if term.variable in condition:
+                            if not term.apply(
+                                condition[term.variable]
+                            ):
+                                # Then our condition is not satisfied in here!
+                                to_include = False
+                                break
+
+                        # Otherwise we will simply ignore it as we are currently
+                        # marginalizing it
+                    else:
+                        # Else this term goes as is in our clause
+                        new_terms.add(term)
+                if to_include and new_terms:
+                    new_clauses.append(ConjunctiveClause(
+                        terms=new_terms,
+                        confidence=clause.confidence,
+                        score=clause.score,
+                    ))
+
+            premises.update(new_clauses)
 
         return premises
 
@@ -441,11 +564,21 @@ class Ruleset(object):
     def from_file(self, path):
         with open(path, 'rb') as f:
             deserialized = pickle.load(f)
+        self._load_from_deserialized(deserialized)
+        return self
+
+    def _load_from_deserialized(self, deserialized):
         if isinstance(deserialized, tuple):
             deserialized = deserialized[0]
         self.rules = deserialized.rules
         self.feature_names = deserialized.feature_names
+        # For backwards compatibility
+        self.default_class = getattr(deserialized, "default_class", None)
         self.output_class_map = deserialized.output_class_map
+
+    def from_binary_blob(self, blob):
+        deserialized = pickle.loads(blob)
+        self._load_from_deserialized(deserialized)
         return self
 
     def to_json(self, **kwargs):
@@ -455,4 +588,5 @@ class Ruleset(object):
             result["rules"].append(rule.to_json())
         result["feature_names"] = list(self.feature_names)
         result["output_class_map"] = dict(self.output_class_map)
+        result["default_class"] = self.default_class
         return result

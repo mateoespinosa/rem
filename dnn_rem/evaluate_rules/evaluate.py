@@ -4,6 +4,7 @@ Methods used for evaluating the performance of a given set of rules.
 
 import sklearn
 import tensorflow as tf
+import logging
 
 from . import metrics
 
@@ -33,31 +34,40 @@ def evaluate(
     """
 
     # Make our predictions using our ruleset
-    predicted_labels = ruleset.predict(X_test)
-
-    # Compute Accuracy
-    acc = sklearn.metrics.accuracy_score(predicted_labels, y_test)
-
-    # Compute Fidelity
-    if high_fidelity_predictions:
-        fid = metrics.fidelity(predicted_labels, high_fidelity_predictions)
+    if ruleset.num_clauses() >= 15000:
+        logging.warning(
+            f"Ruleset has {ruleset.num_clauses()} clauses in it. Too many "
+            f"for making an efficient prediction."
+        )
+        acc = 0
+        auc = 0
+        fid = 0
     else:
-        fid = None
+        predicted_labels = ruleset.predict(X_test)
+
+        # Compute Accuracy
+        acc = sklearn.metrics.accuracy_score(predicted_labels, y_test)
+
+        # Compute the AUC using this model. For multiple labels, we average
+        # across all labels
+        auc = sklearn.metrics.roc_auc_score(
+            y_test,
+            predicted_labels,
+            multi_class="ovr",
+            average='samples',
+        )
+
+        # Compute Fidelity
+        if high_fidelity_predictions is not None:
+            fid = metrics.fidelity(predicted_labels, high_fidelity_predictions)
+        else:
+            fid = None
 
     # Compute Comprehensibility
     comprehensibility_results = metrics.comprehensibility(ruleset)
 
     # Overlapping features
     n_overlapping_features = metrics.overlapping_features(ruleset)
-
-    # Compute the AUC using this model. For multiple labels, we average
-    # across all labels
-    auc = sklearn.metrics.roc_auc_score(
-        tf.keras.utils.to_categorical(y_test),
-        tf.keras.utils.to_categorical(predicted_labels),
-        multi_class="ovr",
-        average='samples',
-    )
 
     # And wrap them all together
     results = dict(

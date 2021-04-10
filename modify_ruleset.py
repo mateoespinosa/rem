@@ -6,14 +6,14 @@ mechanism used by the ruleset.
 """
 
 from sklearn.metrics import accuracy_score
-from sklearn.model_selection import ShuffleSplit
+from sklearn.model_selection import StratifiedShuffleSplit
 import argparse
 import logging
 import numpy as np
+import random
 import os
 import pickle
 import sys
-import tensorflow as tf
 import warnings
 from prettytable import PrettyTable
 
@@ -21,8 +21,9 @@ from prettytable import PrettyTable
 from dnn_rem.evaluate_rules.evaluate import evaluate as ruleset_evaluate
 from dnn_rem.experiment_runners import dataset_configs
 from dnn_rem.rules.ruleset import RuleScoreMechanism
-from dnn_rem.utils.resources import resource_compute
 
+
+_RANDOM_SEED = 42
 
 ################################################################################
 ## HELPER METHODS
@@ -139,7 +140,6 @@ def _evalutate_ruleset(
     y_train,
     X_test=None,
     y_test=None,
-    dataset_name="",
 ):
     data_table = PrettyTable()
     data_table.field_names = [
@@ -165,7 +165,7 @@ def _evalutate_ruleset(
     avg_rule_length /= sum(re_train_results['n_rules_per_class'])
     train_maj_class, train_maj_acc = get_majority_class(y_train)
     data_table.add_row([
-        f'{dataset_name} (train)',  # Name
+        f'{dataset_descr.name} (train)',  # Name
         len(X_train),  # Output samples
         len(dataset_descr.feature_names),  # Output features
         len(dataset_descr.output_classes),  # Output classes
@@ -184,7 +184,7 @@ def _evalutate_ruleset(
         )
         test_maj_class, test_maj_acc = get_majority_class(y_test)
         data_table.add_row([
-            f'{dataset_name} (test)',  # Name
+            f'{dataset_descr.name} (test)',  # Name
             len(X_test),  # Output samples
             len(dataset_descr.feature_names),  # Output features
             len(dataset_descr.output_classes),  # Output classes
@@ -248,10 +248,10 @@ def main():
 
         # Obtain our test and train datasets
         if args.test_percent:
-            split_gen = ShuffleSplit(
+            split_gen = StratifiedShuffleSplit(
                 n_splits=1,
                 test_size=args.test_percent,
-                random_state=42,
+                random_state=_RANDOM_SEED,
             )
             [(train_indices, test_indices)] = split_gen.split(X, y)
             X_train, y_train = X[train_indices], y[train_indices]
@@ -286,7 +286,6 @@ def main():
             y_train=y_train,
             X_test=X_test,
             y_test=y_test,
-            dataset_name=args.dataset_name,
         )
 
     # Get the rule scoring mechanism
@@ -335,7 +334,6 @@ def main():
             y_train=y_train,
             X_test=X_test,
             y_test=y_test,
-            dataset_name=args.dataset_name,
         )
 
 
@@ -344,6 +342,10 @@ def main():
 ################################################################################
 
 if __name__ == '__main__':
+    os.environ['PYTHONHASHSEED'] = str(_RANDOM_SEED)
+    tf.random.set_seed(_RANDOM_SEED)
+    np.random.seed(_RANDOM_SEED)
+    random.seed(_RANDOM_SEED)
     prev_tf_log_level = os.environ.get('TF_CPP_MIN_LOG_LEVEL', '0')
     os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
     try:

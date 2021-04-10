@@ -47,8 +47,8 @@ AVAILABLE_DATASETS = [
 
 
 class FeatureDescriptor(object):
-    def __init__(self):
-        pass
+    def __init__(self, units=None):
+        self.units = units
 
     def is_normalized(self):
         return False
@@ -80,8 +80,9 @@ class RealDescriptor(FeatureDescriptor):
         max_val=float("inf"),
         min_val=-float("inf"),
         normalized=False,
+        units=None,
     ):
-        super(RealDescriptor, self).__init__()
+        super(RealDescriptor, self).__init__(units=units)
         self.normalized = normalized
         self.max_val = max_val
         self.min_val = min_val
@@ -111,8 +112,8 @@ class RealDescriptor(FeatureDescriptor):
 
 
 class DiscreteNumericDescriptor(RealDescriptor):
-    def __init__(self, values):
-        super(DiscreteNumericDescriptor, self).__init__()
+    def __init__(self, values, units=None):
+        super(DiscreteNumericDescriptor, self).__init__(units=units)
         self.values = sorted(values)
         if values:
             self.max_val = values[-1]
@@ -133,7 +134,7 @@ class DiscreteNumericDescriptor(RealDescriptor):
 
 
 class DiscreteEncodingDescriptor(DiscreteNumericDescriptor):
-    def __init__(self, encoding_map):
+    def __init__(self, encoding_map, units=None):
         self.encoding_map = encoding_map
         values = []
         self.inverse_map = {}
@@ -143,7 +144,10 @@ class DiscreteEncodingDescriptor(DiscreteNumericDescriptor):
             values.append(numeric_val)
             self.inverse_map[numeric_val] = datum_name
 
-        super(DiscreteEncodingDescriptor, self).__init__(values)
+        super(DiscreteEncodingDescriptor, self).__init__(
+            values=values,
+            units=units,
+        )
 
     def default_value(self):
         return self._default_value
@@ -152,17 +156,26 @@ class DiscreteEncodingDescriptor(DiscreteNumericDescriptor):
         return True
 
     def transform_to_numeric(self, x):
+        if isinstance(x, (int)):
+            # Then this is already the numeric encoding
+            return x
         return self.encoding_map[x]
 
     def transform_from_numeric(self, x):
+        if not isinstance(x, int):
+            # Then this is already not a numeric encoding
+            return x
         return self.inverse_map[x]
 
 
 class TrivialCatDescriptor(DiscreteEncodingDescriptor):
-    def __init__(self, vals):
-        super(TrivialCatDescriptor, self).__init__(dict(
-            zip(vals, range(len(vals)))
-        ))
+    def __init__(self, vals, units=None):
+        super(TrivialCatDescriptor, self).__init__(
+            encoding_map=dict(
+                zip(vals, range(len(vals)))
+            ),
+            units=units,
+        )
 
 
 ################################################################################
@@ -220,9 +233,8 @@ class DatasetDescriptor(object):
         self.X = None
         self.y = None
 
-    def read_data(self, data_path):
-        # Read our dataset. This will be the first thing we will do:
-        self.data = pd.read_csv(data_path, sep=',')
+    def process_dataframe(self, df):
+        self.data = df
         # Set the target column, number of inputs, and feature names of our
         # dataset accordingly from the opened file if they were not provided
         self.target_col = self.target_col or (
@@ -255,6 +267,10 @@ class DatasetDescriptor(object):
                 )
         return self.X, self.y, self.data
 
+    def read_data(self, data_path):
+        # Read our dataset. This will be the first thing we will do:
+        return self.process_dataframe(pd.read_csv(data_path, sep=','))
+
     def get_feature_ranges(self, feature_name):
         if feature_name in self.feature_descriptors:
             return self.feature_descriptors[feature_name].numeric_bounds()
@@ -273,6 +289,36 @@ class DatasetDescriptor(object):
             if descriptor.is_discrete():
                 return descriptor.values
             return None
+        return None
+
+    def is_categorical(self, feature_name):
+        if feature_name not in self.feature_descriptors and (
+            None in self.feature_descriptors
+        ):
+            feature_name = None
+
+        if feature_name in self.feature_descriptors:
+            return self.feature_descriptors[feature_name].is_categorical()
+        return False
+
+    def is_discrete(self, feature_name):
+        if feature_name not in self.feature_descriptors and (
+            None in self.feature_descriptors
+        ):
+            feature_name = None
+
+        if feature_name in self.feature_descriptors:
+            return self.feature_descriptors[feature_name].is_discrete()
+        return False
+
+    def get_units(self, feature_name):
+        if feature_name not in self.feature_descriptors and (
+            None in self.feature_descriptors
+        ):
+            feature_name = None
+
+        if feature_name in self.feature_descriptors:
+            return self.feature_descriptors[feature_name].units
         return None
 
     def get_default_value(self, feature_name):
@@ -404,7 +450,6 @@ def get_data_configuration(dataset_name):
             OutputClass(name='y1', encoding=1),
         )
         return DatasetDescriptor(
-            n_features=5,
             name=dataset_name,
             output_classes=output_classes,
             target_col='y',
@@ -415,7 +460,6 @@ def get_data_configuration(dataset_name):
             OutputClass(name='y1', encoding=1),
         )
         return DatasetDescriptor(
-            n_features=5,
             name=dataset_name,
             output_classes=output_classes,
             target_col='y',
@@ -426,7 +470,6 @@ def get_data_configuration(dataset_name):
             OutputClass(name='positive', encoding=1),
         )
         return DatasetDescriptor(
-            n_features=1000,
             name=dataset_name,
             output_classes=output_classes,
             preprocessing=unit_scale_preprocess,
@@ -441,7 +484,6 @@ def get_data_configuration(dataset_name):
             OutputClass(name='B', encoding=1),
         )
         return DatasetDescriptor(
-            n_features=30,
             name=dataset_name,
             output_classes=output_classes,
             target_col='diagnosis',
@@ -462,7 +504,6 @@ def get_data_configuration(dataset_name):
                 output_classes=output_classes,
             )
         return DatasetDescriptor(
-            n_features=4,
             name=dataset_name,
             output_classes=output_classes,
             preprocessing=preprocess_fun,
@@ -474,7 +515,6 @@ def get_data_configuration(dataset_name):
             OutputClass(name='B-Z', encoding=1),
         )
         return DatasetDescriptor(
-            n_features=16,
             name=dataset_name,
             output_classes=output_classes,
             target_col='letter',
@@ -485,7 +525,6 @@ def get_data_configuration(dataset_name):
             OutputClass(name='1-9', encoding=1),
         )
         return DatasetDescriptor(
-            n_features=784,
             name=dataset_name,
             output_classes=output_classes,
             target_col='digit',
@@ -499,7 +538,6 @@ def get_data_configuration(dataset_name):
             OutputClass(name='COAD', encoding=4),
         )
         return DatasetDescriptor(
-            n_features=20502,
             name=dataset_name,
             output_classes=output_classes,
             target_col='TCGA',
@@ -510,7 +548,6 @@ def get_data_configuration(dataset_name):
             OutputClass(name='DR', encoding=1),
         )
         return DatasetDescriptor(
-            n_features=1000,
             name=dataset_name,
             output_classes=output_classes,
             target_col='DR',
@@ -522,7 +559,6 @@ def get_data_configuration(dataset_name):
             OutputClass(name='DR', encoding=1),
         )
         return DatasetDescriptor(
-            n_features=350,
             name=dataset_name,
             output_classes=output_classes,
             target_col='DR',
@@ -534,7 +570,6 @@ def get_data_configuration(dataset_name):
             OutputClass(name='Positive', encoding=1),
         )
         return DatasetDescriptor(
-            n_features=350,
             name=dataset_name,
             output_classes=output_classes,
             target_col='ER_Expr',
@@ -546,7 +581,6 @@ def get_data_configuration(dataset_name):
             OutputClass(name='Positive', encoding=1),
         )
         return DatasetDescriptor(
-            n_features=13,
             name=dataset_name,
             output_classes=output_classes,
             target_col='ER_Expr',
@@ -558,7 +592,6 @@ def get_data_configuration(dataset_name):
             OutputClass(name='Positive', encoding=1),
         )
         return DatasetDescriptor(
-            n_features=1350,
             name=dataset_name,
             output_classes=output_classes,
             target_col='ER_Expr',
@@ -570,7 +603,6 @@ def get_data_configuration(dataset_name):
             OutputClass(name='Positive', encoding=1),
         )
         return DatasetDescriptor(
-            n_features=1013,
             name=dataset_name,
             output_classes=output_classes,
             target_col='ER_Expr',
@@ -582,7 +614,6 @@ def get_data_configuration(dataset_name):
             OutputClass(name='ILC', encoding=1),
         )
         return DatasetDescriptor(
-            n_features=1000,
             name=dataset_name,
             output_classes=output_classes,
             preprocessing=unit_scale_preprocess,
@@ -598,7 +629,6 @@ def get_data_configuration(dataset_name):
             OutputClass(name='ILC', encoding=1),
         )
         return DatasetDescriptor(
-            n_features=1001,
             name=dataset_name,
             output_classes=output_classes,
             preprocessing=unit_scale_preprocess,
@@ -614,7 +644,6 @@ def get_data_configuration(dataset_name):
             OutputClass(name='ILC', encoding=1),
         )
         return DatasetDescriptor(
-            n_features=1004,
             name=dataset_name,
             output_classes=output_classes,
             preprocessing=unit_scale_preprocess,
@@ -634,7 +663,6 @@ def get_data_configuration(dataset_name):
             OutputClass(name='IDC-MED', encoding=5),
         )
         return DatasetDescriptor(
-            n_features=368,
             name=dataset_name,
             output_classes=output_classes,
             target_col='Histological_Type',
@@ -650,7 +678,6 @@ def get_data_configuration(dataset_name):
             OutputClass(name='IDC-MED', encoding=5),
         )
         return DatasetDescriptor(
-            n_features=368,
             name=dataset_name,
             output_classes=output_classes,
             target_col='Histological_Type',
@@ -662,7 +689,6 @@ def get_data_configuration(dataset_name):
             OutputClass(name='ILC', encoding=1),
         )
         return DatasetDescriptor(
-            n_features=368,
             name=dataset_name,
             output_classes=output_classes,
             target_col='Histological_Type',
@@ -678,7 +704,6 @@ def get_data_configuration(dataset_name):
             OutputClass(name='IDC-MED', encoding=5),
         )
         return DatasetDescriptor(
-            n_features=1000,
             name=dataset_name,
             output_classes=output_classes,
             preprocessing=unit_scale_preprocess,
@@ -694,7 +719,6 @@ def get_data_configuration(dataset_name):
             OutputClass(name='ER Positive', encoding=1),
         )
         return DatasetDescriptor(
-            n_features=368,
             name=dataset_name,
             output_classes=output_classes,
             target_col='ER_Expr',
@@ -706,7 +730,6 @@ def get_data_configuration(dataset_name):
             OutputClass(name='DR', encoding=1),
         )
         return DatasetDescriptor(
-            n_features=368,
             name=dataset_name,
             output_classes=output_classes,
             target_col='DR',
@@ -722,28 +745,49 @@ def get_data_configuration(dataset_name):
             target_col='pCR',
             feature_descriptors={
                 None: RealDescriptor(),
-                "Age": DiscreteNumericDescriptor(list(range(1, 100))),
+                "Age": DiscreteNumericDescriptor(
+                    list(range(1, 100)),
+                    units="yrs",
+                ),
                 "Receptor_Status": TrivialCatDescriptor(
                     ["Negative", "Positive"]
                 ),
-                "Tumour_subtype": DiscreteNumericDescriptor(list(range(5))),
+                "Tumour_subtype": TrivialCatDescriptor([
+                    "Dictal(NST)",
+                    "Metaplastic",
+                    "Medualiary",
+                    "Apocrine",
+                    "Mixed",
+                ]),
                 "Ductal_subtype": TrivialCatDescriptor(["No Ductal", "Ductal"]),
                 "Grade": DiscreteNumericDescriptor([1, 2, 3]),
-                "Largest_Clinical_Size": RealDescriptor(min_val=0),
+                "Largest_Clinical_Size": RealDescriptor(min_val=0, units="mm"),
                 "T4_or_Inflammatory": TrivialCatDescriptor(["No", "Yes"]),
                 "Clinical_Nodal_Involvement": TrivialCatDescriptor(
                     ["No", "Yes"]
                 ),
-                "Clinical_Stage": DiscreteNumericDescriptor(list(range(6))),
-                "Smoking_category": DiscreteNumericDescriptor(list(range(3))),
-                "BMI": RealDescriptor(min_val=0),
+                "Clinical_Stage": TrivialCatDescriptor([
+                    "IA",
+                    "IIA",
+                    "IIIA",
+                    "IIB",
+                    "IIIB",
+                    "IIIC",
+                ]),
+                "Smoking_category": TrivialCatDescriptor([
+                    "Never",
+                    "Current",
+                    "Former",
+                    "Unknown",
+                ]),
+                "BMI": RealDescriptor(min_val=0, units="kg/m^2"),
                 "anthracycline": TrivialCatDescriptor(["No", "Yes"]),
                 "PARTNER": TrivialCatDescriptor(["No", "Yes"]),
                 "treatment_group": TrivialCatDescriptor(["Control", "Olaparib"]),
                 "TILs": RealDescriptor(min_val=0, max_val=1),
                 "EGFR": TrivialCatDescriptor(["Negative", "Positive"]),
                 "CK5_6": TrivialCatDescriptor(["Negative", "Positive"]),
-                "ARIHC": RealDescriptor(min_val=0, max_val=100),
+                "ARIHC": RealDescriptor(min_val=0, max_val=100, units="%"),
                 "pCR": RealDescriptor(["non-pCR", "pCR"]),
             }
         )
