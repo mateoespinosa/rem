@@ -28,7 +28,7 @@ def extract_rules(
     min_cases=15,
     feature_names=None,
     output_class_names=None,
-    tree_extraction_algorithm_name="C5.0",
+    tree_extraction_algorithm_name="random_forest",
     ccp_prune=True,
     estimators=30,
     **kwargs,
@@ -61,19 +61,18 @@ def extract_rules(
                 threshold_decimals=threshold_decimals,
                 min_cases=min_cases,
             )
-        elif tree_extraction_algorithm.lower() == "cart":
+        elif tree_extraction_algorithm_name.lower() == "cart":
             tree_extraction_algorithm = cart_rules
             algo_kwargs = dict(
                 threshold_decimals=threshold_decimals,
                 min_cases=min_cases,
                 ccp_prune=ccp_prune,
             )
-        elif tree_extraction_algorithm.lower() == "random_forest":
+        elif tree_extraction_algorithm_name.lower() == "random_forest":
             tree_extraction_algorithm = random_forest_rules
             algo_kwargs = dict(
                 threshold_decimals=threshold_decimals,
                 min_cases=min_cases,
-                ccp_prune=ccp_prune,
                 estimators=estimators,
             )
         else:

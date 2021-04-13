@@ -340,7 +340,7 @@ def run_train_loop(
     if compress_mechanism is not None:
         # Then time to reevaluate the model
         prev_nn_accuracy = nn_accuracy
-        _, nn_auc, nn_accuracy, _ = model.evaluate(
+        _, _, nn_accuracy, _ = model.evaluate(
             X_test,
             y_test,
             verbose=(
@@ -354,17 +354,12 @@ def run_train_loop(
         )
 
     predicted_labels = model.predict(X_test)
-    auc = sklearn.metrics.roc_auc_score(
+    # For now overwrite AUC as the one given by TF seems at odds with that
+    # given by sklearn
+    nn_auc = sklearn.metrics.roc_auc_score(
         y_test,
         predicted_labels,
         multi_class="ovr",
         average='samples',
     )
-    auc_2 = sklearn.metrics.roc_auc_score(
-        y_test,
-        predicted_labels,
-        multi_class="ovo",
-        average='macro',
-    )
-    print("TF AUC", nn_auc, "VS sklearn AUC", auc, "and", auc_2)
     return model, nn_accuracy, nn_auc, maj_class_acc

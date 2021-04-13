@@ -224,7 +224,6 @@ def random_forest_rules(
     max_leaf_nodes=None,
     class_weight=None,
     threshold_decimals=None,
-    ccp_prune=True,
     estimators=30,
     rule_conclusion_map=None,
     bootstrap=True,
@@ -255,7 +254,6 @@ def random_forest_rules(
         weighting different classes differently.
     :param int threshold_decimals: Max number of decimals to be used in a given
         threshold. If None, then no limit is applied.
-    :param True ccp_prune: Whether or not we perform post-growing CCP pruning.
     :param int estimators: The number of trees to grow in our random forest.
     :param Dict[y, Any] rule_conclusion_map: A map between possible output
         labels and what they imply. If not given, or if a label is missing, we
@@ -280,21 +278,6 @@ def random_forest_rules(
         class_weight=class_weight,
         bootstrap=bootstrap,
     )
-
-    if ccp_prune:
-        path = dt.cost_complexity_pruning_path(x, y)
-        ccp_alphas, impurities = path.ccp_alphas, path.impurities
-        dt = RandomForestClassifier(
-            n_estimators=estimators,
-            max_depth=max_depth,
-            min_samples_leaf=min_cases,
-            max_features=max_features,
-            criterion=criterion,
-            random_state=seed,
-            max_leaf_nodes=max_leaf_nodes,
-            class_weight=class_weight,
-            ccp_alpha=ccp_alphas[len(ccp_alphas)//2 - 1],
-        )
 
     dt.fit(x, y)
     result_rules = set()

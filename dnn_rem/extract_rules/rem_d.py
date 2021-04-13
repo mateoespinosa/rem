@@ -196,6 +196,7 @@ def extract_rules(
     rule_score_mechanism=RuleScoreMechanism.Accuracy,
     trials=1,  # 1 for original
     block_size=1,  # 1 for original
+    merge_repeated_terms=False,  # False for original
     **kwargs,
 ):
     """
@@ -294,13 +295,16 @@ def extract_rules(
                     class_rule.get_terms_with_conf_from_rule_premises()
                 partial_terms = list(term_confidences.keys())
                 # And get rid of terms that are negations of each other
-                terms = set()
-                for term in partial_terms:
-                    if term.negate() in terms:
-                        # Then no need to add this guy
-                        continue
-                    terms.add(term)
-                terms = list(terms)
+                if merge_repeated_terms:
+                    terms = set()
+                    for term in partial_terms:
+                        if term.negate() in terms:
+                            # Then no need to add this guy
+                            continue
+                        terms.add(term)
+                    terms = list(terms)
+                else:
+                    terms = partial_terms
 
                 if preemptive_redundant_removal:
                     terms = remove_redundant_terms(terms)
