@@ -58,6 +58,7 @@ def model_fn(
     loss_function="softmax_xentr",
     learning_rate=0.001,
     dropout_rate=0,
+    skip_freq=0,
 ):
     """
     Model function to construct our TF model for learning our given task.
@@ -87,16 +88,28 @@ def model_fn(
 
     # And build our intermediate dense layers
     net = input_layer
+    prev_output = None
     for i, units in enumerate(layer_units, start=1):
         if units == 0:
             # Then this is a no-op layer so we will skip it. This is useful
             # for grid searching
             continue
+
+        if skip_freq and ((i % skip_freq) == 0):
+            # Then let's add this result with the output of the previous
+            # skip block
+            net = prev_output + net
+            prev_output = None
+
         net = tf.keras.layers.Dense(
             units,
             activation=activation,
             name=f"dense_{i}",
         )(net)
+
+        if prev_output is None:
+            # Then this is the first layer
+            prev_output = net
 
         if ((i % 2) == 0) and dropout_rate:
             # Then let's add a dropout layer in here
@@ -104,6 +117,7 @@ def model_fn(
                 dropout_rate,
                 name=f"dropout_{i//2}",
             )(net)
+
 
     if loss_function is None and last_activation:
         if last_activation == "sigmoid":
@@ -252,6 +266,7 @@ def run_train_loop(
             activation=hyperparams.get("activation", "tanh"),
             learning_rate=hyperparams.get("learning_rate", 0.001),
             dropout_rate=hyperparams.get("dropout_rate", 0),
+            skip_freq=hyperparams.get("skip_freq", 0),
         )
 
     # If on debug mode, then let's look at the architecture of the model we

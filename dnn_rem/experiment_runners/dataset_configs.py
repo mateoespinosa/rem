@@ -16,29 +16,32 @@ import pandas as pd
 AVAILABLE_DATASETS = [
     'Artif-1',
     'Artif-2',
-    'MB-GE-ER',
     'BreastCancer',
     'Iris',
     'LetterRecognition',
-    'MNIST',
-    'TCGA-PANCAN',
-    'MB-GE-DR',
+    'MAGIC',
+    'MB-1004-GE-2Hist',
     'MB-Clin-DR',
     'MB-Clin-ER',
     'MB-ClinP-ER',
+    'MB-GE-2Hist',
+    'MB-GE-6Hist',
     'MB-GE-Clin-ER',
     'MB-GE-ClinP-ER',
-    'MB-GE-2Hist',
-    'MB_GE_CDH1_2Hist',
-    'MB-1004-GE-2Hist',
+    'MB-GE-DR',
+    'MB-GE-ER',
     'MB-ImageVec5-6Hist',
     'MB-ImageVec50-6Hist',
+    'MB_GE_CDH1_2Hist',
     'mb_imagevec50_2Hist',
-    'MB-GE-6Hist',
-    'mb_imagevec50_ER',
     'mb_imagevec50_DR',
-    'PARTNER-Genomic',
+    'mb_imagevec50_ER',
+    'MiniBooNE',
+    'MNIST',
     'PARTNER-Clinical',
+    'PARTNER-Genomic',
+    'TCGA-PANCAN',
+    'XOR',
 ]
 
 ################################################################################
@@ -734,6 +737,50 @@ def get_data_configuration(dataset_name):
             output_classes=output_classes,
             target_col='DR',
         )
+
+    if dataset_name == 'miniboone':
+        output_classes = (
+            OutputClass(name='electron_neutrino', encoding=0),
+            OutputClass(name='muon_neutrino', encoding=1),
+        )
+        return DatasetDescriptor(
+            name=dataset_name,
+            output_classes=output_classes,
+            # preprocessing=unit_scale_preprocess,
+            target_col='event',
+        )
+
+    if dataset_name == 'xor':
+        output_classes = (
+            OutputClass(name='0', encoding=0),
+            OutputClass(name='1', encoding=1),
+        )
+        return DatasetDescriptor(
+            name=dataset_name,
+            output_classes=output_classes,
+            target_col='xor',
+        )
+
+    if dataset_name == 'magic':
+        output_classes = (
+            OutputClass(name='hadron', encoding=0),
+            OutputClass(name='gamma', encoding=1),
+        )
+        def preprocess_fun(X_train, y_train, X_test=None, y_test=None):
+            return replace_categorical_outputs(
+                X_train=X_train,
+                y_train=y_train,
+                X_test=X_test,
+                y_test=y_test,
+                output_classes=output_classes,
+            )
+        return DatasetDescriptor(
+            name=dataset_name,
+            output_classes=output_classes,
+            preprocessing=preprocess_fun,
+            target_col='class',
+        )
+
     if dataset_name == "partner-clinical":
         output_classes = (
             OutputClass(name='non-pCR', encoding=0),

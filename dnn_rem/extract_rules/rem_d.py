@@ -10,6 +10,7 @@ import numpy as np
 import pandas as pd
 import scipy.special as activation_fns
 import tensorflow.keras.models as keras
+from sklearn.model_selection import StratifiedShuffleSplit
 
 from dnn_rem.rules.rule import Rule
 from dnn_rem.rules.ruleset import Ruleset, RuleScoreMechanism
@@ -19,6 +20,7 @@ from dnn_rem.logic_manipulator.substitute_rules import \
 from dnn_rem.logic_manipulator.delete_redundant_terms import \
     global_most_general_replacement, remove_redundant_terms
 from dnn_rem.logic_manipulator.merge import merge
+from dnn_rem.utils.data_handling import stratified_k_fold_split
 
 ################################################################################
 ## Helper Classes
@@ -172,6 +174,8 @@ def _serialized_function_execute(serialized):
     return function(*args)
 
 
+
+
 ################################################################################
 ## Exposed Methods
 ################################################################################
@@ -197,6 +201,7 @@ def extract_rules(
     trials=1,  # 1 for original
     block_size=1,  # 1 for original
     merge_repeated_terms=False,  # False for original
+    max_number_of_samples=None,
     **kwargs,
 ):
     """
@@ -220,6 +225,26 @@ def extract_rules(
 
     :returns Ruleset: the set of rules extracted from the given model.
     """
+    # Determine whether we want to subsample our training dataset to make it
+    # more scalable or not
+    sample_fraction = 0
+    if max_number_of_samples is not None:
+        if max_number_of_samples < 1:
+            sample_fraction = max_number_of_samples
+        elif max_number_of_samples < train_data.shape[0]:
+            sample_fraction = max_number_of_samples / train_data.shape[0]
+
+    if sample_fraction and (train_labels is not None):
+        [(new_indices, _)] = stratified_k_fold_split(
+            X=train_data,
+            y=train_labels,
+            n_folds=1,
+            test_size=(1 - sample_fraction),
+            random_state=42,
+        )
+        train_data = train_data[new_indices, :]
+        train_labels = train_labels[new_indices]
+
     # First we will instantiate a cache of our given keras model to obtain all
     # intermediate activations
     cache_model = ModelCache(
@@ -415,7 +440,8 @@ def extract_rules(
                 logging.debug(
                     f'\tGenerated intermediate ruleset for layer '
                     f'{hidden_layer} and output class {output_class_name} has '
-                    f'{intermediate_rules.num_clauses()} rules in it.'
+                    f'{intermediate_rules.num_clauses()} rules and '
+                    f'{intermediate_rules.num_terms()} different terms in it.'
                 )
 
                 # Merge rules with current accumulation
@@ -458,7 +484,9 @@ def extract_rules(
                         else:
                             term_target.append(None)
                     temp_ruleset.rank_rules(
-                        X=predictors.to_numpy(),
+                        X=cache_model.get_layer_activations(
+                            layer_index=hidden_layer
+                        ).to_numpy(),
                         y=term_target,
                         score_mechanism=rule_score_mechanism,
                         use_label_names=True,

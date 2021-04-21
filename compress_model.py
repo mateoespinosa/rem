@@ -186,7 +186,6 @@ def _evalutate_model(
     )
     if isinstance(out_train_vals, list):
         raise ValueError(out_train_vals)
-    print("out_train_vals.shape is", out_train_vals.shape)
     model_train_acc = accuracy_score(
         y_train,
         np.argmax(out_train_vals, axis=-1),

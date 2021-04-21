@@ -21,6 +21,7 @@ from dnn_rem.rules.C5 import C5
 from dnn_rem.logic_manipulator.substitute_rules import \
     clausewise_substitute
 from dnn_rem.logic_manipulator.merge import merge
+from dnn_rem.utils.data_handling import stratified_k_fold_split
 
 
 ################################################################################
@@ -46,6 +47,8 @@ def extract_rules(
     rule_score_mechanism=RuleScoreMechanism.Accuracy,
     trials=1,  # 1 for original
     block_size=1,  # 1 for original
+    max_number_of_samples=None,  # None for original
+    min_confidence=0,  # 0 for original
     **kwargs,
 ):
     """
@@ -77,6 +80,27 @@ def extract_rules(
     """
     # First we will instantiate a cache of our given keras model to obtain all
     # intermediate activations
+
+    # Determine whether we want to subsample our training dataset to make it
+    # more scalable or not
+    sample_fraction = 0
+    if max_number_of_samples is not None:
+        if max_number_of_samples < 1:
+            sample_fraction = max_number_of_samples
+        elif max_number_of_samples < train_data.shape[0]:
+            sample_fraction = max_number_of_samples / train_data.shape[0]
+
+    if sample_fraction and (train_labels is not None):
+        [(new_indices, _)] = stratified_k_fold_split(
+            X=train_data,
+            y=train_labels,
+            n_folds=1,
+            test_size=(1 - sample_fraction),
+            random_state=42,
+        )
+        train_data = train_data[new_indices, :]
+        train_labels = train_labels[new_indices]
+
     cache_model = ModelCache(
         keras_model=model,
         train_data=train_data,
@@ -151,6 +175,7 @@ def extract_rules(
                 next_layer_activations = cache_model.get_layer_activations(
                     layer_index=next_hidden_layer,
                 )
+
                 clauses = sorted(class_rule.premise,  key=str)
                 num_clauses = len(clauses)
 
@@ -272,6 +297,22 @@ def extract_rules(
                         f"[WARNING] Found rule with empty premise of for "
                         f"class {output_class_name}."
                     )
+                # And prune all rules that have a confidence below the given
+                # minimum required
+                if min_confidence:
+                    new_clauses = []
+                    num_removed = 0
+                    for clause in class_rule.premise:
+                        if clause.confidence >= min_confidence:
+                            new_clauses.append(clause)
+                        else:
+                            num_removed += 1
+                    print(
+                        f"Removed {num_removed} out of "
+                        f"{len(class_rule.premise)} clauses because they had "
+                        f"a confidence below {min_confidence}."
+                    )
+                    class_rule.premise = set(new_clauses)
 
                 # And then time to drop some intermediate rules in here!
                 temp_ruleset = Ruleset(
@@ -283,7 +324,8 @@ def extract_rules(
                 if (
                     (train_labels is not None) and
                     (intermediate_drop_percent) and
-                    (temp_ruleset.num_clauses() > 1)
+                    (temp_ruleset.num_clauses() > 1) and
+                    (hidden_layer > 0)
                 ):
                     # Then let's do some rule dropping for compressing our
                     # generated ruleset and improving the complexity of the
@@ -295,7 +337,9 @@ def extract_rules(
                         else:
                             term_target.append(None)
                     temp_ruleset.rank_rules(
-                        X=predictors.to_numpy(),
+                        X=cache_model.get_layer_activations(
+                            layer_index=hidden_layer
+                        ).to_numpy(),
                         y=term_target,
                         score_mechanism=rule_score_mechanism,
                         use_label_names=True,

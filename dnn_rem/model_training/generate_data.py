@@ -12,6 +12,7 @@ import logging
 import numpy as np
 import os
 import pandas as pd
+import sklearn
 import tensorflow as tf
 
 from . import find_best_nn_initialisation
@@ -115,10 +116,16 @@ def run(manager, use_grid_search=False):
                 # Then let's try and be nice and include some statistics
                 # reporting for the performance of this model
                 _, _, X_test, y_test = manager.get_fold_data(fold)
-                _, auc, acc, maj_class_acc = model.evaluate(
+                _, _, acc, maj_class_acc = model.evaluate(
                     X_test,
                     tf.keras.utils.to_categorical(y_test),
                     verbose=0,
+                )
+                auc = sklearn.metrics.roc_auc_score(
+                    tf.keras.utils.to_categorical(y_test),
+                    model.predict(X_test),
+                    multi_class="ovr",
+                    average='samples',
                 )
                 pbar.write(
                     f'Test accuracy for fold {fold}/{manager.N_FOLDS} '

@@ -87,8 +87,6 @@ def extract_rules(
     # Ruleset is encapsulated/represented by a DNF rule
     # dnf_rules is a set of rules
     dnf_rules = merge(rules)
-    assert len(dnf_rules) == num_classes, \
-        f'Should only exist 1 DNF rule per class: {rules} vs {dnf_rules}'
 
     return Ruleset(
         dnf_rules,

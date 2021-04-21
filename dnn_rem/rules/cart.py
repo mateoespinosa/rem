@@ -129,10 +129,10 @@ def tree_to_ruleset(
 def cart_rules(
     x,
     y,
-    criterion="entropy",
+    criterion="gini",
     splitter="best",
     max_depth=None,
-    min_cases=15,
+    min_cases=None,
     max_features=None,
     seed=42,
     max_leaf_nodes=None,
@@ -199,7 +199,7 @@ def cart_rules(
             random_state=seed,
             max_leaf_nodes=max_leaf_nodes,
             class_weight=class_weight,
-            ccp_alpha=ccp_alphas[-min(10, len(ccp_alphas))], #[len(ccp_alphas)//2 - 1],
+            ccp_alpha=ccp_alphas[len(ccp_alphas)//2 - 1],
         )
 
     dt.fit(x, y)

@@ -3,11 +3,13 @@ import logging
 import numpy as np
 import pandas as pd
 import pickle
+import sklearn
 import tensorflow as tf
 
-from dnn_rem.evaluate_rules.evaluate import evaluate
+from dnn_rem.evaluate_rules.evaluate import evaluate, evaluate_estimator
 from dnn_rem.model_training.build_and_train_model import load_model
 from dnn_rem.utils.resources import resource_compute
+from dnn_rem.rules.ruleset import Ruleset
 
 
 def _deserialize_rules(path):
@@ -41,6 +43,7 @@ def cross_validate_re(manager):
         "Extraction Memory (MB)",
         "Ruleset Size",
         "Average Rule Length",
+        "# of Terms",
     ]
     results_df = pd.DataFrame(data=[], columns=['fold'])
 
@@ -58,13 +61,19 @@ def cross_validate_re(manager):
         # Path to neural network model for this fold
         model_file_path = manager.n_fold_model_fp(fold)
         nn_model = load_model(model_file_path)
-        _, nn_auc, nn_accuracy, majority_class = nn_model.evaluate(
+        _, _, nn_accuracy, majority_class = nn_model.evaluate(
             X_test,
             tf.keras.utils.to_categorical(y_test),
             verbose=(
                 1 if logging.getLogger().getEffectiveLevel() == logging.DEBUG \
                 else 0
             ),
+        )
+        nn_auc = sklearn.metrics.roc_auc_score(
+            tf.keras.utils.to_categorical(y_test),
+            nn_model.predict(X_test),
+            multi_class="ovr",
+            average='samples',
         )
 
         ########################################################################
@@ -76,7 +85,7 @@ def cross_validate_re(manager):
 
         # Run our rule extraction only if it has not been done in the past
         # through a sequential checkpoint
-        (ruleset, re_time, re_memory), _ = manager.serializable_stage(
+        (surrogate, re_time, re_memory), _ = manager.serializable_stage(
             target_file=extracted_rules_file_path,
             execute_fn=lambda: resource_compute(
                 function=manager.RULE_EXTRACTOR.run,
@@ -89,38 +98,51 @@ def cross_validate_re(manager):
             stage_name="rule_extraction",
         )
 
-        # Serialize a human readable version of the rules always for inspection
-        with open(extracted_rules_file_path + ".txt", 'w') as f:
-            for rule in ruleset:
-                f.write(str(rule) + "\n")
+        if isinstance(surrogate, Ruleset):
+            # Serialize a human readable version of the rules always for
+            # inspection
+            with open(extracted_rules_file_path + ".txt", 'w') as f:
+                for rule in surrogate:
+                    f.write(str(rule) + "\n")
+            # Now let's assign scores to our rules depending on what scoring
+            # function we were asked to use for this experiment
+            logging.debug(
+                f'Evaluating rules extracted from '
+                f'fold {fold}/{manager.N_FOLDS} ({surrogate.num_clauses()} '
+                f'rules with {surrogate.num_terms()} different terms in them '
+                f'on {len(y_test)} test points)...'
+            )
+            surrogate.rank_rules(
+                X=X_train,
+                y=y_train,
+                score_mechanism=manager.RULE_SCORE_MECHANISM,
+            )
 
-        logging.debug(
-            f'Evaluating rules extracted from '
-            f'fold {fold}/{manager.N_FOLDS}...'
-        )
+            # Drop any rules if we are interested in dropping them
+            surrogate.eliminate_rules(manager.RULE_DROP_PRECENT)
 
-        # Now let's assign scores to our rules depending on what scoring
-        # function we were asked to use for this experiment
-        ruleset.rank_rules(
-            X=X_train,
-            y=y_train,
-            score_mechanism=manager.RULE_SCORE_MECHANISM,
-        )
-
-        # Drop any rules if we are interested in dropping them
-        ruleset.eliminate_rules(manager.RULE_DROP_PRECENT)
-
-        # And actually evaluate them
-        re_results = evaluate(
-            ruleset=ruleset,
-            X_test=X_test,
-            y_test=y_test,
-            high_fidelity_predictions=np.argmax(
-                nn_model.predict(X_test),
-                axis=1
-            ),
-        )
-
+            # And actually evaluate them
+            re_results = evaluate(
+                ruleset=surrogate,
+                X_test=X_test,
+                y_test=y_test,
+                high_fidelity_predictions=np.argmax(
+                    nn_model.predict(X_test),
+                    axis=1
+                ),
+            )
+        else:
+            # Else we are talking about a decision tree classifier in here
+            # And actually evaluate them
+            re_results = evaluate_estimator(
+                estimator=surrogate,
+                X_test=X_test,
+                y_test=y_test,
+                high_fidelity_predictions=np.argmax(
+                    nn_model.predict(X_test),
+                    axis=1
+                ),
+            )
         ########################################################################
         ## Table writing and saving
         ########################################################################
@@ -139,19 +161,23 @@ def cross_validate_re(manager):
             re_results['output_classes']
         )
         results_df.loc[fold, 're_n_rules_per_class'] = str(
-            re_results['n_rules_per_class']
+            re_results.get('n_rules_per_class', 0)
         )
         results_df.loc[fold, 'n_overlapping_features'] = str(
-            re_results['n_overlapping_features']
+            re_results.get('n_overlapping_features', 0)
         )
         results_df.loc[fold, 'min_n_terms'] = str(
-            re_results['min_n_terms']
+            re_results.get('min_n_terms', 0)
         )
         results_df.loc[fold, 'max_n_terms'] = str(
-            re_results['max_n_terms']
+            re_results.get('max_n_terms', 0)
         )
         results_df.loc[fold, 'av_n_terms_per_rule'] = str(
-            re_results['av_n_terms_per_rule']
+            re_results.get('av_n_terms_per_rule', 0)
+        )
+        results_df.loc[fold, 're_terms'] = re_results.get(
+            'n_unique_terms',
+            0
         )
 
         logging.debug(
@@ -163,11 +189,16 @@ def cross_validate_re(manager):
         )
 
         # Fill up our pretty table
-        avg_rule_length = np.array(re_results['av_n_terms_per_rule'])
-        avg_rule_length *= np.array(re_results['n_rules_per_class'])
-        avg_rule_length = sum(avg_rule_length)
-        avg_rule_length /= sum(re_results['n_rules_per_class'])
-        num_rules = sum(re_results['n_rules_per_class'])
+        if isinstance(surrogate, Ruleset):
+            avg_rule_length = np.array(re_results['av_n_terms_per_rule'])
+            avg_rule_length *= np.array(re_results['n_rules_per_class'])
+            avg_rule_length = sum(avg_rule_length)
+            avg_rule_length /= sum(re_results['n_rules_per_class'])
+            avg_rule_length = round(avg_rule_length, manager.ROUNDING_DECIMALS)
+            num_rules = sum(re_results['n_rules_per_class'])
+        else:
+            num_rules = 0
+            avg_rule_length = 0
         new_row = [
             round(nn_accuracy, manager.ROUNDING_DECIMALS),
             round(nn_auc, manager.ROUNDING_DECIMALS),
@@ -177,7 +208,8 @@ def cross_validate_re(manager):
             round(re_time,  manager.ROUNDING_DECIMALS),
             round(re_memory, manager.ROUNDING_DECIMALS),
             num_rules,
-            round(avg_rule_length, manager.ROUNDING_DECIMALS),
+            avg_rule_length,
+            re_results.get('n_unique_terms', 0),
         ]
         if table_rows is None:
             table_rows = np.expand_dims(np.array(new_row), axis=0)

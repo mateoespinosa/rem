@@ -26,6 +26,26 @@ from dnn_rem.experiment_runners.manager import (
 ## HELPER METHODS
 ################################################################################
 
+def _to_val(x):
+    try:
+        return int(x)
+    except ValueError:
+        # Then this is not an int
+        pass
+
+    try:
+        return float(x)
+    except ValueError:
+        # Then this is not an float
+        pass
+
+    if x.lower() in ["true"]:
+        return True
+    if x.lower() in ["false"]:
+        return False
+
+    return x
+
 
 def build_parser():
     """
@@ -86,7 +106,15 @@ def build_parser():
             "rule set."
         ),
         metavar="name",
-        choices=['DeepRED_C5', 'Pedagogical'],
+        choices=[
+            "CART",
+            "Clause-REM-D",
+            "random_forest",
+            "RandomForest",
+            "REM-T",
+            'Pedagogical',
+            'REM-D',
+        ],
     )
     parser.add_argument(
         '--grid_search',
@@ -154,6 +182,19 @@ def build_parser():
         default=False,
         help="starts debug mode in our program.",
     )
+    parser.add_argument(
+        '-p',
+        '--param',
+        action='append',
+        nargs=2,
+        metavar=('param_name=value'),
+        help=(
+            'Allows the passing of a config param that will overwrite '
+            'anything passed as part of the config file itself.'
+        ),
+        default=[],
+    )
+
     return parser
 
 
@@ -204,7 +245,7 @@ def main():
             args.n_folds = 1
         if args.rule_extractor is None:
             # Default it to use our rule generation algorithm
-            args.rule_extractor = "DeepRED_C5"
+            args.rule_extractor = "REM-D"
         if args.initialisation_trials is None:
             # Then default it to not making any initalisation
             args.initialisation_trials = 1
@@ -249,10 +290,23 @@ def main():
     # And our initial stage to start overwriting, if any.
     start_rerun_stage = args.force_rerun or config.get("force_rerun")
 
+    for param_path, value in args.param:
+        var_names = list(map(lambda x: x.strip(), param_path.split(".")))
+        current_obj = config
+        for path_entry in var_names[:1]:
+            if path_entry not in config:
+                config[path_entry] = {}
+            current_obj = config[path_entry]
+        current_obj[var_names[-1]] = _to_val(value)
+
     # Time to initialize our experiment manager
     with ExperimentManager(config, start_rerun_stage) as manager:
         # Generate our neural network, train it, and then extract the ruleset
         # that approximates it from it
+        print(
+            "Starting experiment with data being dumped at",
+            manager.experiment_dir,
+        )
         generate_data.run(
             manager=manager,
             use_grid_search=manager.GRID_SEARCH_PARAMS.get("enable", False),

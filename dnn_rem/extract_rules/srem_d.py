@@ -16,7 +16,7 @@ import numpy as np
 from .rem_d import ModelCache
 from dnn_rem.rules.rule import Rule
 from dnn_rem.rules.ruleset import Ruleset, RuleScoreMechanism
-from dnn_rem.rules.cart import cart_rules
+from dnn_rem.rules.cart import cart_rules, random_forest_rules
 from dnn_rem.logic_manipulator.substitute_rules import multilabel_substitute
 from dnn_rem.logic_manipulator.merge import merge
 

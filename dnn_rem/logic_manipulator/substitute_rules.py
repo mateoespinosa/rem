@@ -3,6 +3,7 @@ Methods for making rule substitution.
 """
 
 import itertools
+import logging
 
 from ..rules.clause import ConjunctiveClause
 from ..rules.rule import Rule
@@ -23,7 +24,11 @@ def substitute(total_rule, intermediate_rules, conf_threshold=0):
     """
     new_premise_clauses = set()
     # for each clause in the total rule
-    for old_premise_clause in total_rule.premise:
+    logging.debug(
+        f"Performing substitution with class rule with "
+        f"{len(total_rule.premise)} clauses in it."
+    )
+    for i, old_premise_clause in enumerate(total_rule.premise):
         # list of sets of conjunctive clauses that are all conjunctive
         conj_new_premise_clauses = []
         for old_premise_term in old_premise_clause.terms:
@@ -41,18 +46,22 @@ def substitute(total_rule, intermediate_rules, conf_threshold=0):
         # clauses for merged rule
         # Itertools implementation does not build up intermediate results in
         # memory
-        conj_new_premise_clauses_combinations = itertools.product(
+        new_combos = itertools.product(
             *tuple(conj_new_premise_clauses)
+        )
+        logging.debug(
+            f"\tAbout to perform a Cartesian product "
+            f"{i + 1}/{len(total_rule.premise)} with sets of size "
+            f"{list(map(len, conj_new_premise_clauses))}"
         )
 
         # given tuples of ConjunctiveClauses that are all now conjunctions,
         # union terms into a single clause
-        for premise_clause_tuple in conj_new_premise_clauses_combinations:
+        for premise_clause_tuple in new_combos:
             new_clause = ConjunctiveClause()
             for premise_clause in premise_clause_tuple:
                 new_clause = new_clause.union(premise_clause)
             new_premise_clauses.add(new_clause)
-
     return Rule(
         premise=new_premise_clauses,
         conclusion=total_rule.conclusion,
@@ -177,13 +186,13 @@ def conditional_substitute(
         # clauses for merged rule
         # Itertools implementation does not build up intermediate results in
         # memory
-        conj_new_premise_clauses_combinations = itertools.product(
+        new_combos = itertools.product(
             *tuple(conj_new_premise_clauses)
         )
 
         # given tuples of ConjunctiveClauses that are all now conjunctions,
         # union terms into a single clause
-        for premise_clause_tuple in conj_new_premise_clauses_combinations:
+        for premise_clause_tuple in new_combos:
             new_clause = ConjunctiveClause()
             for premise_clause in premise_clause_tuple:
                 new_clause = new_clause.union(premise_clause)
@@ -213,6 +222,11 @@ def clausewise_substitute(total_rule, intermediate_rules):
     """
     new_premise_clauses = set()
     # for each clause in the total rule
+    logging.debug(
+        f"Performing a clause-wise substitution "
+        f"using {len(intermediate_rules)} intermediate rules into a rule "
+        f"with {len(total_rule.premise)} clauses in it."
+    )
     for old_premise_clause in total_rule.premise:
         # list of sets of conjunctive clauses that are all conjunctive
         conj_new_premise_clauses = \

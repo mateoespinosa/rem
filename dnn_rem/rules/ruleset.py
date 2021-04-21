@@ -122,18 +122,21 @@ class Ruleset(object):
                 "shape {X.shape} instead."
             )
 
-        for instance in X:
+        total_vol = len(X) * len(self.rules)
+        for instance_id, instance in enumerate(X):
             # Map of neuron names to values from input data
             neuron_to_value_map = self._get_named_dictionary(instance)
 
             # Each output class given a score based on how many rules x
             # satisfies
             class_ruleset_scores = {}
-            for class_rules in self.rules:
+            for rule_id, class_rules in enumerate(self.rules):
                 score = class_rules.evaluate_score(
                     neuron_to_value_map
                 )
                 class_ruleset_scores[class_rules] = score
+                id_mem = instance_id*len(self.rules) + rule_id
+                print(f"Done evaluating instance {id_mem}/{total_vol}", end='\r')
 
             # Output class with max score decides the classification of
             # instance. If a tie happens, then choose randomly

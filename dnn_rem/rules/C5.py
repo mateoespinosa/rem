@@ -2,6 +2,7 @@
 Python wrapper implementation around R's C5.0 package.
 """
 import math
+import numpy as np
 
 from .term import Term
 from .helpers import parse_variable_str_to_dict
@@ -36,6 +37,7 @@ def truncate(x, decimals):
 
 def _parse_C5_rule_str(
     rule_str,
+    y,
     rule_conclusion_map,
     prior_rule_confidence,
     threshold_decimals=None,
@@ -117,6 +119,17 @@ def _parse_C5_rule_str(
             conclusion=rule_conclusion,
             confidence=rule_confidence,
         ))
+    if n_rules == 0:
+        # Then we will an empty rule that always output the default class
+        y = np.array(y)
+        default_class = metadata_variables['default']
+        default_val = rule_conclusion_map[default_class]
+        default_class_percent = np.sum(y == default_class) / len(y)
+        rules_set.add(Rule.from_term_set(
+            premise=[],
+            conclusion=default_val,
+            confidence=prior_rule_confidence * default_class_percent,
+        ))
 
     return rules_set
 
@@ -170,9 +183,10 @@ def C5(
     )
     C5_rules_str = C5_model.rx2('rules')[0]
     C5_rules = _parse_C5_rule_str(
-        C5_rules_str,
-        rule_conclusion_map,
-        prior_rule_confidence,
+        rule_str=C5_rules_str,
+        y=y,
+        rule_conclusion_map=rule_conclusion_map,
+        prior_rule_confidence=prior_rule_confidence,
         threshold_decimals=threshold_decimals,
     )
     return C5_rules

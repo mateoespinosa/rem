@@ -44,7 +44,8 @@ def comprehensibility(rules):
         of the given set of rules.
     """
     all_ruleset_info = []
-
+    all_terms = set()
+    output_classes = set()
     for class_ruleset in rules:
         class_encoding = class_ruleset.conclusion
 
@@ -61,6 +62,8 @@ def comprehensibility(rules):
             min_n_terms = min(n_clause_terms, min_n_terms)
             max_n_terms = max(n_clause_terms, max_n_terms)
             total_n_terms += n_clause_terms
+            for term in clause.terms:
+                all_terms.add(term)
 
         av_n_terms_per_rule = (
             (total_n_terms / n_rules_in_class) if n_rules_in_class else 0
@@ -85,6 +88,7 @@ def comprehensibility(rules):
         min_n_terms=min_n_terms,
         max_n_terms=max_n_terms,
         av_n_terms_per_rule=av_n_terms_per_rule,
+        n_unique_terms=len(all_terms),
     )
 
 

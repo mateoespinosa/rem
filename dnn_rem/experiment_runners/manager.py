@@ -4,8 +4,6 @@ rule generation algorithm.
 """
 
 from collections import namedtuple
-from sklearn.model_selection import ShuffleSplit
-from sklearn.model_selection import StratifiedKFold
 
 import logging
 import numpy as np
@@ -17,6 +15,8 @@ import tempfile
 import tensorflow as tf
 import time
 import yaml
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.tree import DecisionTreeClassifier
 
 from . import dataset_configs
 from dnn_rem.extract_rules.pedagogical import extract_rules as pedagogical
@@ -26,7 +26,7 @@ from dnn_rem.extract_rules.srem_d import extract_rules as srem_d
 from dnn_rem.extract_rules.crem_d import extract_rules as crem_d
 from dnn_rem.extract_rules.clause_rem_d import extract_rules as clause_rem_d
 from dnn_rem.rules.ruleset import RuleScoreMechanism
-
+from dnn_rem.utils.data_handling import stratified_k_fold_split
 
 # Algorithm used for Rule Extraction
 RuleExMode = namedtuple('RuleExMode', ['mode', 'run'])
@@ -69,38 +69,6 @@ def split_deserializer(path):
                 list(map(int, lines[(i * 2)].split(' ')[1:])),
                 list(map(int, lines[(i * 2) + 1].split(' ')[1:]))
             ))
-    return result
-
-
-def stratified_k_fold_split(
-    X,
-    y,
-    n_folds=1,
-    test_size=0.2,
-    random_state=None,
-):
-    # Helper method to return a list with n_folds tuples (X_train, y_train)
-    # after partitioning the given X, y dataset using stratified splits.
-    result = []
-    if n_folds == 1:
-        # Degenerate case: let's just dump all our indices as our single fold
-        split_gen = ShuffleSplit(
-            n_splits=1,
-            test_size=test_size,
-            random_state=random_state,
-        )
-    else:
-        # Split data
-        split_gen = StratifiedKFold(
-            n_splits=n_folds,
-            shuffle=True,
-            random_state=random_state,
-        )
-
-    # Save indices
-    for train_indices, test_indices in split_gen.split(X, y):
-        result.append((train_indices, test_indices))
-
     return result
 
 
@@ -451,6 +419,104 @@ f
                         lambda x: x.name,
                         self.DATASET_INFO.output_classes,
                     )),
+                ),
+            )
+
+        if name in ["random_forest", "randomforest"]:
+            def train_random_forest(
+                model,
+                train_data,
+                train_labels,
+                *args,
+                criterion="gini",
+                max_depth=None,
+                min_cases=None,
+                max_features=None,
+                seed=42,
+                max_leaf_nodes=None,
+                class_weight=None,
+                estimators=30,
+                bootstrap=True,
+                **kwargs
+            ):
+                dt = RandomForestClassifier(
+                    n_estimators=estimators,
+                    max_depth=max_depth,
+                    min_samples_leaf=min_cases,
+                    max_features=max_features,
+                    criterion=criterion,
+                    random_state=seed,
+                    max_leaf_nodes=max_leaf_nodes,
+                    class_weight=class_weight,
+                    bootstrap=bootstrap,
+                )
+
+                dt.fit(train_data, train_labels)
+                return dt
+
+            return RuleExMode(
+                mode='RandomForest',
+                run=lambda *args, **kwargs: train_random_forest(
+                    *args,
+                    **kwargs,
+                    **extractor_params,
+                ),
+            )
+
+        if name in ["cart"]:
+            def train_cart_tree(
+                model,
+                train_data,
+                train_labels,
+                *args,
+                criterion="gini",
+                splitter="best",
+                max_depth=None,
+                min_cases=None,
+                max_features=None,
+                seed=42,
+                max_leaf_nodes=None,
+                class_weight=None,
+                ccp_prune=True,
+                **kwargs
+            ):
+                dt = DecisionTreeClassifier(
+                    max_depth=max_depth,
+                    min_samples_leaf=min_cases,
+                    max_features=max_features,
+                    splitter=splitter,
+                    criterion=criterion,
+                    random_state=seed,
+                    max_leaf_nodes=max_leaf_nodes,
+                    class_weight=class_weight,
+                )
+                if ccp_prune:
+                    path = dt.cost_complexity_pruning_path(
+                        train_data,
+                        train_labels,
+                    )
+                    ccp_alphas, impurities = path.ccp_alphas, path.impurities
+                    dt = DecisionTreeClassifier(
+                        max_depth=max_depth,
+                        min_samples_leaf=min_cases,
+                        max_features=max_features,
+                        splitter=splitter,
+                        criterion=criterion,
+                        random_state=seed,
+                        max_leaf_nodes=max_leaf_nodes,
+                        class_weight=class_weight,
+                        ccp_alpha=ccp_alphas[len(ccp_alphas)//2 - 1],
+                    )
+
+                dt.fit(train_data, train_labels)
+                return dt
+
+            return RuleExMode(
+                mode='CART',
+                run=lambda *args, **kwargs: train_cart_tree(
+                    *args,
+                    **kwargs,
+                    **extractor_params,
                 ),
             )
 
