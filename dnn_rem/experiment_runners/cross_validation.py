@@ -72,8 +72,6 @@ def cross_validate_re(manager):
         nn_auc = sklearn.metrics.roc_auc_score(
             tf.keras.utils.to_categorical(y_test),
             nn_model.predict(X_test),
-            multi_class="ovr",
-            average='samples',
         )
 
         ########################################################################

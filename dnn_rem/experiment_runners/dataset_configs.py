@@ -767,13 +767,15 @@ def get_data_configuration(dataset_name):
             OutputClass(name='gamma', encoding=1),
         )
         def preprocess_fun(X_train, y_train, X_test=None, y_test=None):
-            return replace_categorical_outputs(
+            result = replace_categorical_outputs(
                 X_train=X_train,
                 y_train=y_train,
                 X_test=X_test,
                 y_test=y_test,
                 output_classes=output_classes,
             )
+            return unit_scale_preprocess(*result)
+
         return DatasetDescriptor(
             name=dataset_name,
             output_classes=output_classes,

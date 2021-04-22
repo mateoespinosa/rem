@@ -389,6 +389,13 @@ class Ruleset(object):
             result += len(rule.premise)
         return result
 
+    def all_clauses(self):
+        result = set()
+        for rule in self.rules:
+            for clause in rule.premise:
+                result.add(clause)
+        return result
+
     def num_terms(self):
         seen_terms = set()
         for rule in self.rules:

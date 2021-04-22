@@ -109,11 +109,15 @@ def build_parser():
         choices=[
             "CART",
             "Clause-REM-D",
+            "cREM-D",
+            "DeepRED",
+            "eREM-D",
             "random_forest",
             "RandomForest",
             "REM-T",
             'Pedagogical',
             'REM-D',
+            "sREM-D",
         ],
     )
     parser.add_argument(

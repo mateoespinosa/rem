@@ -24,6 +24,8 @@ from dnn_rem.extract_rules.rem_t import extract_rules as rem_t
 from dnn_rem.extract_rules.rem_d import extract_rules as rem_d
 from dnn_rem.extract_rules.srem_d import extract_rules as srem_d
 from dnn_rem.extract_rules.crem_d import extract_rules as crem_d
+from dnn_rem.extract_rules.erem_d import extract_rules as erem_d
+from dnn_rem.extract_rules.deep_red_c5 import extract_rules as deep_red_c5
 from dnn_rem.extract_rules.clause_rem_d import extract_rules as clause_rem_d
 from dnn_rem.rules.ruleset import RuleScoreMechanism
 from dnn_rem.utils.data_handling import stratified_k_fold_split
@@ -342,7 +344,15 @@ f
 
     def get_rule_extractor(self, extractor_name, **extractor_params):
         name = extractor_name.lower()
-        if name in ["rem-d", "srem-d", "crem-d", "clause-rem-d"]:
+        if name in [
+            "erem-d",
+            "rem-d",
+            "srem-d",
+            "crem-d",
+            "clause-rem-d",
+            "deepred",
+            "deepred_c5",
+        ]:
             loss_function = self.HYPERPARAMS.get(
                 "loss_function",
                 "softmax_xentr",
@@ -363,6 +373,12 @@ f
             elif name == "clause-rem-d":
                 run_fn = clause_rem_d
                 real_name = "Clause-REM-D"
+            elif name == "erem-d":
+                run_fn = erem_d
+                real_name = "eREM-D"
+            elif name in ["deepred", "deepred_c5"]:
+                run_fn = deep_red_c5
+                real_name = "DeepRED_C5"
 
             # We set the last activation to None here if it is going to be
             # be included in the network itself. Otherwise, we request our

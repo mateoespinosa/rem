@@ -161,9 +161,12 @@ def C5(
                 f"min_cases need to be an integer greater than or equal to 1 "
                 f"or a float in [0, 1]. Instead we got {min_cases}"
             )
-        # Then let's take a fraction from the total number of points
-        # in our training data
-        min_cases = int(np.ceil(len(y) * min_cases))
+        if int(min_cases) == float(min_cases):
+            min_cases = int(min_cases)
+        else:
+            # Then let's take a fraction from the total number of points
+            # in our training data
+            min_cases = int(np.ceil(len(y) * min_cases))
 
     C5_model = C50.C5_0(
         x=x,
