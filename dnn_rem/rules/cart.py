@@ -4,7 +4,9 @@ Module for learning and extracting rules using CART decision trees.
 
 from dnn_rem.logic_manipulator.merge import merge
 from sklearn.ensemble import RandomForestClassifier
+from sklearn.ensemble import RandomForestRegressor
 from sklearn.tree import DecisionTreeClassifier
+from sklearn.tree import DecisionTreeRegressor
 import numpy as np
 
 from .C5 import truncate
@@ -19,6 +21,8 @@ def tree_to_ruleset(
     multilabel=False,
     rule_conclusion_map=None,
     scalar_confidence=True,
+    prior_rule_confidence=1,
+    regression=False,
 ):
     """
     Helper function that turns a sklearn decision tree into a set of rules.
@@ -90,13 +94,20 @@ def tree_to_ruleset(
                         class_count = true_count
 
                     confidence.append(
-                        class_count / (true_count + false_count)
+                        prior_rule_confidence * (
+                            class_count / (true_count + false_count)
+                        )
                     )
                 if scalar_confidence:
                     confidence = np.mean(confidence)
                 else:
                     confidence = tuple(confidence)
                 conclusion = tuple(conclusion)
+            elif regression:
+                conclusion = value[node_id][0][0]
+                # We cannot guarantee any confidence in here so we will leave it
+                # as None
+                confidence = 0
             else:
                 # Else this is the multi-class setting
                 assert len(value[node_id]) == 1, \
@@ -109,7 +120,9 @@ def tree_to_ruleset(
                     if count >= max_count:
                         max_count = count
                         conclusion = rule_conclusion_map.get(label_id, label_id)
-                confidence = max_count / (total_count)
+                confidence = prior_rule_confidence * (
+                    max_count / (total_count)
+                )
 
             rules_set.add(
                 Rule.from_term_set(
@@ -140,6 +153,8 @@ def cart_rules(
     threshold_decimals=None,
     ccp_prune=True,
     rule_conclusion_map=None,
+    prior_rule_confidence=1,
+    regression=False,
 ):
     """
     Extracts a ruleset from learning a CART decision tree that maps datapoints
@@ -177,29 +192,39 @@ def cart_rules(
     if not isinstance(y, np.ndarray):
         y = np.array(y)
 
-    dt = DecisionTreeClassifier(
+    if regression:
+        dt_class = DecisionTreeRegressor
+        extra_params = {
+            "criterion": "mse",
+        }
+    else:
+        dt_class = DecisionTreeClassifier
+        extra_params = {
+            "class_weight": class_weight,
+            "criterion": criterion,
+        }
+
+    dt = dt_class(
         max_depth=max_depth,
         min_samples_leaf=min_cases,
         max_features=max_features,
         splitter=splitter,
-        criterion=criterion,
         random_state=seed,
         max_leaf_nodes=max_leaf_nodes,
-        class_weight=class_weight,
+        **extra_params,
     )
     if ccp_prune:
         path = dt.cost_complexity_pruning_path(x, y)
         ccp_alphas, impurities = path.ccp_alphas, path.impurities
-        dt = DecisionTreeClassifier(
+        dt = dt_class(
             max_depth=max_depth,
             min_samples_leaf=min_cases,
             max_features=max_features,
             splitter=splitter,
-            criterion=criterion,
             random_state=seed,
             max_leaf_nodes=max_leaf_nodes,
-            class_weight=class_weight,
             ccp_alpha=ccp_alphas[len(ccp_alphas)//2 - 1],
+            **extra_params,
         )
 
     dt.fit(x, y)
@@ -210,6 +235,8 @@ def cart_rules(
         feature_names=x.columns,
         multilabel=(len(y.shape) == 2),
         rule_conclusion_map=rule_conclusion_map,
+        prior_rule_confidence=prior_rule_confidence,
+        regression=regression,
     )
 
 
@@ -227,6 +254,8 @@ def random_forest_rules(
     estimators=30,
     rule_conclusion_map=None,
     bootstrap=True,
+    prior_rule_confidence=1,
+    regression=False,
 ):
     """
     Extracts a ruleset from learning a random forest that maps datapoints in x
@@ -267,16 +296,27 @@ def random_forest_rules(
     if not isinstance(y, np.ndarray):
         y = np.array(y)
 
-    dt = RandomForestClassifier(
+    if regression:
+        rf_class = RandomForestRegressor
+        extra_params = {
+            "criterion": "mse",
+        }
+    else:
+        rf_class = RandomForestClassifier
+        extra_params = {
+            "class_weight": class_weight,
+            "criterion": criterion,
+        }
+
+    dt = rf_class(
         n_estimators=estimators,
         max_depth=max_depth,
         min_samples_leaf=min_cases,
         max_features=max_features,
-        criterion=criterion,
         random_state=seed,
         max_leaf_nodes=max_leaf_nodes,
-        class_weight=class_weight,
         bootstrap=bootstrap,
+        **extra_params,
     )
 
     dt.fit(x, y)
@@ -289,6 +329,8 @@ def random_forest_rules(
                 feature_names=x.columns,
                 multilabel=len(y.shape) == 2,
                 rule_conclusion_map=rule_conclusion_map,
+                prior_rule_confidence=prior_rule_confidence,
+                regression=regression,
             )
         )
     return result_rules

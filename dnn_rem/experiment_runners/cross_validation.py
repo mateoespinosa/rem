@@ -32,19 +32,33 @@ def cross_validate_re(manager):
     # be pretty-printed at the end of the experiment and visually reported to
     # the user
     table = PrettyTable()
-    table.field_names = [
-        "Fold",
-        "NN Accuracy",
-        'NN AUC',
-        f"{manager.RULE_EXTRACTOR.mode} Accuracy",
-        f"{manager.RULE_EXTRACTOR.mode} AUC",
-        f"{manager.RULE_EXTRACTOR.mode} Fidelity",
-        "Extraction Time (sec)",
-        "Extraction Memory (MB)",
-        "Ruleset Size",
-        "Average Rule Length",
-        "# of Terms",
-    ]
+    regression = manager.DATASET_INFO.regression
+    if regression:
+        table.field_names = [
+            "Fold",
+            "NN Loss",
+            f"{manager.RULE_EXTRACTOR.mode} Loss",
+            f"{manager.RULE_EXTRACTOR.mode} MSE Fidelity",
+            "Extraction Time (sec)",
+            "Extraction Memory (MB)",
+            "Ruleset Size",
+            "Average Rule Length",
+            "# of Terms",
+        ]
+    else:
+        table.field_names = [
+            "Fold",
+            "NN Accuracy",
+            'NN AUC',
+            f"{manager.RULE_EXTRACTOR.mode} Accuracy",
+            f"{manager.RULE_EXTRACTOR.mode} AUC",
+            f"{manager.RULE_EXTRACTOR.mode} Fidelity",
+            "Extraction Time (sec)",
+            "Extraction Memory (MB)",
+            "Ruleset Size",
+            "Average Rule Length",
+            "# of Terms",
+        ]
     results_df = pd.DataFrame(data=[], columns=['fold'])
 
     # Extract rules from model from each fold
@@ -61,18 +75,34 @@ def cross_validate_re(manager):
         # Path to neural network model for this fold
         model_file_path = manager.n_fold_model_fp(fold)
         nn_model = load_model(model_file_path)
-        _, _, nn_accuracy, majority_class = nn_model.evaluate(
-            X_test,
-            tf.keras.utils.to_categorical(y_test),
-            verbose=(
-                1 if logging.getLogger().getEffectiveLevel() == logging.DEBUG \
-                else 0
-            ),
-        )
-        nn_auc = sklearn.metrics.roc_auc_score(
-            tf.keras.utils.to_categorical(y_test),
-            nn_model.predict(X_test),
-        )
+        if regression:
+            nn_loss = nn_model.evaluate(
+                X_test,
+                y_test,
+                verbose=(
+                    1 if logging.getLogger().getEffectiveLevel() == logging.DEBUG \
+                    else 0
+                ),
+            )
+        else:
+            nn_loss, _, nn_accuracy, majority_class = nn_model.evaluate(
+                X_test,
+                tf.keras.utils.to_categorical(
+                    y_test,
+                    num_classes=len(manager.DATASET_INFO.output_classes),
+                ),
+                verbose=(
+                    1 if logging.getLogger().getEffectiveLevel() == logging.DEBUG \
+                    else 0
+                ),
+            )
+            if len(manager.DATASET_INFO.output_classes) <= 2:
+                nn_auc = sklearn.metrics.roc_auc_score(
+                    y_test,
+                    np.argmax(nn_model.predict(X_test), axis=-1),
+                )
+            else:
+                nn_auc = 0
 
         ########################################################################
         ## Rule Extraction Evaluation
@@ -127,7 +157,10 @@ def cross_validate_re(manager):
                 high_fidelity_predictions=np.argmax(
                     nn_model.predict(X_test),
                     axis=1
-                ),
+                ) if (not regression) else nn_model.predict(X_test),
+                num_workers=manager.EVALUATE_NUM_WORKERS,
+                regression=regression,
+                multi_class=(len(manager.DATASET_INFO.output_classes) > 2),
             )
         else:
             # Else we are talking about a decision tree classifier in here
@@ -139,7 +172,9 @@ def cross_validate_re(manager):
                 high_fidelity_predictions=np.argmax(
                     nn_model.predict(X_test),
                     axis=1
-                ),
+                ) if (not regression) else nn_model.predict(X_test),
+                regression=regression,
+                multi_class=(len(manager.DATASET_INFO.output_classes) > 2),
             )
         ########################################################################
         ## Table writing and saving
@@ -147,20 +182,26 @@ def cross_validate_re(manager):
 
         # Same some of this information into our dataframe
         results_df.loc[fold, 'fold'] = fold
-        results_df.loc[fold, 'nn_accuracy'] = nn_accuracy
-        results_df.loc[fold, 'nn_auc'] = nn_auc
-        results_df.loc[fold, 'majority_class'] = majority_class
+        results_df.loc[fold, 'nn_loss'] = nn_loss
+        if not regression:
+            results_df.loc[fold, 'nn_accuracy'] = nn_accuracy
+            results_df.loc[fold, 'nn_auc'] = nn_auc
+            results_df.loc[fold, 'majority_class'] = majority_class
         results_df.loc[fold, 're_time (sec)'] = re_time
         results_df.loc[fold, 're_memory (MB)'] = re_memory
-        results_df.loc[fold, 're_acc'] = re_results['acc']
-        results_df.loc[fold, 're_fid'] = re_results['fid']
-        results_df.loc[fold, 're_auc'] = re_results['auc']
-        results_df.loc[fold, 'output_classes'] = str(
-            re_results['output_classes']
-        )
-        results_df.loc[fold, 're_n_rules_per_class'] = str(
-            re_results.get('n_rules_per_class', 0)
-        )
+        if regression:
+            results_df.loc[fold, 're_loss'] = re_results['loss']
+            results_df.loc[fold, 're_mse_fid'] = re_results['mse_fid']
+        else:
+            results_df.loc[fold, 're_acc'] = re_results['acc']
+            results_df.loc[fold, 're_fid'] = re_results['fid']
+            results_df.loc[fold, 're_auc'] = re_results['auc']
+            results_df.loc[fold, 'output_classes'] = str(
+                re_results['output_classes']
+            )
+            results_df.loc[fold, 're_n_rules_per_class'] = str(
+                re_results.get('n_rules_per_class', 0)
+            )
         results_df.loc[fold, 'n_overlapping_features'] = str(
             re_results.get('n_overlapping_features', 0)
         )
@@ -178,13 +219,22 @@ def cross_validate_re(manager):
             0
         )
 
-        logging.debug(
-            f"Rule extraction for fold {fold} took a total of "
-            f"{re_time} sec "
-            f"and {re_memory} MB to obtain "
-            f"testing accuracy {re_results['acc']} compared to the accuracy "
-            f"of the neural network {nn_accuracy}."
-        )
+        if regression:
+            logging.debug(
+                f"Rule extraction for fold {fold} took a total of "
+                f"{re_time} sec "
+                f"and {re_memory} MB to obtain "
+                f"testing loss of {re_results['loss']} compared to the "
+                f"loss of the neural network {nn_loss}."
+            )
+        else:
+            logging.debug(
+                f"Rule extraction for fold {fold} took a total of "
+                f"{re_time} sec "
+                f"and {re_memory} MB to obtain "
+                f"testing accuracy {re_results['acc']} compared to the "
+                f"accuracy of the neural network {nn_accuracy}."
+            )
 
         # Fill up our pretty table
         if isinstance(surrogate, Ruleset):
@@ -197,18 +247,30 @@ def cross_validate_re(manager):
         else:
             num_rules = 0
             avg_rule_length = 0
-        new_row = [
-            round(nn_accuracy, manager.ROUNDING_DECIMALS),
-            round(nn_auc, manager.ROUNDING_DECIMALS),
-            round(re_results['acc'], manager.ROUNDING_DECIMALS),
-            round(re_results['auc'], manager.ROUNDING_DECIMALS),
-            round(re_results['fid'], manager.ROUNDING_DECIMALS),
-            round(re_time,  manager.ROUNDING_DECIMALS),
-            round(re_memory, manager.ROUNDING_DECIMALS),
-            num_rules,
-            avg_rule_length,
-            re_results.get('n_unique_terms', 0),
-        ]
+        if regression:
+            new_row = [
+                round(nn_loss, manager.ROUNDING_DECIMALS),
+                round(re_results['loss'], manager.ROUNDING_DECIMALS),
+                round(re_results['mse_fid'], manager.ROUNDING_DECIMALS),
+                round(re_time,  manager.ROUNDING_DECIMALS),
+                round(re_memory, manager.ROUNDING_DECIMALS),
+                num_rules,
+                avg_rule_length,
+                re_results.get('n_unique_terms', 0),
+            ]
+        else:
+            new_row = [
+                round(nn_accuracy, manager.ROUNDING_DECIMALS),
+                round(nn_auc, manager.ROUNDING_DECIMALS),
+                round(re_results['acc'], manager.ROUNDING_DECIMALS),
+                round(re_results['auc'], manager.ROUNDING_DECIMALS),
+                round(re_results['fid'], manager.ROUNDING_DECIMALS),
+                round(re_time,  manager.ROUNDING_DECIMALS),
+                round(re_memory, manager.ROUNDING_DECIMALS),
+                num_rules,
+                avg_rule_length,
+                re_results.get('n_unique_terms', 0),
+            ]
         if table_rows is None:
             table_rows = np.expand_dims(np.array(new_row), axis=0)
         else:
@@ -220,12 +282,21 @@ def cross_validate_re(manager):
 
         # Finally, log this int the progress bar if not on quiet mode to get
         # some feedback
-        logging.info(
-            f'Rule set test accuracy for fold {fold}/{manager.N_FOLDS} '
-            f'is {round(re_results["acc"], 3)}, AUC is '
-            f'{round(re_results["auc"], 3)}, and size of rule set is '
-            f'{num_rules}'
-        )
+        if regression:
+            logging.info(
+                f'Rule set test loss for fold {fold}/{manager.N_FOLDS} '
+                f'is {round(re_results["loss"], 3)}, MSE fidelity is '
+                f'{round(re_results["mse_fid"], 3)}, and size of rule set '
+                f'is {num_rules}'
+            )
+        else:
+            logging.info(
+                f'Rule set test accuracy for fold {fold}/{manager.N_FOLDS} '
+                f'is {round(re_results["acc"], 3)}, AUC is '
+                f'{round(re_results["auc"], 3)}, fidelity is '
+                f'{round(re_results["fid"], 3)}, and size of rule set '
+                f'is {num_rules}'
+            )
 
     # Now that we are done, let's serialize our dataframe for further analysis
     results_df.to_csv(manager.N_FOLD_RESULTS_FP, index=False)

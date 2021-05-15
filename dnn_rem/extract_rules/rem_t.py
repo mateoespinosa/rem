@@ -31,6 +31,8 @@ def extract_rules(
     tree_extraction_algorithm_name="random_forest",
     ccp_prune=True,
     estimators=30,
+    regression=False,
+    tree_max_depth=None,
     **kwargs,
 ):
     """
@@ -67,6 +69,8 @@ def extract_rules(
                 threshold_decimals=threshold_decimals,
                 min_cases=min_cases,
                 ccp_prune=ccp_prune,
+                regression=regression,
+                max_depth=tree_max_depth,
             )
         elif tree_extraction_algorithm_name.lower() == "random_forest":
             tree_extraction_algorithm = random_forest_rules
@@ -74,6 +78,8 @@ def extract_rules(
                 threshold_decimals=threshold_decimals,
                 min_cases=min_cases,
                 estimators=estimators,
+                regression=regression,
+                max_depth=tree_max_depth,
             )
         else:
             raise ValueError(

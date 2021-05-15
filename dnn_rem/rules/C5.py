@@ -59,7 +59,6 @@ def _parse_C5_rule_str(
         the given output of C5.0.
     """
     rules_set = set()
-
     rule_str_lines = rule_str.split('\n')
     line_index = 2
 
@@ -146,6 +145,7 @@ def C5(
     seed=42,
     sample_fraction=0,
     trials=1,
+    case_weights=1,
 ):
     y = robjects.vectors.FactorVector(
         y.map(str),
@@ -172,6 +172,7 @@ def C5(
         x=x,
         y=y,
         rules=True,
+        # weights=(case_weights or 1),
         control=C50.C5_0Control(
             winnow=winnow,
             minCases=min_cases,

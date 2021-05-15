@@ -20,7 +20,8 @@ from dnn_rem.rules.C5 import C5
 from dnn_rem.logic_manipulator.substitute_rules import \
     substitute
 
-from .rem_d import ModelCache, _serialized_function_execute
+from .rem_d import ModelCache
+from dnn_rem.utils.parallelism import serialized_function_execute
 
 
 ################################################################################
@@ -217,7 +218,7 @@ def extract_rules(
 
                         # And do the multi-process pooling call
                         new_rulesets = pool.map(
-                            _serialized_function_execute,
+                            serialized_function_execute,
                             serialized_terms,
                         )
 

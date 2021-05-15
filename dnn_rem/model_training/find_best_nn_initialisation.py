@@ -64,7 +64,7 @@ def run(manager):
             ####################################################################
 
             # Build and train nn put it in temp/
-            model, nn_accuracy, nn_auc, maj_class_acc = run_train_loop(
+            model, nn_loss, nn_accuracy, nn_auc, maj_class_acc = run_train_loop(
                 X_train=X_train,
                 y_train=y_train,
                 # Validate on our training data itself. In the near future,

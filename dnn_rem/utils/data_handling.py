@@ -12,14 +12,15 @@ def stratified_k_fold_split(
     n_folds=1,
     test_size=0.2,
     random_state=None,
+    regression=False,
 ):
     # Helper method to return a list with n_folds tuples (X_train, y_train)
     # after partitioning the given X, y dataset using stratified splits.
     result = []
-    if n_folds == 1:
+    if (n_folds == 1) or regression:
         # Degenerate case: let's just dump all our indices as our single fold
         split_gen = ShuffleSplit(
-            n_splits=1,
+            n_splits=n_folds,
             test_size=test_size,
             random_state=random_state,
         )

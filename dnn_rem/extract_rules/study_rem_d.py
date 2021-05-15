@@ -4,6 +4,8 @@ Main implementation of the vanilla REM-D rule extraction algorithm for DNNs.
 from collections import defaultdict
 from multiprocessing import Pool
 from tqdm import tqdm  # Loading bar for rule generation
+# TODO: DELETE THIS
+import sklearn
 import dill
 import logging
 import numpy as np
@@ -16,7 +18,7 @@ from dnn_rem.rules.rule import Rule
 from dnn_rem.rules.ruleset import Ruleset, RuleScoreMechanism
 from dnn_rem.rules.C5 import C5
 from dnn_rem.logic_manipulator.substitute_rules import \
-    substitute
+    substitute_study
 from dnn_rem.logic_manipulator.delete_redundant_terms import \
     global_most_general_replacement, remove_redundant_terms
 from dnn_rem.logic_manipulator.merge import merge
@@ -26,6 +28,12 @@ from dnn_rem.utils.parallelism import serialized_function_execute
 ################################################################################
 ## Helper Classes
 ################################################################################
+
+# TODO: DELETE THIS
+def _log_to_file(*args):
+    print(*args)
+    with open('xor_rem_d_example.log', 'a') as f:
+        print(*args, file=f)  # Python 3.x
 
 class ModelCache(object):
     """
@@ -148,12 +156,6 @@ class ModelCache(object):
             result = result.iloc[:, top_k_indices]
         return result
 
-    def get_num_activations(self, layer_index):
-        """
-        Return the number of activations for the layer at the given index.
-        """
-        return self._activation_map[layer_index].shape[-1]
-
     def get_layer_activations_of_neuron(self, layer_index, neuron_index):
         """
         Return activation values given layer index, only return the column for
@@ -218,6 +220,9 @@ def extract_rules(
 
     :returns Ruleset: the set of rules extracted from the given model.
     """
+
+    # TODO: DELETE THIS
+    intermediate_ruleset_map = defaultdict(list)
 
     # Determine whether we want to subsample our training dataset to make it
     # more scalable or not
@@ -291,8 +296,12 @@ def extract_rules(
                     (1 / num_classes) if (last_activation == "softmax") else 0.5
                 ),
             )
+            intermediate_ruleset_map[output_layer].append(class_rule)
 
+            # TODO: DELETE THIS
+            _log_to_file("*"*50, "Starting with class", output_class_name, "*"*50)
             # Extract layer-wise rules
+
             for hidden_layer, next_hidden_layer in zip(
                 reversed(input_hidden_acts),
                 reversed(output_hidden_acts),
@@ -303,6 +312,8 @@ def extract_rules(
                     # We never prune things from the input layer itself
                     top_k=top_k_activations if hidden_layer else 1,
                 )
+                # TODO: DELETE THIS
+                _log_to_file("\tCurrently in hidden layer", hidden_layer, "with activations shape", predictors.shape, "and next layer is", next_hidden_layer)
 
                 # We will generate an intermediate ruleset for this layer
                 intermediate_rules = Ruleset(
@@ -328,6 +339,19 @@ def extract_rules(
                 if preemptive_redundant_removal:
                     terms = remove_redundant_terms(terms)
                 num_terms = len(terms)
+
+                # TODO: DELETE THIS
+                next_layer_acts = cache_model.get_layer_activations(
+                    layer_index=next_hidden_layer
+                )
+                # TODO: DELETE THIS
+                temp_ruleset = Ruleset(
+                    rules=[class_rule],
+                    feature_names=list(next_layer_acts.columns),
+                    output_class_names=[output_class_name, None],
+                )
+                # TODO: DELETE THIS
+                _log_to_file("\t\tClass rule has a total of", num_terms, "terms and", temp_ruleset.num_clauses())
 
                 # We preemptively extract all the activations of the next layer
                 # so that we can serialize the function below using dill.
@@ -357,6 +381,8 @@ def extract_rules(
                         f"\tA total of {np.count_nonzero(target)}/"
                         f"{len(target)} training samples satisfied {term}."
                     )
+                    # TODO: DELETE THIS
+                    _log_to_file("\t\t\tExtracting rules from term", term, "when a total of", f"{np.count_nonzero(target)}/{len(target)} training samples satisfied it.")
 
                     prior_rule_confidence = term_confidences[term]
                     rule_conclusion_map = {
@@ -376,6 +402,8 @@ def extract_rules(
                         min_cases=min_cases,
                         trials=trials,
                     )
+                    # TODO: DELETE THIS
+                    _log_to_file("\t\t\t\tWe extracted a total of", len(new_rules), "from this term")
 
                     if pbar:
                         pbar.update(1/num_terms)
@@ -429,8 +457,13 @@ def extract_rules(
 
                 # Time to do our simple reduction from our map above by
                 # accumulating all the generated rules into a single ruleset
+                # TODO: DELETE THIS
+                _log_to_file("\t\tThe summary of all extracted rule sets for all terms is:", list(map(len, new_rulesets)))
                 for ruleset in new_rulesets:
                     intermediate_rules.add_rules(ruleset)
+                # TODO: DELETE THIS
+                _log_to_file("\t\tOur intermediate ruleset has a total of", intermediate_rules.num_clauses(), "clauses and", intermediate_rules.num_terms(), "terms")
+
                 logging.debug(
                     f'\tGenerated intermediate ruleset for layer '
                     f'{hidden_layer} and output class {output_class_name} has '
@@ -438,22 +471,30 @@ def extract_rules(
                     f'{intermediate_rules.num_terms()} different terms in it.'
                 )
 
-
                 # Merge rules with current accumulation
                 pbar.set_description(
                     f"Substituting rules for layer {hidden_layer} with output "
                     f"class {output_class_name}"
                 )
-                class_rule = substitute(
+                # TODO: DELETE THIS
+                _log_to_file("\t\tStarting substitution into total rule...")
+                class_rule = substitute_study(
                     total_rule=class_rule,
                     intermediate_rules=intermediate_rules,
                 )
+                # And clean it up
+                # # TODO: DELETE THIS
+                # class_rule.remove_unsatisfiable_clauses()
+                # # TODO: DELETE THIS
+                # for clause in class_rule.premise:
+                #     # TODO: DELETE THIS
+                #     clause.remove_redundant_terms()
 
-                if not len(class_rule.premise):
-                    pbar.write(
-                        f"[WARNING] Found rule with empty premise of for "
-                        f"class {output_class_name}."
-                    )
+                # if not len(class_rule.premise):
+                #     pbar.write(
+                #         f"[WARNING] Found rule with empty premise of for "
+                #         f"class {output_class_name}."
+                #     )
 
                 # And then time to drop some intermediate rules in here!
                 temp_ruleset = Ruleset(
@@ -461,6 +502,13 @@ def extract_rules(
                     feature_names=list(predictors.columns),
                     output_class_names=[output_class_name, None],
                 )
+                # TODO: DELETE THIS
+                _log_to_file("\t\tAfter substitution resulting class rule has", temp_ruleset.num_clauses(), "clauses in it and", temp_ruleset.num_terms(), "terms in it...")
+
+                # Keep a collection of intermediate class rules to explore how
+                # much performance degrades as the we go into the network
+                # TODO: DELETE THIS
+                intermediate_ruleset_map[hidden_layer].append(class_rule)
 
                 if (
                     (train_labels is not None) and
@@ -494,10 +542,51 @@ def extract_rules(
                     class_rule = next(iter(temp_ruleset.rules))
 
             # Finally add this class rule to our solution ruleset
+            # TODO: DELETE THIS
+            temp_ruleset = Ruleset(
+                rules=[class_rule],
+                feature_names=list(predictors.columns),
+                output_class_names=[output_class_name, None],
+            )
+            # TODO: DELETE THIS
+            _log_to_file("\tAt the end of this class, we obtained a ruleset with", temp_ruleset.num_clauses(), "clauses in it and", temp_ruleset.num_terms(), "terms in it")
             dnf_rules.add(class_rule)
 
         pbar.set_description("Done extracting rules from neural network")
 
+    # Time to analyze performance degradation as the depth of the layer advances
+    # TODO: DELETE THIS
+    out_preds = np.argmax(
+        cache_model.get_layer_activations(layer_index=output_layer).to_numpy(),
+        axis=-1,
+    )
+    for hidden_layer in reversed(input_hidden_acts + [output_layer]):
+        predictors = cache_model.get_layer_activations(
+            layer_index=hidden_layer,
+        )
+        collected_rules = set(intermediate_ruleset_map[hidden_layer])
+        temp_ruleset = Ruleset(
+            rules=set(intermediate_ruleset_map[hidden_layer]),
+            feature_names=list(predictors.columns),
+            output_class_names=output_class_names,
+        )
+        predicted_vals = temp_ruleset.predict(
+            X=predictors.to_numpy(),
+            num_workers=6,
+        )
+        acc = sklearn.metrics.accuracy_score(
+            train_labels,
+            predicted_vals,
+        )
+        _log_to_file("Train accuracy for intermediate ruleset of hidden layer", hidden_layer, "was", acc, "with ruleset having a total of", temp_ruleset.num_clauses(), "clauses and", temp_ruleset.num_terms(), "terms in it")
+
+        fid = sklearn.metrics.accuracy_score(
+            out_preds,
+            predicted_vals,
+        )
+        _log_to_file("Train fidelity for intermediate ruleset of hidden layer", hidden_layer, "was", fid)
+
+    _log_to_file("\n-------------------------------------- DONE --------------------------------------\n\n\n\n")
     return Ruleset(
         rules=dnf_rules,
         feature_names=feature_names,

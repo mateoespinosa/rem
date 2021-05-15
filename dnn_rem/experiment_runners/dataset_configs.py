@@ -17,8 +17,11 @@ AVAILABLE_DATASETS = [
     'Artif-1',
     'Artif-2',
     'BreastCancer',
+    'ForestCoverType',
+    'GlassIdentification',
     'Iris',
     'LetterRecognition',
+    'LetterRecognitionComplete',
     'MAGIC',
     'MB-1004-GE-2Hist',
     'MB-Clin-DR',
@@ -40,7 +43,10 @@ AVAILABLE_DATASETS = [
     'MNIST',
     'PARTNER-Clinical',
     'PARTNER-Genomic',
+    'SARCOS',
     'TCGA-PANCAN',
+    'WineQuality',
+    'WineQualityClassification',
     'XOR',
 ]
 
@@ -224,6 +230,7 @@ class DatasetDescriptor(object):
         feature_names=None,
         preprocessing=None,
         feature_descriptors=None,
+        regression=False,
     ):
         self.name = name
         self.n_features = n_features
@@ -235,6 +242,7 @@ class DatasetDescriptor(object):
         self.data = None
         self.X = None
         self.y = None
+        self.regression = regression
 
     def process_dataframe(self, df):
         self.data = df
@@ -261,7 +269,7 @@ class DatasetDescriptor(object):
 
         self.X = self.data.drop([self.target_col], axis=1).values
         self.y = self.data[self.target_col].values
-        if self.output_classes is None:
+        if (self.output_classes is None) and (not self.regression):
             out_classes = sorted(list(set(self.y)))
             self.output_classes = []
             for out_class in out_classes:
@@ -522,6 +530,117 @@ def get_data_configuration(dataset_name):
             output_classes=output_classes,
             target_col='letter',
         )
+
+    if dataset_name == 'letterrecognitioncomplete':
+        output_classes = [
+            OutputClass(
+                name=chr(i),
+                encoding=i - ord('A'),
+            ) for i in range(ord('A'), ord('Z') + 1, 1)
+        ]
+        def preprocess_fun(X_train, y_train, X_test=None, y_test=None):
+            return replace_categorical_outputs(
+                X_train=X_train,
+                y_train=y_train,
+                X_test=X_test,
+                y_test=y_test,
+                output_classes=output_classes,
+            )
+        return DatasetDescriptor(
+            name=dataset_name,
+            output_classes=output_classes,
+            target_col='letter',
+            preprocessing=preprocess_fun,
+        )
+
+    if dataset_name == 'glassidentification':
+        output_classes = [
+            OutputClass(
+                name='building_windows_float_processed',
+                encoding=0,
+            ),
+            OutputClass(
+                name='building_windows_non_float_processed',
+                encoding=1,
+            ),
+            OutputClass(
+                name='vehicle_windows_float_processed',
+                encoding=2,
+            ),
+            OutputClass(
+                name='containers',
+                encoding=3,
+            ),
+            OutputClass(
+                name='tableware',
+                encoding=4,
+            ),
+            OutputClass(
+                name='headlamps',
+                encoding=5,
+            ),
+        ]
+        def preprocess_fun(X_train, y_train, X_test=None, y_test=None):
+            return replace_categorical_outputs(
+                X_train=X_train,
+                y_train=y_train,
+                X_test=X_test,
+                y_test=y_test,
+                output_classes=output_classes,
+            )
+        return DatasetDescriptor(
+            name=dataset_name,
+            output_classes=output_classes,
+            target_col='Type',
+            preprocessing=preprocess_fun,
+        )
+
+    if dataset_name == 'forestcovertype':
+        output_classes = [
+            OutputClass(
+                name='Spruce/Fir',
+                encoding=0,
+            ),
+            OutputClass(
+                name='Lodgepole_Pine',
+                encoding=1,
+            ),
+            OutputClass(
+                name='Ponderosa_Pine',
+                encoding=2,
+            ),
+            OutputClass(
+                name='Cottonwood/Willow',
+                encoding=3,
+            ),
+            OutputClass(
+                name='Aspen',
+                encoding=4,
+            ),
+            OutputClass(
+                name='Douglas-fir',
+                encoding=5,
+            ),
+            OutputClass(
+                name='Krummholz',
+                encoding=6,
+            ),
+        ]
+        def preprocess_fun(X_train, y_train, X_test=None, y_test=None):
+            return replace_categorical_outputs(
+                X_train=X_train,
+                y_train=y_train,
+                X_test=X_test,
+                y_test=y_test,
+                output_classes=output_classes,
+            )
+        return DatasetDescriptor(
+            name=dataset_name,
+            output_classes=output_classes,
+            target_col='Cover_Type',
+            preprocessing=preprocess_fun,
+        )
+
     if dataset_name == 'mnist':
         output_classes = (
             OutputClass(name='0', encoding=0),
@@ -759,6 +878,32 @@ def get_data_configuration(dataset_name):
             name=dataset_name,
             output_classes=output_classes,
             target_col='xor',
+        )
+
+    if dataset_name == 'sarcos':
+        return DatasetDescriptor(
+            name=dataset_name,
+            target_col='torque',
+            regression=True,
+        )
+
+    if dataset_name == 'winequality':
+        return DatasetDescriptor(
+            name=dataset_name,
+            target_col='quality',
+            regression=True,
+            preprocessing=unit_scale_preprocess,
+        )
+
+    if dataset_name == 'winequalityclassification':
+        return DatasetDescriptor(
+            name=dataset_name,
+            target_col='quality',
+            preprocessing=unit_scale_preprocess,
+            output_classes=[
+                OutputClass(name=str(i), encoding=i)
+                for i in range(10)
+            ]
         )
 
     if dataset_name == 'magic':

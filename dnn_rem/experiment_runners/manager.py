@@ -16,7 +16,9 @@ import tensorflow as tf
 import time
 import yaml
 from sklearn.ensemble import RandomForestClassifier
+from sklearn.ensemble import RandomForestRegressor
 from sklearn.tree import DecisionTreeClassifier
+from sklearn.tree import DecisionTreeRegressor
 
 from . import dataset_configs
 from dnn_rem.extract_rules.pedagogical import extract_rules as pedagogical
@@ -108,7 +110,7 @@ class ExperimentManager(object):
                 best_initialisation.h5
     """
 
-    def __init__(self, config, start_rerun_stage=None):
+    def __init__(self, config, start_rerun_stage=None, initialize=True):
 
         # Let's see if we allow for checkpointing or if we want to always do
         # a rerun
@@ -134,7 +136,7 @@ class ExperimentManager(object):
         self.DATASET_INFO = dataset_configs.get_data_configuration(
             dataset_name=config["dataset_name"],
         )
-
+        self.EVALUATE_NUM_WORKERS = config.get("evaluate_num_workers", 1)
         self.DATA_FP = config["dataset_file"]
         # How many trials we will attempt for finding our best initialisation
         self.INITIALISATION_TRIALS = config["initialisation_trials"]
@@ -252,16 +254,20 @@ class ExperimentManager(object):
             )
 
         # Set up all the directories we will need
-        self._initialize_directories()
+        if initialize:
+            self._initialize_directories()
 
-        # For reference purposes, let's dump our effective config file into
-        # the experiment directory to make sure we can always reproduce the
-        # results generated here
-        with open(os.path.join(self.experiment_dir, "config.yaml"), 'w') as f:
-            f.write(yaml.dump(config, sort_keys=True))
+            # For reference purposes, let's dump our effective config file into
+            # the experiment directory to make sure we can always reproduce the
+            # results generated here
+            with open(
+                os.path.join(self.experiment_dir, "config.yaml"),
+                'w',
+            ) as f:
+                f.write(yaml.dump(config, sort_keys=True))
 
-        # And initialize our data splits
-        self._initialize_data()
+            # And initialize our data splits
+            self._initialize_data()
 
     def __enter__(self):
         """
@@ -380,13 +386,21 @@ f
                 run_fn = deep_red_c5
                 real_name = "DeepRED_C5"
 
+            if self.DATASET_INFO.regression and (name != "erem-d"):
+                raise ValueError(
+                    f"Only eREM-D supports regression tasks such as "
+                    f"{self.DATASET_INFO.name}"
+                )
+
             # We set the last activation to None here if it is going to be
             # be included in the network itself. Otherwise, we request our
             # rule extractor to explicitly perform the activation on the last
             # layer as this was merged into the loss function
-            last_activation = (
-                last_activation if last_activation in loss_function else None
-            )
+            if last_activation is not None:
+                last_activation = (
+                    last_activation if last_activation in loss_function
+                    else None
+                )
 
             def _run(*args, **kwargs):
                 return run_fn(
@@ -395,10 +409,11 @@ f
                     **extractor_params,
                     last_activation=last_activation,
                     feature_names=self.DATASET_INFO.feature_names,
+                    regression=self.DATASET_INFO.regression,
                     output_class_names=list(map(
                         lambda x: x.name,
                         self.DATASET_INFO.output_classes,
-                    )),
+                    )) if (not self.DATASET_INFO.regression) else None,
                 )
             return RuleExMode(
                 mode=real_name,
@@ -407,16 +422,16 @@ f
 
         if name == "pedagogical":
             def _run(*args, **kwargs):
-                kwargs.pop("train_labels", None)
                 return pedagogical(
                     *args,
                     **kwargs,
                     **extractor_params,
                     feature_names=self.DATASET_INFO.feature_names,
+                    regression=self.DATASET_INFO.regression,
                     output_class_names=list(map(
                         lambda x: x.name,
                         self.DATASET_INFO.output_classes,
-                    )),
+                    )) if (not self.DATASET_INFO.regression) else None,
                 )
             return RuleExMode(
                 mode='pedagogical',
@@ -431,10 +446,11 @@ f
                     **kwargs,
                     **extractor_params,
                     feature_names=self.DATASET_INFO.feature_names,
+                    regression=self.DATASET_INFO.regression,
                     output_class_names=list(map(
                         lambda x: x.name,
                         self.DATASET_INFO.output_classes,
-                    )),
+                    )) if (not self.DATASET_INFO.regression) else None,
                 ),
             )
 
@@ -455,20 +471,32 @@ f
                 bootstrap=True,
                 **kwargs
             ):
-                dt = RandomForestClassifier(
-                    n_estimators=estimators,
-                    max_depth=max_depth,
-                    min_samples_leaf=min_cases,
-                    max_features=max_features,
-                    criterion=criterion,
-                    random_state=seed,
-                    max_leaf_nodes=max_leaf_nodes,
-                    class_weight=class_weight,
-                    bootstrap=bootstrap,
-                )
+                if self.DATASET_INFO.regression:
+                    rf = RandomForestClassifier(
+                        n_estimators=estimators,
+                        max_depth=max_depth,
+                        min_samples_leaf=min_cases,
+                        max_features=max_features,
+                        criterion=criterion,
+                        random_state=seed,
+                        max_leaf_nodes=max_leaf_nodes,
+                        class_weight=class_weight,
+                        bootstrap=bootstrap,
+                    )
+                else:
+                    rf = RandomForestRegressor(
+                        n_estimators=estimators,
+                        max_depth=max_depth,
+                        min_samples_leaf=min_cases,
+                        max_features=max_features,
+                        criterion=criterion,
+                        random_state=seed,
+                        max_leaf_nodes=max_leaf_nodes,
+                        bootstrap=bootstrap,
+                    )
 
-                dt.fit(train_data, train_labels)
-                return dt
+                rf.fit(train_data, train_labels)
+                return rf
 
             return RuleExMode(
                 mode='RandomForest',
@@ -496,7 +524,15 @@ f
                 ccp_prune=True,
                 **kwargs
             ):
-                dt = DecisionTreeClassifier(
+                if self.DATASET_INFO.regression:
+                    dt_class = DecisionTreeRegressor
+                    extra_params = {}
+                else:
+                    dt_class = DecisionTreeClassifier
+                    extra_params = {
+                        "class_weight": class_weight,
+                    }
+                dt = dt_class(
                     max_depth=max_depth,
                     min_samples_leaf=min_cases,
                     max_features=max_features,
@@ -504,7 +540,7 @@ f
                     criterion=criterion,
                     random_state=seed,
                     max_leaf_nodes=max_leaf_nodes,
-                    class_weight=class_weight,
+                    **extra_params
                 )
                 if ccp_prune:
                     path = dt.cost_complexity_pruning_path(
@@ -512,7 +548,7 @@ f
                         train_labels,
                     )
                     ccp_alphas, impurities = path.ccp_alphas, path.impurities
-                    dt = DecisionTreeClassifier(
+                    dt = dt_class(
                         max_depth=max_depth,
                         min_samples_leaf=min_cases,
                         max_features=max_features,
@@ -520,8 +556,8 @@ f
                         criterion=criterion,
                         random_state=seed,
                         max_leaf_nodes=max_leaf_nodes,
-                        class_weight=class_weight,
                         ccp_alpha=ccp_alphas[len(ccp_alphas)//2 - 1],
+                        **extra_params
                     )
 
                 dt.fit(train_data, train_labels)
@@ -596,7 +632,6 @@ f
 
         # Read our dataset
         self.X, self.y, _ = self.DATASET_INFO.read_data(self.DATA_FP)
-
         # Split our data into two groups of train and test data in general
         self.data_split, _ = self.serializable_stage(
             target_file=self.NN_INIT_SPLIT_INDICES_FP,
@@ -606,6 +641,7 @@ f
                 random_state=self.RANDOM_SEED,
                 test_size=self.PERCENT_TEST_DATA,
                 n_folds=1,
+                regression=self.DATASET_INFO.regression,
             ),
             serializing_fn=split_serializer,
             deserializing_fn=split_deserializer,
@@ -621,6 +657,7 @@ f
                 random_state=self.RANDOM_SEED,
                 test_size=self.PERCENT_TEST_DATA,
                 n_folds=self.N_FOLDS,
+                regression=self.DATASET_INFO.regression,
             ),
             serializing_fn=split_serializer,
             deserializing_fn=split_deserializer,

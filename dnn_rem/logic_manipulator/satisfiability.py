@@ -9,7 +9,8 @@ from ..rules.term import TermOperator
 def is_satisfiable(clause):
     """
     Determines whether or not the clause is satisfiable.
-    Unsatisfiable if empty or a neurons min value >= its max value
+    Unsatisfiable two or more terms are mutually exclusive i.e. they restrict
+    a variable into
 
     :param ConjuctiveClause clause: The clause whose satisfiability we want to
         determine.
@@ -18,28 +19,25 @@ def is_satisfiable(clause):
         otherwise.
     """
 
-    # Empty Clause
+    # Empty Clause is always satisfiable
     if len(clause.terms) == 0:
         return True
 
-    # Check if neurons min value >= max value
-    neuron_conditions = terms_set_to_variable_dict(clause.terms)
-    for neuron in neuron_conditions.keys():
-        # If neuron is specified with <= and >
-        if (
-            neuron_conditions[neuron][TermOperator.GreaterThan] and
-            neuron_conditions[neuron][TermOperator.LessThanEq]
+    # Check if variables min value >= max value
+    variable_conds = terms_set_to_variable_dict(clause.terms)
+    for var in variable_conds.keys():
+        # Look at this variable's lower and upper bounds
+        upper_bounds = variable_conds[var][TermOperator.LessThanEq]
+        lower_bounds = variable_conds[var][TermOperator.GreaterThan]
+
+        if upper_bounds and lower_bounds and (
+            min(lower_bounds) >= max(upper_bounds)
         ):
-            gt_vals = neuron_conditions[neuron][TermOperator.GreaterThan]
-            lteq_vals = neuron_conditions[neuron][TermOperator.LessThanEq]
+            # Then we have reached a situation where both conditions are
+            # mutually exclusive
+            return False
 
-            if gt_vals and lteq_vals:  # if neuron is subject to both predicates
-                min_value = min(gt_vals)
-                max_value = max(lteq_vals)
-                if min_value >= max_value:
-                    return False
-
-    # All conditions on a neuron are satisfiable
+    # If we reached this point, then all variables are satisfiable
     return True
 
 
@@ -52,9 +50,7 @@ def remove_unsatisfiable_clauses(clauses):
     :returns Set[ConjuctiveClause]: Equivalent set of clauses with all
         unsatisfiable clauses removed.
     """
-    satisfiable_clauses = set()
-    for clause in clauses:
-        if is_satisfiable(clause):
-            satisfiable_clauses.add(clause)
-
-    return satisfiable_clauses
+    return set([
+        clause for clause in clauses
+        if is_satisfiable(clause)
+    ])

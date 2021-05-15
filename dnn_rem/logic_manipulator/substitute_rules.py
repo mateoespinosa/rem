@@ -4,9 +4,18 @@ Methods for making rule substitution.
 
 import itertools
 import logging
+# TODO: DELETE THIS
+import numpy as np
 
 from ..rules.clause import ConjunctiveClause
 from ..rules.rule import Rule
+
+
+# TODO: DELETE THIS
+def _log_to_file(*args):
+    print(*args)
+    with open('xor_rem_d_example.log', 'a') as f:
+        print(*args, file=f)  # Python 3.x
 
 
 def substitute(total_rule, intermediate_rules, conf_threshold=0):
@@ -66,6 +75,153 @@ def substitute(total_rule, intermediate_rules, conf_threshold=0):
         premise=new_premise_clauses,
         conclusion=total_rule.conclusion,
     )
+
+def substitute_efficient(total_rule, intermediate_rules, conf_threshold=0):
+    """
+    Substitute the intermediate rules from the previous layer into the total
+    rule.
+
+    :param Rule total_rule: The receiver rule of the beta reduction we are about
+        to make.
+    :param Ruleset intermediate_rules: The set of intermediate rules which we
+        want to substitute in the given total rule.
+
+    :returns Rule: a new rule equivalent to making the substitution of the given
+        intermediate rules into total_rule.
+    """
+    new_premise_clauses = set()
+    # for each clause in the total rule
+    logging.debug(
+        f"Performing substitution with class rule with "
+        f"{len(total_rule.premise)} clauses in it."
+    )
+    for i, old_premise_clause in enumerate(total_rule.premise):
+        # list of sets of conjunctive clauses that are all conjunctive
+        conj_new_premise_clauses = []
+        for old_premise_term in old_premise_clause.terms:
+            clauses_to_append = \
+                intermediate_rules.get_rule_premises_by_conclusion(
+                    old_premise_term
+                )
+            if clauses_to_append:
+                conj_new_premise_clauses.append([
+                    clause for clause in clauses_to_append
+                    if clause.confidence >= conf_threshold
+                ])
+
+        # When combined into a Cartesian product, get all possible conjunctive
+        # clauses for merged rule
+        # Itertools implementation does not build up intermediate results in
+        # memory
+        new_combos = itertools.product(
+            *tuple(conj_new_premise_clauses)
+        )
+        logging.debug(
+            f"\tAbout to perform a Cartesian product "
+            f"{i + 1}/{len(total_rule.premise)} with sets of size "
+            f"{list(map(len, conj_new_premise_clauses))}"
+        )
+
+        # given tuples of ConjunctiveClauses that are all now conjunctions,
+        # union terms into a single clause
+        for premise_clause_tuple in new_combos:
+            new_terms = set()
+            total_confidence = 0
+            for premise_clause in premise_clause_tuple:
+                # new_clause = new_clause.union(premise_clause)
+                total_confidence += premise_clause.confidence
+                new_terms = new_terms.union(premise_clause.terms)
+            new_clause = ConjunctiveClause(
+                terms=new_terms,
+                confidence=(
+                    (total_confidence / len(premise_clause_tuple))
+                    if premise_clause_tuple else 0
+                ),
+            )
+            new_premise_clauses.add(new_clause)
+    return Rule(
+        premise=new_premise_clauses,
+        conclusion=total_rule.conclusion,
+    )
+
+
+def substitute_study(total_rule, intermediate_rules, conf_threshold=0):
+    """
+    Same as above but used to study the behavior of REM-D in much more detail
+    for the purposes of the write up.
+
+    :param Rule total_rule: The receiver rule of the beta reduction we are about
+        to make.
+    :param Ruleset intermediate_rules: The set of intermediate rules which we
+        want to substitute in the given total rule.
+
+    :returns Rule: a new rule equivalent to making the substitution of the given
+        intermediate rules into total_rule.
+    """
+    # TODO: DELETE THIS
+    _log_to_file("\t\t\tStarting substitution with class rule with", len(total_rule.premise), "clauses in it and", len(set([t for r in total_rule.premise for t in r.terms])), "different terms")
+    new_premise_clauses = set()
+    # for each clause in the total rule
+    logging.debug(
+        f"Performing substitution with class rule with "
+        f"{len(total_rule.premise)} clauses in it."
+    )
+    for i, old_premise_clause in enumerate(total_rule.premise):
+        # list of sets of conjunctive clauses that are all conjunctive
+        conj_new_premise_clauses = []
+        for old_premise_term in old_premise_clause.terms:
+            clauses_to_append = \
+                intermediate_rules.get_rule_premises_by_conclusion(
+                    old_premise_term
+                )
+            if clauses_to_append:
+                conj_new_premise_clauses.append([
+                    clause for clause in clauses_to_append
+                    if clause.confidence >= conf_threshold
+                ])
+
+        # When combined into a Cartesian product, get all possible conjunctive
+        # clauses for merged rule
+        # Itertools implementation does not build up intermediate results in
+        # memory
+        new_combos = itertools.product(
+            *tuple(conj_new_premise_clauses)
+        )
+        logging.debug(
+            f"\tAbout to perform a Cartesian product "
+            f"{i + 1}/{len(total_rule.premise)} with sets of size "
+            f"{list(map(len, conj_new_premise_clauses))}"
+        )
+        # TODO: DELETE THIS
+        _log_to_file("\t\t\t\tAbout to perform a Cartesian product", f"{i + 1}/{len(total_rule.premise)} with sets of size {list(map(len, conj_new_premise_clauses))} for rule with {len(old_premise_clause.terms)} original terms in it resulting in a volume of size {np.prod(list(map(len, conj_new_premise_clauses)))}")
+
+        # given tuples of ConjunctiveClauses that are all now conjunctions,
+        # union terms into a single clause
+        for premise_clause_tuple in new_combos:
+            new_terms = set()
+            total_confidence = 0
+            for premise_clause in premise_clause_tuple:
+                # new_clause = new_clause.union(premise_clause)
+                total_confidence += premise_clause.confidence
+                new_terms = new_terms.union(premise_clause.terms)
+            new_clause = ConjunctiveClause(
+                terms=new_terms,
+                confidence=(total_confidence / len(premise_clause_tuple)),
+                # # TODO: DELETE THIS
+                # remove_redundant=False,
+            )
+            new_premise_clauses.add(new_clause)
+    result = Rule(
+        premise=new_premise_clauses,
+        conclusion=total_rule.conclusion,
+        # # TODO: DELETE THIS
+        # remove_unsatisfiable=False,
+    )
+
+    og_clause_nums = len(new_premise_clauses)
+    end_clause_nums = len(result.premise)
+    _log_to_file("\t\t\tWe removed a total of", og_clause_nums - end_clause_nums, "out of", og_clause_nums, f"intermediate clauses as they were redundant ({100 * (og_clause_nums - end_clause_nums)/og_clause_nums:.2f}% of them)")
+    return result
 
 
 def multilabel_substitute(total_rule, multi_label_rules, term_mapping):
@@ -193,9 +349,16 @@ def conditional_substitute(
         # given tuples of ConjunctiveClauses that are all now conjunctions,
         # union terms into a single clause
         for premise_clause_tuple in new_combos:
-            new_clause = ConjunctiveClause()
+            new_terms = set()
+            total_confidence = 0
             for premise_clause in premise_clause_tuple:
-                new_clause = new_clause.union(premise_clause)
+                # new_clause = new_clause.union(premise_clause)
+                total_confidence += premise_clause.confidence
+                new_terms = new_terms.union(premise_clause)
+            new_clause = ConjunctiveClause(
+                terms=new_terms,
+                confidence=(total_confidence / len(premise_clause_tuple)),
+            )
             new_premise_clauses.add(new_clause)
 
     return Rule(

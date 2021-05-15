@@ -1,5 +1,5 @@
 """
-Merge multiple rules of into Disjunctive Normal Form rules
+Merge multiple rules into Disjunctive Normal Form rules
 
 e.g.
     if x>1 AND y<3 AND z<1 THEN 1
@@ -24,25 +24,24 @@ def merge(rules):
 
     # Build Dictionary mapping rule conclusions to premises(= a set of
     # ConjunctiveClauses)
-    rule_conclusion_to_premises_map = {}
+    conclusion_map = {}
     for rule in rules:
-        premise = rule.premise
-        conclusion = rule.conclusion
-
-        if rule.conclusion in rule_conclusion_to_premises_map:
+        if rule.conclusion in conclusion_map:
             # Seen conclusion - add rule premise to set of premises for that
             #                   conclusion
-            rule_conclusion_to_premises_map[conclusion] = \
-                rule_conclusion_to_premises_map[conclusion].union(premise)
+            conclusion_map[rule.conclusion] = \
+                conclusion_map[rule.conclusion].union(
+                    rule.premise
+                )
         else:
-            # Unseen conclusion - initialise dictionary entry with a set of 1
+            # Unseen conclusion - initialize dictionary entry with a set of 1
             # conjunctive clauses
-            rule_conclusion_to_premises_map[conclusion] = premise
+            conclusion_map[rule.conclusion] = rule.premise
 
     # Convert this dictionary into a set of rules where each conclusion occurs
     # only once, i.e. all rules are in DNF
     DNF_rules = set()
-    for conclusion, premise in rule_conclusion_to_premises_map.items():
+    for conclusion, premise in conclusion_map.items():
         DNF_rules.add(Rule(
             premise=premise,
             conclusion=conclusion

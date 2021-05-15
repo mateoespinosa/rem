@@ -297,10 +297,10 @@ def main():
     for param_path, value in args.param:
         var_names = list(map(lambda x: x.strip(), param_path.split(".")))
         current_obj = config
-        for path_entry in var_names[:1]:
+        for path_entry in var_names[:-1]:
             if path_entry not in config:
-                config[path_entry] = {}
-            current_obj = config[path_entry]
+                current_obj[path_entry] = {}
+            current_obj = current_obj[path_entry]
         current_obj[var_names[-1]] = _to_val(value)
 
     # Time to initialize our experiment manager
@@ -324,7 +324,7 @@ def main():
         # And turn off our profiler if we were using it
         if args.profile:
             pr.disable()
-            pr.print_stats()
+            pr.print_stats(sort='cumtime')
 
     # And that's all folks
     return 0

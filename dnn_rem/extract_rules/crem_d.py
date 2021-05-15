@@ -13,7 +13,8 @@ import dill
 import logging
 import numpy as np
 
-from .rem_d import ModelCache, _serialized_function_execute
+from .rem_d import ModelCache
+from dnn_rem.utils.parallelism import serialized_function_execute
 from dnn_rem.rules.rule import Rule
 from dnn_rem.rules.ruleset import Ruleset, RuleScoreMechanism
 from dnn_rem.rules.C5 import C5

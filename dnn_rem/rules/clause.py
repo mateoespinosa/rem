@@ -12,10 +12,19 @@ class ConjunctiveClause(object):
     The rank_score refers to the hill-climbing score associated with each
     clause. By default, each clause will have a score of 1.
     """
-    def __init__(self, terms=None, confidence=1, score=1):
-        self.terms = remove_redundant_terms(terms or set())
+    def __init__(
+        self,
+        terms=None,
+        confidence=1,
+        score=1,
+        remove_redundant=True,
+    ):
+        self.terms = terms or set()
+        if remove_redundant:
+            self.terms = remove_redundant_terms(self.terms)
         self.confidence = confidence
         self.score = score
+        self.remove_redundant = remove_redundant
 
     def __str__(self):
         terms_str = [str(term) for term in sorted(self.terms, key=str)]
@@ -23,6 +32,9 @@ class ConjunctiveClause(object):
             f"({self.confidence:.4f} | {self.score:.4f})"
             f"[{' AND '.join(terms_str)}]"
         )
+
+    def remove_redundant_terms(self):
+        self.terms = remove_redundant_terms(self.terms)
 
     def __eq__(self, other):
         return (

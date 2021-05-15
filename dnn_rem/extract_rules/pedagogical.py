@@ -11,6 +11,9 @@ import pandas as pd
 from dnn_rem.logic_manipulator.merge import merge
 from dnn_rem.rules.C5 import C5
 from dnn_rem.rules.ruleset import Ruleset
+from dnn_rem.utils.data_handling import stratified_k_fold_split
+from dnn_rem.rules.cart import cart_rules, random_forest_rules
+
 
 ################################################################################
 ## Exposed Methods
@@ -20,12 +23,20 @@ from dnn_rem.rules.ruleset import Ruleset
 def extract_rules(
     model,
     train_data,
+    train_labels=None,
     verbosity=logging.INFO,
     winnow=True,
     threshold_decimals=None,
     min_cases=15,
     feature_names=None,
     output_class_names=None,
+    max_number_of_samples=None,
+    tree_extraction_algorithm_name="C5.0",
+    trials=1,
+    tree_max_depth=None,
+    ccp_prune=True,
+    estimators=30,
+    regression=False,
     **kwargs,
 ):
     """
@@ -44,9 +55,63 @@ def extract_rules(
     :returns Set[Rule]: the set of rules extracted from the given model.
     """
 
+    if tree_extraction_algorithm_name.lower() in ["c5.0", "c5", "see5"]:
+        algo_call = C5
+        algo_kwargs = dict(
+            winnow=winnow,
+            threshold_decimals=threshold_decimals,
+            trials=trials,
+        )
+    elif tree_extraction_algorithm_name.lower() == "cart":
+        algo_call = cart_rules
+        algo_kwargs = dict(
+            threshold_decimals=threshold_decimals,
+            ccp_prune=ccp_prune,
+            class_weight="balanced",
+            max_depth=tree_max_depth,
+            regression=regression,
+        )
+    elif tree_extraction_algorithm_name.lower() == "random_forest":
+        algo_call = random_forest_rules
+        algo_kwargs = dict(
+            threshold_decimals=threshold_decimals,
+            estimators=estimators,
+            regression=regression,
+        )
+    else:
+        raise ValueError(
+            f'Unsupported tree extraction algorithm '
+            f'{tree_extraction_algorithm_name}. Supported algorithms are '
+            '"C5.0", "CART", and "random_forest".'
+        )
+
+    # Determine whether we want to subsample our training dataset to make it
+    # more scalable or not
+    sample_fraction = 0
+    if max_number_of_samples is not None:
+        if max_number_of_samples < 1:
+            sample_fraction = max_number_of_samples
+        elif max_number_of_samples < train_data.shape[0]:
+            sample_fraction = max_number_of_samples / train_data.shape[0]
+
+    if sample_fraction and (train_labels is not None):
+        [(new_indices, _)] = stratified_k_fold_split(
+            X=train_data,
+            y=train_labels,
+            n_folds=1,
+            test_size=(1 - sample_fraction),
+            random_state=42,
+        )
+        train_data = train_data[new_indices, :]
+        train_labels = train_labels[new_indices]
+
     # y = output classifications of neural network. C5 requires y to be a
     # pd.Series
-    nn_model_predictions = np.argmax(model.predict(train_data), axis=-1)
+    nn_model_predictions = model.predict(train_data)
+    if regression:
+        nn_model_predictions = np.squeeze(nn_model_predictions, axis=-1)
+    else:
+        nn_model_predictions = np.argmax(nn_model_predictions, axis=-1)
     y = pd.Series(nn_model_predictions)
 
     assert len(train_data) == len(y), \
@@ -65,21 +130,23 @@ def extract_rules(
         ],
     )
 
-    rule_conclusion_map = {}
-    for i in range(num_classes):
-        if output_class_names is not None:
-            rule_conclusion_map[i] = output_class_names[i]
-        else:
-            rule_conclusion_map[i] = i
+    if regression:
+        rule_conclusion_map = None
+    else:
+        rule_conclusion_map = {}
+        for i in range(num_classes):
+            if output_class_names is not None:
+                rule_conclusion_map[i] = output_class_names[i]
+            else:
+                rule_conclusion_map[i] = i
 
-    rules = C5(
+    rules = algo_call(
         x=train_data,
         y=y,
         rule_conclusion_map=rule_conclusion_map,
         prior_rule_confidence=1,
-        winnow=winnow,
-        threshold_decimals=threshold_decimals,
         min_cases=min_cases,
+        **algo_kwargs,
     )
 
     # Merge rules so that they are in Disjunctive Normal Form

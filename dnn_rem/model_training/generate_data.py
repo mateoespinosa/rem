@@ -73,7 +73,7 @@ def run(manager, use_grid_search=False):
         X_train, y_train, X_test, y_test = manager.get_fold_data(fold)
 
         # Actually build and train the model
-        model, acc, auc, maj_class_acc = run_train_loop(
+        model, loss, acc, auc, maj_class_acc = run_train_loop(
             X_train=X_train,
             y_train=y_train,
             X_test=X_test,
@@ -86,11 +86,17 @@ def run(manager, use_grid_search=False):
             logging.WARNING,
             logging.ERROR
         ]:
-            pbar.write(
-                f'Test accuracy for fold {fold}/{manager.N_FOLDS} '
-                f'is {round(acc, 3)}, AUC is {round(auc, 3)}, and '
-                f'majority class accuracy is {round(maj_class_acc, 3)}'
-            )
+            if manager.DATASET_INFO.regression:
+                pbar.write(
+                    f'Test loss for fold {fold}/{manager.N_FOLDS} '
+                    f'is {round(loss, 5)}'
+                )
+            else:
+                pbar.write(
+                    f'Test accuracy for fold {fold}/{manager.N_FOLDS} '
+                    f'is {round(acc, 3)}, AUC is {round(auc, 3)}, and '
+                    f'majority class accuracy is {round(maj_class_acc, 3)}'
+                )
         return model
 
     # We instantiate a progress bar that keeps track how many more models
@@ -116,20 +122,37 @@ def run(manager, use_grid_search=False):
                 # Then let's try and be nice and include some statistics
                 # reporting for the performance of this model
                 _, _, X_test, y_test = manager.get_fold_data(fold)
-                _, _, acc, maj_class_acc = model.evaluate(
-                    X_test,
-                    tf.keras.utils.to_categorical(y_test),
-                    verbose=0,
-                )
-                auc = sklearn.metrics.roc_auc_score(
-                    tf.keras.utils.to_categorical(y_test),
-                    model.predict(X_test),
-                    multi_class="ovr",
-                    average='samples',
-                )
-                pbar.write(
-                    f'Test accuracy for fold {fold}/{manager.N_FOLDS} '
-                    f'is {round(acc, 3)}, AUC is {round(auc, 3)}, and '
-                    f'majority class accuracy is {round(maj_class_acc, 3)}'
-                )
+                if manager.DATASET_INFO.regression:
+                    loss = model.evaluate(
+                        X_test,
+                        y_test,
+                        verbose=0,
+                    )
+                    pbar.write(
+                        f'Test loss for fold {fold}/{manager.N_FOLDS} '
+                        f'is {round(loss, 5)}'
+                    )
+                else:
+                    _, _, acc, maj_class_acc = model.evaluate(
+                        X_test,
+                        tf.keras.utils.to_categorical(
+                            y_test,
+                            num_classes=len(
+                                manager.DATASET_INFO.output_classes
+                            ),
+                        ),
+                        verbose=0,
+                    )
+                    if len(manager.DATASET_INFO.output_classes) <= 2:
+                        auc = sklearn.metrics.roc_auc_score(
+                            y_test,
+                            np.argmax(model.predict(X_test), axis=-1),
+                        )
+                    else:
+                        auc = 0
+                    pbar.write(
+                        f'Test accuracy for fold {fold}/{manager.N_FOLDS} '
+                        f'is {round(acc, 3)}, AUC is {round(auc, 3)}, and '
+                        f'majority class accuracy is {round(maj_class_acc, 3)}'
+                    )
 

@@ -44,9 +44,14 @@ class Rule(object):
     Immutable and Hashable.
     """
 
-    def __init__(self, premise, conclusion):
-        self.premise = remove_unsatisfiable_clauses(clauses=premise)
+    def __init__(self, premise, conclusion, remove_unsatisfiable=True):
+        self.premise = premise
+        if remove_unsatisfiable:
+            self.premise = remove_unsatisfiable_clauses(clauses=self.premise)
         self.conclusion = conclusion
+
+    def remove_unsatisfiable_clauses(self):
+        self.premise = remove_unsatisfiable_clauses(clauses=self.premise)
 
     def __eq__(self, other):
         return (
@@ -78,6 +83,14 @@ class Rule(object):
         # Be careful with the always true clause (i.e. empty). In that case, the
         # average score is always 1.
         return total_correct_score/total if total else 0
+
+    def count_activated_clauses(self, data):
+        result = 0
+        for clause in self.premise:
+            if clause.evaluate(data):
+                result += 1
+        return result
+
 
     def evaluate_score_and_explain(
         self,

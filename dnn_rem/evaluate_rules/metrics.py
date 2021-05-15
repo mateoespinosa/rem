@@ -3,8 +3,10 @@ Metrics for evaluation of a given ruleset that was extracted from a network.
 """
 
 from collections import Counter
-import random
 import copy
+import numpy as np
+import random
+
 from ..rules.term import TermOperator
 
 ################################################################################

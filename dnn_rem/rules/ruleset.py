@@ -1,15 +1,19 @@
 """
 Represents a ruleset made up of rules
 """
-
+from collections import defaultdict
 from enum import Enum
+from multiprocessing import Pool
+import dill
+import logging
 import numpy as np
-import random
 import pickle
+import random
 
-from dnn_rem.logic_manipulator.merge import merge
-from .rule import Rule, RulePredictMechanism
 from .clause import ConjunctiveClause
+from .rule import Rule, RulePredictMechanism
+from dnn_rem.logic_manipulator.merge import merge
+from dnn_rem.utils.parallelism import serialized_function_execute
 
 ################################################################################
 ## Exposed Classes
@@ -91,15 +95,21 @@ class Ruleset(object):
         return len(self.rules)
 
     def _get_named_dictionary(self, instance):
-        neuron_to_value_map = {}
+        variable_to_value_map = {}
         for i in range(len(instance)):
-            neuron_name = f'h_0_{i}'
+            variable_name = f'h_0_{i}'
             if self.feature_names is not None:
-                neuron_name = self.feature_names[i]
-            neuron_to_value_map[neuron_name] = instance[i]
-        return neuron_to_value_map
+                variable_name = self.feature_names[i]
+            variable_to_value_map[variable_name] = instance[i]
+        return variable_to_value_map
 
-    def predict(self, X, use_label_names=False):
+    def predict(
+        self,
+        X,
+        use_label_names=False,
+        num_workers=1,
+        regression=False,
+    ):
         """
         Predicts the labels corresponding to unseen data points X given a set of
         rules.
@@ -121,52 +131,113 @@ class Ruleset(object):
                 "Expected provided data to be 2D but got "
                 "shape {X.shape} instead."
             )
+        def _predict_samples(block_id, instances):
+            result = []
+            for i, instance in enumerate(instances):
+                # Map of variable names to values from input data
+                variable_to_value_map = self._get_named_dictionary(instance)
 
-        total_vol = len(X) * len(self.rules)
-        for instance_id, instance in enumerate(X):
-            # Map of neuron names to values from input data
-            neuron_to_value_map = self._get_named_dictionary(instance)
+                # Each output class given a score based on how many rules x
+                # satisfies
+                class_ruleset_scores = {}
+                for rule_id, class_rules in enumerate(self.rules):
+                    score = class_rules.evaluate_score(
+                        variable_to_value_map
+                    )
+                    class_ruleset_scores[class_rules] = score
 
-            # Each output class given a score based on how many rules x
-            # satisfies
-            class_ruleset_scores = {}
-            for rule_id, class_rules in enumerate(self.rules):
-                score = class_rules.evaluate_score(
-                    neuron_to_value_map
+                # Output class with max score decides the classification of
+                # instance. If a tie happens, then choose randomly
+                max_rule = max(
+                    class_ruleset_scores,
+                    key=class_ruleset_scores.get
                 )
-                class_ruleset_scores[class_rules] = score
-                id_mem = instance_id*len(self.rules) + rule_id
-                print(f"Done evaluating instance {id_mem}/{total_vol}", end='\r')
+                max_score = class_ruleset_scores[max_rule]
+                if (max_score == 0) and (self.default_class is not None):
+                    # Then time to use the default class as the output given
+                    # that no other rule got activated
+                    max_class = self.default_class
+                else:
+                    max_set = [
+                        rule for (rule, score) in class_ruleset_scores.items()
+                        if score == max_score
+                    ]
+                    if len(max_set) > 1:
+                        # Then select one at random
+                        max_rule = random.choice(max_set)
+                    max_class = max_rule.conclusion
 
-            # Output class with max score decides the classification of
-            # instance. If a tie happens, then choose randomly
-            max_rule = max(
-                class_ruleset_scores,
-                key=class_ruleset_scores.get
-            )
-            max_score = class_ruleset_scores[max_rule]
-            if (max_score == 0) and (self.default_class is not None):
-                # Then time to use the default class as the output given
-                # that no other rule got activated
-                max_class = self.default_class
-            else:
-                max_set = [
-                    rule for (rule, score) in class_ruleset_scores.items()
-                    if score == max_score
-                ]
-                if len(max_set) > 1:
-                    # Then select one at random
-                    max_rule = random.choice(max_set)
-                max_class = max_rule.conclusion
+                # Output class encoding is index out output variable
+                if not use_label_names:
+                    # Then turn this into its encoding
+                    max_class = self.output_class_map.get(max_class, max_class)
+                result.append(max_class)
+            return result
 
-            # Output class encoding is index out output neuron
-            if not use_label_names:
-                # Then turn this into its encoding
-                max_class = self.output_class_map.get(max_class, max_class)
-                y = np.append(y, max_class)
-            else:
-                y.append(max_class)
-        return y
+        def _regress_samples(block_id, instances):
+            result = []
+            for i, instance in enumerate(instances):
+                # Map of variable names to values from input data
+                variable_to_value_map = self._get_named_dictionary(instance)
+
+                # Each output class given a score based on how many rules x
+                # satisfies
+                total_activated = 0
+                total_sum = 0
+                for rule_id, rule in enumerate(self.rules):
+                    num_activated = rule.count_activated_clauses(
+                        variable_to_value_map
+                    )
+                    total_activated += num_activated
+                    total_sum += num_activated * rule.conclusion
+
+                if not total_activated:
+                    # Then return the default value
+                    instance_pred = self.default_class
+                else:
+                    instance_pred = total_sum / total_activated
+
+                result.append(instance_pred)
+            return result
+
+        effective_workers = min(num_workers, len(X))
+        logging.info(
+            f"Performing prediction over {len(X)} test samples "
+            f"using {self.num_clauses()} rules and {effective_workers} "
+            f"effective processes."
+        )
+        if effective_workers > 1:
+            # Them time to do this the multi-process way
+            with Pool(processes=effective_workers) as pool:
+                serialized_terms = []
+                block_size = len(X) // effective_workers
+                current_ind = 0
+                blocks = []
+                while current_ind < len(X):
+                    next_ind = min(current_ind + block_size, len(X))
+                    blocks.append(X[current_ind:  next_ind])
+                    current_ind = next_ind
+
+                for block_instances in enumerate(blocks):
+                    # Let's serialize our (function, args) tuple
+                    serialized_terms.append(dill.dumps((
+                        _regress_samples if regression else _predict_samples,
+                        (*block_instances,)
+                    )))
+
+                # And do the multi-process pooling call
+                all_lists = pool.map(
+                    serialized_function_execute,
+                    serialized_terms,
+                )
+                result = []
+                for partial in all_lists:
+                    result.extend(partial)
+                return np.array(result)
+        # Else we will do it in this same process in one jump
+        return np.array(_regress_samples(1, X)) if regression else (
+            np.array(_predict_samples(1, X))
+        )
 
     def predict_and_explain(
         self,
@@ -208,15 +279,15 @@ class Ruleset(object):
         scores = [None for _ in range(X.shape[0])]
 
         for i, instance in enumerate(X):
-            # Map of neuron names to values from input data
-            neuron_to_value_map = self._get_named_dictionary(instance)
+            # Map of variable names to values from input data
+            variable_to_value_map = self._get_named_dictionary(instance)
 
             # Each output class given a score based on how many rules x
             # satisfies
             class_ruleset_scores = {}
             for class_rules in self.rules:
                 score, activated_rules = class_rules.evaluate_score_and_explain(
-                    neuron_to_value_map,
+                    variable_to_value_map,
                     aggregator=aggregator,
                     use_confidence=use_confidence,
                 )
@@ -243,7 +314,7 @@ class Ruleset(object):
                     max_rule = random.choice(max_set)
                 max_class = max_rule.conclusion
 
-            # Output class encoding is index out output neuron
+            # Output class encoding is index out output variable
             if not use_label_names:
                 # Then turn this into its encoding
                 max_class = self.output_class_map.get(max_class, max_class)
@@ -295,13 +366,13 @@ class Ruleset(object):
         """
 
         # We will cache a map between sample IDs and their corresponding
-        # maps of neurons to values to avoid computing this at all times.
+        # maps of variables to values to avoid computing this at all times.
         # We only do this when we use the training data for scoring our rules.
         if score_mechanism in [
             RuleScoreMechanism.Accuracy,
             RuleScoreMechanism.HillClimb,
         ]:
-            neuron_map_cache = [None] * len(X)
+            variable_map_cache = [None] * len(X)
         for class_rule in self.rules:
             # Each run of rule extraction return a DNF rule for each output
             # class
@@ -330,17 +401,17 @@ class Ruleset(object):
                     # Else we will score it based on
                     # Iterate over all items in the training data
                     for sample_id, (sample, label) in enumerate(zip(X, y)):
-                        # Map of neuron names to values from input data. This
+                        # Map of variable names to values from input data. This
                         # is the form of data a rule expects
-                        if neuron_map_cache[sample_id] is None:
+                        if variable_map_cache[sample_id] is None:
                             # Then we are populating our cache for the first
                             # time
-                            neuron_map_cache[sample_id] = \
+                            variable_map_cache[sample_id] = \
                                 self._get_named_dictionary(sample)
-                        neuron_to_value_map = neuron_map_cache[sample_id]
+                        variable_to_value_map = variable_map_cache[sample_id]
 
                         # if rule predicts the correct output class
-                        if clause.evaluate(data=neuron_to_value_map):
+                        if clause.evaluate(data=variable_to_value_map):
                             if rule_output == label:
                                 correct += 1
                             else:
@@ -407,7 +478,13 @@ class Ruleset(object):
     def add_rules(self, rules):
         self.rules = self.rules.union(rules)
 
-    def eliminate_rules(self, percent):
+    def eliminate_rules(
+        self,
+        percent,
+        max_num=float("inf"),
+        by_confidence=False,
+        per_class=False,
+    ):
         """
         Eliminates the lowest scoring `percent` of clauses for each rule in this
         ruleset.
@@ -427,25 +504,63 @@ class Ruleset(object):
             )
 
         # Time to actually do the elimination
-        for class_rule in self.rules:
-            # For each set of rules of a given class, we will sort all all the
-            # individual clauses in it by their score and drop the lowest
-            # `percent` of them.
+        if per_class:
+            self.rules = merge(self.rules)
+            for class_rule in self.rules:
+                # For each set of rules of a given class, we will sort all all the
+                # individual clauses in it by their score and drop the lowest
+                # `percent` of them.
 
-            # 1. Sort all rules based on their score
-            premise = sorted(list(class_rule.premise), key=lambda x: x.score)
+                # 1. Sort all rules based on their score
+                premise = sorted(
+                    list(class_rule.premise),
+                    key=lambda x: x.confidence if by_confidence else x.score
+                )
+
+                # 2. Eliminate the lowest `percent` percent of the rules
+                # PS: make sure we leave at least one rule in here....
+                to_eliminate = min(
+                    int(round(len(premise) * percent)),
+                    len(premise) - 1,
+                    max_num
+                )
+                if to_eliminate:
+                    premise = premise[to_eliminate:]
+
+                # 3. And update this class's premise
+                class_rule.premise = set(premise)
+        else:
+            # Otherwise we will consider all rules at the same time
+            candidates = []
+            for rule in self.rules:
+                for clause in rule.premise:
+                    candidates.append(clause, rule.conclusion)
+
+            # 1. Sort all rules as a whole based on their score
+            candidates = sorted(
+                candidates,
+                key=lambda x: x[0].confidence if by_confidence else x[0].score
+            )
 
             # 2. Eliminate the lowest `percent` percent of the rules
             # PS: make sure we leave at least one rule in here....
             to_eliminate = min(
-                int(round(len(premise) * percent)),
-                len(premise) - 1,
+                int(round(len(candidates) * percent)),
+                len(candidates) - 1,
+                max_num
             )
             if to_eliminate:
-                premise = premise[:-to_eliminate]
+                candidates = candidates[to_eliminate:]
 
-            # 3. And update this class's premise
-            class_rule.premise = set(premise)
+            # 3. And time to reconstruct our rule set
+            self.rules = set()
+            for (clause, conclusion) in candidates:
+                self.rules.add(Rule(
+                    premise=set([clause]),
+                    conclusion=conclusion,
+                ))
+            self.rules = merge(self.rules)
+
 
     def get_rule_premises_by_conclusion(self, conclusion):
         """
@@ -549,7 +664,7 @@ class Ruleset(object):
 
         return ruleset_str
 
-    def get_rule_by_conclusion(self, conclusion) -> Rule:
+    def get_rule_by_conclusion(self, conclusion):
         for rule in self.rules:
             if conclusion == rule.conclusion:
                 return rule

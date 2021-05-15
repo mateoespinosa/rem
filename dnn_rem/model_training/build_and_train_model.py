@@ -59,6 +59,10 @@ def model_fn(
     learning_rate=0.001,
     dropout_rate=0,
     skip_freq=0,
+    regression=False,
+    decay_rate=1,
+    decay_steps=None,
+    staircase=False,
 ):
     """
     Model function to construct our TF model for learning our given task.
@@ -118,13 +122,12 @@ def model_fn(
                 name=f"dropout_{i//2}",
             )(net)
 
-
-    if loss_function is None and last_activation:
+    if (loss_function is None) and last_activation:
         if last_activation == "sigmoid":
             loss_function = "sigmoid_xentr"
         elif last_activation == "softmax":
             loss_function = "softmax_xentr"
-    if last_activation is None:
+    if (last_activation is None) and (not regression):
         if loss_function is None:
             raise ValueError(
                 "We were not provided with a loss function or last activation "
@@ -145,13 +148,19 @@ def model_fn(
         # it here.
         activation=(
             None if (last_activation in loss_function) else last_activation
-        ),
+        ) if last_activation else None,
     )(net)
 
     # Compile Model
     model = tf.keras.models.Model(inputs=input_layer, outputs=net)
     optimizer = optimizer or tf.keras.optimizers.Adam(
-        learning_rate=learning_rate
+        learning_rate=tf.keras.optimizers.schedules.ExponentialDecay(
+            initial_learning_rate=learning_rate,
+            decay_steps=(decay_steps or 1),
+            decay_rate=decay_rate,
+            staircase=staircase,
+
+        )
     )
     if loss_function == "softmax_xentr":
         loss = tf.keras.losses.CategoricalCrossentropy(
@@ -161,6 +170,8 @@ def model_fn(
         loss = tf.keras.losses.BinaryCrossentropy(
             from_logits=(last_activation in loss_function),
         )
+    elif loss_function == "mse":
+        loss = "mse"
     else:
         raise ValueError(
             f"Unsupported loss {loss_function}. We currently only support "
@@ -177,7 +188,7 @@ def model_fn(
             ),
             'accuracy',
             majority_classifier_acc,
-        ]
+        ] if (not regression) else [],
     )
     return model
 
@@ -213,6 +224,8 @@ def run_train_loop(
     X_test,
     y_test,
     manager,
+    X_val=None,
+    y_val=None,
 ):
     """
     Builds and train our model with the given train data. Evaluates the model
@@ -233,20 +246,38 @@ def run_train_loop(
         test accuracy for the given test data.
     """
     hyperparams = manager.HYPERPARAMS
+    optimizer_params = hyperparams.get("optimizer_params", {})
+    if "learning_rate" in hyperparams:
+        optimizer_params["learning_rate"] = hyperparams["learning_rate"]
 
     # Weight classes due to imbalanced dataset
-    class_weights = dict(enumerate(
-        sklearn.utils.class_weight.compute_class_weight(
-            'balanced',
-            np.unique(y_train),
-            y_train
-        )
-    ))
+    regression = manager.DATASET_INFO.regression
+    if regression:
+        class_weights = None
+    else:
+        unique_elems = np.unique(y_train)
+        class_weights = dict(enumerate(
+            sklearn.utils.class_weight.compute_class_weight(
+                'balanced',
+                unique_elems,
+                y_train
+            )
+        ))
+        for i in range(len(manager.DATASET_INFO.output_classes)):
+            if i not in class_weights:
+                # Then this is an unseen label so let's assign it no
+                # weight at all
+                class_weights[i] = 1
 
     # Make sure we use a one-hot representation for this model
-    y_train = tf.keras.utils.to_categorical(y_train)
-    y_test = tf.keras.utils.to_categorical(y_test)
-
+    y_test_og = y_test
+    if not regression:
+        num_classes = len(manager.DATASET_INFO.output_classes)
+        y_train = tf.keras.utils.to_categorical(
+            y_train,
+            num_classes=num_classes,
+        )
+        y_test = tf.keras.utils.to_categorical(y_test, num_classes=num_classes)
     if os.path.exists(manager.BEST_NN_INIT_FP):
         # Use best saved initialisation found earlier
         logging.debug(
@@ -260,13 +291,18 @@ def run_train_loop(
         model = model_fn(
             input_features=X_train.shape[-1],
             layer_units=hyperparams["layer_units"],
-            num_outputs=len(manager.DATASET_INFO.output_classes),
+            num_outputs=(
+                1 if regression else len(manager.DATASET_INFO.output_classes)
+            ),
             last_activation=hyperparams.get("last_activation", None),
             loss_function=hyperparams.get("loss_function", "softmax_xentr"),
             activation=hyperparams.get("activation", "tanh"),
-            learning_rate=hyperparams.get("learning_rate", 0.001),
+            learning_rate=optimizer_params.get("learning_rate", 0.001),
             dropout_rate=hyperparams.get("dropout_rate", 0),
             skip_freq=hyperparams.get("skip_freq", 0),
+            regression=regression,
+            decay_rate=optimizer_params.get("decay_rate", 1),
+            decay_steps=optimizer_params.get("decay_steps", None),
         )
 
     # If on debug mode, then let's look at the architecture of the model we
@@ -276,6 +312,31 @@ def run_train_loop(
         model.summary()
 
     # Train Model
+    early_stopping_params = hyperparams.get("early_stopping_params", {})
+    if early_stopping_params.get("patience"):
+        callbacks = [
+            tf.keras.callbacks.EarlyStopping(
+                monitor=early_stopping_params.get("monitor", "val_loss"),
+                min_delta=early_stopping_params.get("min_delta", 5),
+                patience=early_stopping_params.get("patience", 5),
+                restore_best_weights=True,
+                verbose=2,
+                mode=early_stopping_params.get("mode", 'min'),
+            )
+        ]
+        if X_val is None:
+            validation_split = early_stopping_params.get(
+                "validation_percent",
+                0.1,
+            )
+        else:
+            validation_split = (X_val, y_val)
+    else:
+        callbacks = []
+        if X_val is None:
+            validation_split = None
+        else:
+            validation_split = (X_val, y_val)
     model.fit(
         X_train,
         y_train,
@@ -285,16 +346,30 @@ def run_train_loop(
         verbose=(
             1 if logging.getLogger().getEffectiveLevel() == logging.DEBUG else 0
         ),
+        callbacks=callbacks,
+        validation_split=validation_split,
     )
 
     # Evaluate Accuracy of the Model
-    _, nn_auc, nn_accuracy, maj_class_acc = model.evaluate(
-        X_test,
-        y_test,
-        verbose=(
-            1 if logging.getLogger().getEffectiveLevel() == logging.DEBUG else 0
-        ),
-    )
+    if regression:
+        nn_loss = model.evaluate(
+            X_test,
+            y_test,
+            verbose=(
+                1 if logging.getLogger().getEffectiveLevel() == logging.DEBUG
+                else 0
+            ),
+        )
+        nn_accuracy, nn_auc, maj_class_acc = None, None, None
+    else:
+        nn_loss, nn_auc, nn_accuracy, maj_class_acc = model.evaluate(
+            X_test,
+            y_test,
+            verbose=(
+                1 if logging.getLogger().getEffectiveLevel() == logging.DEBUG
+                else 0
+            ),
+        )
 
     compress_mechanism = hyperparams["compress_mechanism"]
     if compress_mechanism == "weight-magnitude":
@@ -317,7 +392,7 @@ def run_train_loop(
                 ),
                 'accuracy',
                 majority_classifier_acc,
-            ],
+            ] if (not regression) else [],
             ignore_layer_fn=lambda l: "output_dense" in l.name,
             **hyperparams.get("compression_params", {}),
         )
@@ -341,7 +416,7 @@ def run_train_loop(
                 ),
                 'accuracy',
                 majority_classifier_acc,
-            ],
+            ] if (not regression) else [],
             ignore_layer_fn=lambda l: "output_dense" in l.name,
             **hyperparams.get("compression_params", {}),
         )
@@ -354,27 +429,40 @@ def run_train_loop(
 
     if compress_mechanism is not None:
         # Then time to reevaluate the model
-        prev_nn_accuracy = nn_accuracy
-        _, _, nn_accuracy, _ = model.evaluate(
-            X_test,
-            y_test,
-            verbose=(
-                1 if logging.getLogger().getEffectiveLevel() == logging.DEBUG
-                else 0
-            ),
-        )
-        logging.info(
-            f"Uncompressed model accuracy was {prev_nn_accuracy:.4f} compared "
-            f"to compressed model {nn_accuracy:.4f}"
-        )
+        if regression:
+            prev_nn_loss = nn_loss
+            nn_loss = model.evaluate(
+                X_test,
+                y_test,
+                verbose=(
+                    1 if logging.getLogger().getEffectiveLevel() == logging.DEBUG
+                    else 0
+                ),
+            )
+            logging.info(
+                f"Uncompressed model loss was {prev_nn_loss:.4f} compared "
+                f"to compressed model {nn_loss:.4f}"
+            )
+        else:
+            prev_nn_accuracy = nn_accuracy
+            _, _, nn_accuracy, _ = model.evaluate(
+                X_test,
+                y_test,
+                verbose=(
+                    1 if logging.getLogger().getEffectiveLevel() == logging.DEBUG
+                    else 0
+                ),
+            )
+            logging.info(
+                f"Uncompressed model accuracy was {prev_nn_accuracy:.4f} compared "
+                f"to compressed model {nn_accuracy:.4f}"
+            )
 
-    predicted_labels = model.predict(X_test)
-    # For now overwrite AUC as the one given by TF seems at odds with that
-    # given by sklearn
-    nn_auc = sklearn.metrics.roc_auc_score(
-        y_test,
-        predicted_labels,
-        multi_class="ovr",
-        average='samples',
-    )
-    return model, nn_accuracy, nn_auc, maj_class_acc
+    if (not regression) and (len(manager.DATASET_INFO.output_classes) <= 2):
+        # For now overwrite AUC as the one given by TF seems at odds with that
+        # given by sklearn
+        nn_auc = sklearn.metrics.roc_auc_score(
+            y_test_og,
+            np.argmax(model.predict(X_test), axis=-1),
+        )
+    return model, nn_loss, nn_accuracy, nn_auc, maj_class_acc

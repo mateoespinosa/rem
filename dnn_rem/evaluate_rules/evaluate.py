@@ -8,13 +8,14 @@ import numpy as np
 
 from . import metrics
 
-_MAX_CLAUSES = 55000
-
 def evaluate(
     ruleset,
     X_test,
     y_test,
     high_fidelity_predictions=None,
+    num_workers=1,
+    regression=False,
+    multi_class=False,
 ):
     """
     Evaluates the performance of the given set of rules given the provided
@@ -35,34 +36,40 @@ def evaluate(
     """
 
     # Make our predictions using our ruleset
-    if ruleset.num_clauses() >= _MAX_CLAUSES:
-        logging.warning(
-            f"Ruleset has {ruleset.num_clauses()} clauses in it. Too many "
-            f"for making an efficient prediction."
-        )
-        acc = 0
-        auc = 0
-        fid = 0
-    else:
-        predicted_labels = ruleset.predict(X_test)
-
+    predicted_labels = ruleset.predict(
+        X_test,
+        num_workers=num_workers,
+        regression=regression,
+    )
+    if not regression:
         # Compute Accuracy
-        acc = sklearn.metrics.accuracy_score(predicted_labels, y_test)
+        acc = sklearn.metrics.accuracy_score(y_test, predicted_labels)
 
         # Compute the AUC using this model. For multiple labels, we average
         # across all labels
-        auc = sklearn.metrics.roc_auc_score(
-            y_test,
-            predicted_labels,
-            multi_class="ovr",
-            average='samples',
-        )
-
-        # Compute Fidelity
-        if high_fidelity_predictions is not None:
-            fid = metrics.fidelity(predicted_labels, high_fidelity_predictions)
+        if multi_class:
+            auc = 0
         else:
-            fid = None
+            auc = sklearn.metrics.roc_auc_score(
+                y_test,
+                predicted_labels,
+                multi_class="ovr",
+                average='samples',
+            )
+    else:
+        loss = sklearn.metrics.mean_squared_error(y_test, predicted_labels)
+
+    # Compute Fidelity
+    if high_fidelity_predictions is not None:
+        if regression:
+            fid = sklearn.metrics.mean_squared_error(
+                high_fidelity_predictions,
+                predicted_labels,
+            )
+        else:
+            fid = metrics.fidelity(predicted_labels, high_fidelity_predictions)
+    else:
+        fid = None
 
     # Compute Comprehensibility
     comprehensibility_results = metrics.comprehensibility(ruleset)
@@ -71,21 +78,31 @@ def evaluate(
     n_overlapping_features = metrics.overlapping_features(ruleset)
 
     # And wrap them all together
-    results = dict(
-        acc=acc,
-        fid=fid,
-        n_overlapping_features=n_overlapping_features,
-        auc=auc,
-    )
+    if regression:
+        results = dict(
+            n_overlapping_features=n_overlapping_features,
+            mse_fid=fid,
+            loss=loss,
+        )
+    else:
+        results = dict(
+            acc=acc,
+            n_overlapping_features=n_overlapping_features,
+            auc=auc,
+            fid=fid,
+        )
     results.update(comprehensibility_results)
-
     return results
+
 
 def evaluate_estimator(
     estimator,
     X_test,
     y_test,
     high_fidelity_predictions=None,
+    num_workers=1,
+    regression=False,
+    multi_class=False,
 ):
     """
     Evaluates the performance of the given decision tree given the provided
@@ -109,29 +126,42 @@ def evaluate_estimator(
     predicted_labels = estimator.predict(X_test)
 
     # Compute Accuracy
-    acc = sklearn.metrics.accuracy_score(predicted_labels, y_test)
+    if not regression:
+        acc = sklearn.metrics.accuracy_score(predicted_labels, y_test)
 
-    # Compute the AUC using this model. For multiple labels, we average
-    # across all labels
-    auc = sklearn.metrics.roc_auc_score(
-        y_test,
-        predicted_labels,
-        multi_class="ovr",
-        average='samples',
-    )
+        # Compute the AUC using this model. For multiple labels, we average
+        # across all labels
+        if multi_class:
+            auc = 0
+        else:
+            auc = sklearn.metrics.roc_auc_score(
+                y_test,
+                predicted_labels,
+                multi_class="ovr",
+                average='samples',
+            )
 
     # Compute Fidelity
     if high_fidelity_predictions is not None:
-        fid = metrics.fidelity(predicted_labels, high_fidelity_predictions)
+        if regression:
+            fid = metrics.mse_fidelity(
+                predicted_labels,
+                high_fidelity_predictions,
+            )
+        else:
+            fid = metrics.fidelity(predicted_labels, high_fidelity_predictions)
     else:
         fid = None
 
     # And wrap them all together
-    results = dict(
+    if regression:
+        return dict(
+            mse_fid=fid,
+        )
+    return dict(
         output_classes=np.unique(y_test),
         acc=acc,
         fid=fid,
         auc=auc,
     )
-    return results
 
