@@ -16,6 +16,10 @@ from tensorflow_model_optimization.python.core.sparsity.keras import \
 
 ################################################################################
 ## Reimplemented TF Model Optimization Methods with Bug Fixes/Extensions
+## The following functions have been adapted from
+## https://github.com/tensorflow/model-optimization/tree/master/tensorflow_model_optimization/python/core/sparsity/keras
+## as TF's implementation proved to have a bug that needed fixing.
+## I will make a PR into TF's repository addressing this bug following this.
 ################################################################################
 
 

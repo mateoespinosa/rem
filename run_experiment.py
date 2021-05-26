@@ -55,8 +55,8 @@ def build_parser():
     """
     parser = argparse.ArgumentParser(
         description=(
-            'Runs cross validation experiment with REM-D and our '
-            'neural network training.'
+            'Runs cross validation experiment with the given rule extraction '
+            'method and our neural network training.'
         ),
     )
     parser.add_argument(
@@ -72,18 +72,6 @@ def build_parser():
         default=None,
         help='how many folds to use for our data partitioning.',
         metavar='N',
-        type=int,
-    )
-    parser.add_argument(
-        '--initialisation_trials',
-        '-i',
-        default=None,
-        help=(
-            "how many initialisations for our model's initial parameters do we "
-            "want to try before running our training. If less than or equal to "
-            "one, then we will simply use a random initialisation."
-        ),
-        metavar="N",
         type=int,
     )
     parser.add_argument(
@@ -111,13 +99,14 @@ def build_parser():
             "Clause-REM-D",
             "cREM-D",
             "DeepRED",
+            "ECLAIRE",
             "eREM-D",
             "random_forest",
             "RandomForest",
             "REM-T",
+            "sREM-D",
             'Pedagogical',
             'REM-D',
-            "sREM-D",
         ],
     )
     parser.add_argument(
@@ -249,10 +238,7 @@ def main():
             args.n_folds = 1
         if args.rule_extractor is None:
             # Default it to use our rule generation algorithm
-            args.rule_extractor = "REM-D"
-        if args.initialisation_trials is None:
-            # Then default it to not making any initalisation
-            args.initialisation_trials = 1
+            args.rule_extractor = "ECLAIRE"
         if None in [
             args.dataset_name,
             args.dataset_file,
@@ -275,8 +261,6 @@ def main():
         config["rule_extractor"] = args.rule_extractor
     if args.dataset_file is not None:
         config["dataset_file"] = args.dataset_file
-    if args.initialisation_trials is not None:
-        config["initialisation_trials"] = args.initialisation_trials
     if args.output_dir is not None:
         config["output_dir"] = args.output_dir
     if args.grid_search is not None:

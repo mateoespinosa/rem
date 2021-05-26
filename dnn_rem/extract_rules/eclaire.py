@@ -1,11 +1,11 @@
 """
-Implementation of clause-wise REM-D algorithm. This algorithm acts in a
-similar manner to vanilla REM-D but extracts rules at a clause-wise level rather
-than at a term-wise level. This helps the model avoiding the exponential
-explosion of terms that arises from distribution term-wise clauses during
-substitution. It also helps reducing the variance in the ruleset sizes while
-also capturing correlations between terms when extracting a ruleset for the
-overall clause.
+Implementation of ECLAIRE algorithm. This algorithm extracts intermediate rules
+for each hidden layer and then performs a change of variables in all of these
+rule sets by using a clause-wise level rather than at a term-wise level.
+This helps the model avoiding the exponential explosion of terms that arises
+from distribution term-wise clauses during substitution. It also helps reducing
+the variance in the ruleset sizes while also capturing correlations between
+terms when extracting a ruleset for the overall clause.
 """
 
 from multiprocessing import Pool, Lock
@@ -69,12 +69,13 @@ def extract_rules(
     """
     Extracts a ruleset model that approximates the given Keras model.
 
-    This algorithm acts in a similar manner to vanilla REM-D but extracts rules
-    at a clause-wise level rather than at a term-wise level. This helps the
-    model avoiding the exponential explosion of terms that arises from
-    distribution term-wise clauses during substitution. It also helps reducing
-    the variance in the ruleset sizes while also capturing correlations between
-    terms when extracting a ruleset for the overall clause.
+    This algorithm extracts intermediate rules for each hidden layer and then
+    performs a change of variables in all of these rule sets by using a
+    clause-wise level rather than at a term-wise level. This helps the model
+    avoiding the exponential explosion of terms that arises from distribution
+    term-wise clauses during substitution. It also helps reducing the variance
+    in the ruleset sizes while also capturing correlations between terms when
+    extracting a ruleset for the overall clause.
 
     :param tf.keras.Model model: The model we want to imitate using our ruleset.
     :param np.array train_data: 2D data matrix containing all the training
@@ -519,7 +520,6 @@ def extract_rules(
             # accumulating all the generated rules into a single ruleset
             for ruleset in new_rulesets:
                 extracted_ruleset.add_rules(ruleset)
-
 
             extracted_ruleset.rules = merge(extracted_ruleset.rules)
 

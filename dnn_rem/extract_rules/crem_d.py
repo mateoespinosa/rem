@@ -1,5 +1,5 @@
 """
-Implementation of conditional-REM-D (cREM-D) for short where we extract clauses
+Implementation of conditional-REM-D (cREM-D) where we extract clauses
 for both individual terms (as in REM-D) as well as rulesets that are conditioned
 on the result of all other clauses but the target one. These are then used
 to create a resulting clause ruleset that takes into account correlations

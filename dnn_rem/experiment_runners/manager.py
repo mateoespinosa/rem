@@ -26,7 +26,7 @@ from dnn_rem.extract_rules.rem_t import extract_rules as rem_t
 from dnn_rem.extract_rules.rem_d import extract_rules as rem_d
 from dnn_rem.extract_rules.srem_d import extract_rules as srem_d
 from dnn_rem.extract_rules.crem_d import extract_rules as crem_d
-from dnn_rem.extract_rules.erem_d import extract_rules as erem_d
+from dnn_rem.extract_rules.eclaire import extract_rules as eclaire
 from dnn_rem.extract_rules.deep_red_c5 import extract_rules as deep_red_c5
 from dnn_rem.extract_rules.clause_rem_d import extract_rules as clause_rem_d
 from dnn_rem.rules.ruleset import RuleScoreMechanism
@@ -40,7 +40,6 @@ EXPERIMENT_STAGES = [
     "data_split",
     "fold_split",
     "grid_search",
-    "initialisation_trials",
     "nn_train",
     "rule_extraction",
 ]
@@ -103,11 +102,6 @@ class ExperimentManager(object):
                     trained_models/
                         fold_<n>_model.h5
                     data_split_indices.txt
-            neural_network_initialisation/
-                re_results.csv
-                grid_search_results.txt
-                data_split_indices.txt
-                best_initialisation.h5
     """
 
     def __init__(self, config, start_rerun_stage=None, initialize=True):
@@ -138,8 +132,6 @@ class ExperimentManager(object):
         )
         self.EVALUATE_NUM_WORKERS = config.get("evaluate_num_workers", 1)
         self.DATA_FP = config["dataset_file"]
-        # How many trials we will attempt for finding our best initialisation
-        self.INITIALISATION_TRIALS = config["initialisation_trials"]
         self.N_FOLDS = config["n_folds"]
         self.HYPERPARAMS = config["hyperparameters"]
 
@@ -170,12 +162,6 @@ class ExperimentManager(object):
         self.GRID_SEARCH_PARAMS = config.get(
             "grid_search_params",
             {},
-        )
-
-        # And our initialization trial
-        self.BEST_INIT_METRIC_NAME = config.get(
-            "initialisation_trial_metric",
-            "acc",
         )
 
         # <dataset_name>/cross_validation/<n>_folds/
@@ -222,27 +208,13 @@ class ExperimentManager(object):
             )
         )
         model_fp = os.path.join(self.N_FOLD_MODELS_DP, 'model.h5')
-
-        # <dataset_name>/neural_network_initialisation/
-        nn_init_dir = os.path.join(
-            self.experiment_dir,
-            'neural_network_initialisation'
-        )
         self.NN_INIT_GRID_RESULTS_FP = os.path.join(
-            nn_init_dir,
+            self.experiment_dir,
             'grid_search_results.txt'
         )
         self.NN_INIT_SPLIT_INDICES_FP = os.path.join(
-            nn_init_dir,
+            self.experiment_dir,
             'data_complete_split_indices.txt'
-        )
-        self.NN_INIT_RE_RESULTS_FP = os.path.join(
-            nn_init_dir,
-            're_results.csv'
-        )
-        self.BEST_NN_INIT_FP = os.path.join(
-            nn_init_dir,
-            'best_initialisation.h5'
         )
 
         # And time for some data and directory initialization!
@@ -351,13 +323,14 @@ f
     def get_rule_extractor(self, extractor_name, **extractor_params):
         name = extractor_name.lower()
         if name in [
+            "clause-rem-d",
+            "crem-d",
+            "deepred",
+            "deepred_c5",
+            "eclaire",
             "erem-d",
             "rem-d",
             "srem-d",
-            "crem-d",
-            "clause-rem-d",
-            "deepred",
-            "deepred_c5",
         ]:
             loss_function = self.HYPERPARAMS.get(
                 "loss_function",
@@ -379,16 +352,18 @@ f
             elif name == "clause-rem-d":
                 run_fn = clause_rem_d
                 real_name = "Clause-REM-D"
-            elif name == "erem-d":
-                run_fn = erem_d
-                real_name = "eREM-D"
+            elif name in ["erem-d", "eclaire"]:
+                run_fn = eclaire
+                real_name = "ECLAIRE"
             elif name in ["deepred", "deepred_c5"]:
                 run_fn = deep_red_c5
                 real_name = "DeepRED_C5"
 
-            if self.DATASET_INFO.regression and (name != "erem-d"):
+            if self.DATASET_INFO.regression and (
+                name not in ["eclaire", "erem-d"]
+            ):
                 raise ValueError(
-                    f"Only eREM-D supports regression tasks such as "
+                    f"Only ECLAIRE supports regression tasks such as "
                     f"{self.DATASET_INFO.name}"
                 )
 

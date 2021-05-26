@@ -15,7 +15,6 @@ import pandas as pd
 import sklearn
 import tensorflow as tf
 
-from . import find_best_nn_initialisation
 from .build_and_train_model import run_train_loop, load_model
 from .grid_search import (
     grid_search as grid_search_fn, deserialize_best_params,
@@ -55,18 +54,7 @@ def run(manager, use_grid_search=False):
             if hyper_param in manager.HYPERPARAMS:
                 manager.HYPERPARAMS[hyper_param] = value
 
-    # 3. Initialize some neural networks using 1 train test split
-    # Pick initialization that yields the smallest ruleset if we are asked by
-    # the manager
-    if manager.INITIALISATION_TRIALS > 1:
-        manager.serializable_stage(
-            target_file=manager.BEST_NN_INIT_FP,
-            execute_fn=lambda: find_best_nn_initialisation.run(manager),
-            serializing_fn=_save_model_and_return,
-            stage_name="initialisation_trials",
-        )
-
-    # 4. Build neural network for each fold using best initialization found
+    # 2. Build neural network for each fold using best initialization found
     #    above
     def _train_fold(fold, pbar):
         # Split data using precomputed split indices

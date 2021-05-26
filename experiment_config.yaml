@@ -1,10 +1,10 @@
 # The directory of our training data. Can be a path relative to the caller or
 # an absolute path.
-dataset_file: "../DNN-RE-data-new/MB-GE-ER/data.csv"
+dataset_file: "../DNN-RE-data-new/XOR/data.csv"
 
 # The name of our dataset. Must be one of the data sets supported by our
 # experiment runners.
-dataset_name: 'MB-GE-ER'
+dataset_name: 'XOR'
 
 # Whether or not we want our experiment runner to overwrite results from
 # previous runs found in the given output directory or we want to reuse them
@@ -17,7 +17,6 @@ dataset_name: 'MB-GE-ER'
 #    - "data_split"
 #    - "fold_split"
 #    - "grid_search"
-#    - "initialisation_trials"
 #    - "nn_train"
 #    - "rule_extraction"
 # to indicate the stage in which we will start rewriting previous results. If
@@ -34,28 +33,49 @@ hyperparameters:
     # The batch size we will use for training.
     batch_size: 16
     # Number of epochs to run our model for
-    epochs: 100
+    epochs: 150
     # Now many hidden layers we will use and how many activations in each
-    layer_units: [128, 128]
+    layer_units: [64, 32, 16]
     # The activation use in between hidden layers. Can be any valid Keras
     # activation function. If not provided, it defaults to "tanh"
-    activation: "elu"
+    activation: "tanh"
     # The last activation used in our model. Used to define the type of
     # categorical loss we will use. If not provided, it defaults to the
     # corresponding last activation for the given loss function.
     last_activation: "softmax"
     # The type of loss we will use. Must be one of
-    # ["sofxmax_xentr", "sigmoid_xentr"]. If not provided, we will use the
+    # ["softmax_xentr", "sigmoid_xentr"]. If not provided, we will use the
     # given last layer's activation to obtain the corresponding loss if it was
     # provided. Otherwise, we will default to softmax xentropy.
     loss_function: "softmax_xentr"
     # The learning rate we will use for our Adam optimizer. If not provided,
     # then it will be defaulted to 0.001
-    learning_rate: 0.0001
+    learning_rate: 0.001
     # Dropout rate to use in layer in between last hidden layer and last layer
     # If 0, then no dropout is done. This is the probability that a given
     # activation will be dropped.
-    dropout_rate: 0.0
+    dropout_rate: 0
+    # Frequency of skip connections in the form of additions. If zero, then
+    # no skip connections are made
+    skip_freq: 0
+
+
+    ###########################################
+    # Early Stopping Parameters
+    ###########################################
+
+    # Early stopping parameters. Only valid if patience is greater than 0.
+    early_stopping_params:
+        validation_percent: 0.1
+        patience: 0
+        monitor: "loss"
+        min_delta: 0.001
+        mode: 'min'
+
+    # Optimizer parameters
+    optimizer_params:
+        decay_rate: 1
+        decay_steps: 1
 
     ###########################################
     # Compression Parameters
@@ -81,17 +101,21 @@ hyperparameters:
         # end sparsity
         initial_sparsity: 0.0
 
-# How many trials we will attempt for finding our best initialization. If not
-# provided or less than or equal to 1, then we will use a random initialization
-# at train time.
-initialisation_trials: 1
+# How many subprocesses to use to evaluate our ruleset in the testing data
+evaluate_num_workers: 6
 
-# If we are looking for a best initialization, then we also need to provide
-# a metric to optimize over. This can be one of [accuracy", "auc"]
-initialisation_trial_metric: "accuracy"
-
-# The rule extractor we will use. If not provided, it defaults to REM-D.
-rule_extractor: "REM-D"
+# The rule extractor we will use. If not provided, it defaults to ECLAIRE.
+# Must be one of [
+#   "REM-D",
+#   "ECLAIRE", (or equivalently "eREM-D")
+#   "cREM-D",
+#   "Pedagogical",
+#   "Clause-REM-D",
+#   "DeepRED",
+#   "REM-T",
+#   "sREM-D"
+# ]
+rule_extractor: "ECLAIRE"
 
 # And any parameters we want to provide to the extractor for further
 # tuning/experimentation. This is dependent on the used extractor
@@ -100,6 +124,7 @@ extractor_params:
     # to. If null, then no truncation will happen.
     # For original REM-D: set to null
     threshold_decimals: null
+
     # The winnow parameter to use for C5 for intermediate rulesets.
     # Must be a boolean.
     # For original REM-D: set to True
@@ -112,11 +137,48 @@ extractor_params:
     winnow_features: True
 
     # The minimum number of cases for a split in C5. Must be a positive integer
-    min_cases: 15
+    min_cases: 2
+
+    # What is the maximum number of training samples to use when building trees
+    # If a float, then this is seen as a fraction of the dataset
+    # If 0 or null, then no restriction is applied.
+    # For original REM-D: set to null
+    max_number_of_samples: null
 
     ###########################################
-    # Scalable REM-D Parameters
+    # REM-T Parameters
     ###########################################
+
+    # The name of the algorithm used to extract the decision trees if using
+    # REM-T
+    # Must be one of: [C5.0, random_forest, cart]
+    tree_extraction_algorithm_name: "C5.0"
+
+    # Whether or not we perform posthoc CCP pruning when growing decision trees
+    ccp_prune: true
+
+    # Number of estimators to use in random forest if using REM-T
+    estimators: 10
+
+    # The maximum depth allowed for a single tree when using REM-T with
+    # CART and/or random_forest
+    tree_max_depth: 10
+
+    ###########################################
+    # ECLAIRE Parameters
+    ###########################################
+
+    # The rule extraction algorithm used to change intermediate rule sets in
+    # ECLAIRE to be a function of input feature activations only.
+    # Must be one of ["C5.0", "CART", "random_forest"]
+    # If not given then C5.0 is used
+    final_algorithm_name: "C5.0"
+
+    # The rule extraction algorithm used to generate intermediate rule sets in
+    # ECLAIRE.
+    # Must be one of ["C5.0", "CART", "random_forest"]
+    # If not given then C5.0 is used
+    intermediate_algorithm_name: "C5.0"
 
     # The number of processes (i.e. workers) to use when extracting rules from
     # our ruleset. Make sure to pick a reasonable number depending on the number
@@ -160,7 +222,57 @@ extractor_params:
     # activations. Only relevant if intermediate_drop_percent is greater than
     # zero.
     # Has to be one of ["Majority", "Accuracy", "HillClimb", "Confidence"]
-    rule_score_mechanism: "Accuracy"
+    rule_score_mechanism: "Confidence"
+
+    # Whether or not when we iterate over terms, we merge their negations into
+    # the set of terms to avoid extracting them twice
+    # For original REM-D: set to False
+    merge_repeated_terms: True
+
+    # Minimum confidence required for a given rule to be included in the
+    # a produced ruleset
+    # For original REM-D: set to 0
+    min_confidence: 0
+
+    # Maximum number of rules allowed in any intermediate ruleset generated
+    # by the decompositional algorithm. If ruleset has more rules than this
+    # number, then we will drop the lowest ranking rules until we have a rule
+    # set as with exactly max_intermediate_rules
+    # If null, then no rule pruning happens
+    max_intermediate_rules: null
+
+    # Whether or not intermediate rule elimination happens at a per-class basis
+    # or not.
+    per_class_elimination: true
+
+    # The initial value of min cases to for later layers in the network.
+    # If 0 or null, then we will use the same as min_cases throughout.
+    # Otherwise we will do a linear interpolation where the end number of min
+    # cases is given by min_cases
+    # For original REM-D: set to null
+    initial_min_cases: null
+
+    # The number of min cases used at the end of processing all intermediate
+    # layers (if annealing is done).
+    # If null or 0 then we will use the same value as min_cases
+    intermediate_end_min_cases: null
+
+    # Whether or not we will use class weights in C5.0 when changing variables
+    # in intermediate rule sets
+    balance_classes: false
+
+    # Maximum depth of tree in rule extractor used to generate intermediate rule
+    # sets if CART and/or random_forest is used.
+    intermediate_tree_max_depth: 15
+
+    # Maximum depth of tree used to change variables in intermediate rule sets
+    # if CART and/or random_forest is used.
+    final_tree_max_depth: 10
+
+    # If True, then ECLAIRE will include input feature activations as part of
+    # the set of activations it can use to extract intermediate rule sets from.
+    ecclectic: False
+
 
 
 # We can specify which mechanism we will obtain a score a given rule given our

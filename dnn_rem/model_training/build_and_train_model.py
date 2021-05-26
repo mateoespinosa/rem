@@ -278,32 +278,23 @@ def run_train_loop(
             num_classes=num_classes,
         )
         y_test = tf.keras.utils.to_categorical(y_test, num_classes=num_classes)
-    if os.path.exists(manager.BEST_NN_INIT_FP):
-        # Use best saved initialisation found earlier
-        logging.debug(
-            f'Training neural network with best initialisation from path: '
-            f'{manager.BEST_NN_INIT_FP}'
-        )
-        model = load_model(manager.BEST_NN_INIT_FP)
-    else:
-        # Build and initialise new model
-        logging.debug('Training neural network with new random initialisation')
-        model = model_fn(
-            input_features=X_train.shape[-1],
-            layer_units=hyperparams["layer_units"],
-            num_outputs=(
-                1 if regression else len(manager.DATASET_INFO.output_classes)
-            ),
-            last_activation=hyperparams.get("last_activation", None),
-            loss_function=hyperparams.get("loss_function", "softmax_xentr"),
-            activation=hyperparams.get("activation", "tanh"),
-            learning_rate=optimizer_params.get("learning_rate", 0.001),
-            dropout_rate=hyperparams.get("dropout_rate", 0),
-            skip_freq=hyperparams.get("skip_freq", 0),
-            regression=regression,
-            decay_rate=optimizer_params.get("decay_rate", 1),
-            decay_steps=optimizer_params.get("decay_steps", None),
-        )
+    # Initialize new model
+    model = model_fn(
+        input_features=X_train.shape[-1],
+        layer_units=hyperparams["layer_units"],
+        num_outputs=(
+            1 if regression else len(manager.DATASET_INFO.output_classes)
+        ),
+        last_activation=hyperparams.get("last_activation", None),
+        loss_function=hyperparams.get("loss_function", "softmax_xentr"),
+        activation=hyperparams.get("activation", "tanh"),
+        learning_rate=optimizer_params.get("learning_rate", 0.001),
+        dropout_rate=hyperparams.get("dropout_rate", 0),
+        skip_freq=hyperparams.get("skip_freq", 0),
+        regression=regression,
+        decay_rate=optimizer_params.get("decay_rate", 1),
+        decay_steps=optimizer_params.get("decay_steps", None),
+    )
 
     # If on debug mode, then let's look at the architecture of the model we
     # are about to train
