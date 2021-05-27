@@ -29,21 +29,14 @@ from dnn_rem.logic_manipulator.merge import merge
 def extract_rules(
     model,
     train_data,
-    train_labels=None,
     verbosity=logging.INFO,
     last_activation=None,
     threshold_decimals=None,
     min_cases=15,
     feature_names=None,
     output_class_names=None,
-    top_k_activations=1,  # 1 for original
-    intermediate_drop_percent=0,  # 0.0 for original
-    initial_drop_percent=None,  # None for original
-    rule_score_mechanism=RuleScoreMechanism.Accuracy,
     block_size=1,  # 1 for original
-    max_features=None,
-    max_leaf_nodes=None,
-    max_depth=None,
+    tree_max_depth=None,
     ccp_prune=True,
     **kwargs,
 ):
@@ -54,23 +47,44 @@ def extract_rules(
     branches that lead to a conclusion where all the terms of interest in a
     given clause are activated as needed.
 
-    :param tf.keras.Model model: The model we want to imitate using our ruleset.
-    :param np.array train_data: 2D data matrix containing all the training
-        points used to train the provided keras model.
-    :param logging.verbosity verbosity: The verbosity in which we want to run
-        this algorithm.
-    :param str last_activation: an explicit function name to apply to the
-        activations of the last layer of the given model before rule extraction.
-        This is needed in case the network's last activation function got merged
-        into the network's loss. If None, then no activation is done. Otherwise,
-        it must be either "sigmoid" or "softmax".
-    :param bool winnow: whether or not to use winnowing for C5.0
-    :param int threshold_decimals: how many decimal points to use for
-        thresholds. If None, then no truncation is done.
-    :param int min_cases: minimum number of cases for a split to happen in C5.0
+    :param keras.Model model: An input instantiated Keras Model object from
+        which we will extract rules from.
+    :param np.ndarray train_data: A tensor of shape [N, m] with N training
+        samples which have m features each.
+    :param logging.VerbosityLevel verbosity: The verbosity level to use for this
+        function.
+    :param str last_activation: Either "softmax" or "sigmoid" indicating which
+        activation function should be applied to the last layer of the given
+        model if last function is fused with loss. If None, then no activation
+        function is applied.
+    :param int threshold_decimals: The maximum number of decimals a threshold in
+        the generated ruleset may have. If None, then we impose no limit.
+    :param bool winnow_intermediate: Whether or not we use winnowing when using
+        C5.0 for intermediate hidden layers.
+    :param bool winnow_features: Whether or not we use winnowing when extracting
+        rules in the features layer.
+    :param int min_cases: The minimum number of samples we must have to perform
+        a split in a decision tree.
+    :param List[str] feature_names: List of feature names to be used for
+        generating our rule set. If None, then we will assume all input features
+        are named `h_0_0`, `h_0_1`, `h_0_2`, etc.
+    :param List[str] output_class_names: List of output class names to be used
+        for generating our rule set. If None, then we will assume all output
+        are named `h_{d+1}_0`, `h_{d+1}_1`, `h_{d+1}_2`, etc where `d` is the
+        number of hidden layers in the network.
+    :param int block_size: The hidden layer sampling frequency. That is, how
+        often will we use a hidden layer in the input network to extract an
+        intermediate rule set from it.
+    :param int tree_max_depth: max tree depth when using CART or random_forest
+        for rule set extraction.
+    :param bool ccp_prune: whether or not we do post-hoc CCP prune to CART trees
+        if CART is used for rule induction.
+    :param Dict[str, Any] kwargs: The keywords arguments used for easier
+        integration with other rule extraction methods.
 
     :returns Ruleset: the set of rules extracted from the given model.
     """
+
     # First we will instantiate a cache of our given keras model to obtain all
     # intermediate activations
     cache_model = ModelCache(
@@ -80,16 +94,6 @@ def extract_rules(
         feature_names=feature_names,
         output_class_names=output_class_names,
     )
-
-    if initial_drop_percent is None:
-        # Then we do a constant dropping rate through the entire network
-        initial_drop_percent = intermediate_drop_percent
-
-    if isinstance(rule_score_mechanism, str):
-        # Then let's turn it into its corresponding enum
-        rule_score_mechanism = RuleScoreMechanism.from_string(
-            rule_score_mechanism
-        )
 
     # Now time to actually extract our set of rules
     dnf_rules = set()
@@ -133,8 +137,6 @@ def extract_rules(
             # Obtain our cached predictions
             predictors = cache_model.get_layer_activations(
                 layer_index=hidden_layer,
-                # We never prune things from the input layer itself
-                top_k=top_k_activations if hidden_layer else 1,
             )
 
             # Let's get the current terms in our class ruleset as those
@@ -205,8 +207,6 @@ def extract_rules(
                 y=targets,
                 threshold_decimals=threshold_decimals,
                 min_cases=min_cases,
-                max_features=max_features,
-                max_leaf_nodes=max_leaf_nodes,
                 max_depth=max_depth,
                 ccp_prune=ccp_prune,
             )

@@ -8,8 +8,6 @@ the variance in the ruleset sizes while also capturing correlations between
 terms when extracting a ruleset for the overall clause.
 """
 
-from multiprocessing import Pool, Lock
-from tqdm import tqdm  # Loading bar for rule generation
 import dill
 import logging
 import numpy as np
@@ -17,15 +15,16 @@ import pandas as pd
 import sklearn
 
 from .utils import ModelCache
-from dnn_rem.utils.parallelism import serialized_function_execute
+from dnn_rem.logic_manipulator.merge import merge
+from dnn_rem.logic_manipulator.substitute_rules import clausewise_substitute
+from dnn_rem.rules.C5 import C5
+from dnn_rem.rules.cart import cart_rules, random_forest_rules
 from dnn_rem.rules.rule import Rule
 from dnn_rem.rules.ruleset import Ruleset, RuleScoreMechanism
-from dnn_rem.rules.C5 import C5
-from dnn_rem.logic_manipulator.substitute_rules import \
-    clausewise_substitute
 from dnn_rem.utils.data_handling import stratified_k_fold_split
-from dnn_rem.logic_manipulator.merge import merge
-from dnn_rem.rules.cart import cart_rules, random_forest_rules
+from dnn_rem.utils.parallelism import serialized_function_execute
+from multiprocessing import Pool
+from tqdm import tqdm  # Loading bar for rule generation
 
 
 ################################################################################
@@ -35,7 +34,6 @@ from dnn_rem.rules.cart import cart_rules, random_forest_rules
 def extract_rules(
     model,
     train_data,
-    train_labels=None,
     verbosity=logging.INFO,
     last_activation=None,
     threshold_decimals=None,
@@ -61,7 +59,7 @@ def extract_rules(
     final_tree_max_depth=None,
     ecclectic=False,
     max_intermediate_rules=float("inf"),
-    intermediate_drop_percent=0,  # 0.0 for original
+    intermediate_drop_percent=0,
     rule_score_mechanism=RuleScoreMechanism.Accuracy,
     per_class_elimination=True,
     **kwargs,
@@ -77,23 +75,114 @@ def extract_rules(
     in the ruleset sizes while also capturing correlations between terms when
     extracting a ruleset for the overall clause.
 
-    :param tf.keras.Model model: The model we want to imitate using our ruleset.
-    :param np.array train_data: 2D data matrix containing all the training
-        points used to train the provided keras model.
-    :param logging.verbosity verbosity: The verbosity in which we want to run
-        this algorithm.
-    :param str last_activation: an explicit function name to apply to the
-        activations of the last layer of the given model before rule extraction.
-        This is needed in case the network's last activation function got merged
-        into the network's loss. If None, then no activation is done. Otherwise,
-        it must be either "sigmoid" or "softmax".
-    :param bool winnow: whether or not to use winnowing for C5.0
-    :param int threshold_decimals: how many decimal points to use for
-        thresholds. If None, then no truncation is done.
-    :param int min_cases: minimum number of cases for a split to happen in C5.0
+    :param keras.Model model: An input instantiated Keras Model object from
+        which we will extract rules from.
+    :param np.ndarray train_data: A tensor of shape [N, m] with N training
+        samples which have m features each.
+    :param logging.VerbosityLevel verbosity: The verbosity level to use for this
+        function.
+    :param str last_activation: Either "softmax" or "sigmoid" indicating which
+        activation function should be applied to the last layer of the given
+        model if last function is fused with loss. If None, then no activation
+        function is applied.
+    :param int threshold_decimals: The maximum number of decimals a threshold in
+        the generated ruleset may have. If None, then we impose no limit.
+    :param bool winnow_intermediate: Whether or not we use winnowing to
+        extract intermediate rule sets when using C5.0 for intermediate rule
+        set extraction.
+    :param bool winnow_features: Whether or not we use winnowing when extracting
+        rules to approximate intermediate clauses when using C5.0 for
+        clause-approximating.
+    :param int min_cases: The minimum number of samples we must have to perform
+        a split in a decision tree when approximating intermediate clauses.
+    :param int intermediate_end_min_cases:  The minimum number of samples we
+        must have to perform a split in a decision tree when extracting
+        intermediate rules from the first layer. It is annealed together with
+        initial_min_cases such that intermediate rule sets from the last hidden
+        layer are extracted using initial_min_cases minimum samples per split
+        and intermediate rule sets from the first hidden layer are extracted
+        using intermediate_end_min_cases min samples per split. If None, then
+        this defaults to initial_min_cases
+    :param int initial_min_cases: Initial minimum number of samples required for
+        a split when generating intermediate rule sets for hidden layers (see
+        description of intermediate_end_min_cases to understand how it is
+        annealed). If None, then it defaults to min_cases.
+    :param int num_workers: Maximum number of working processes to be spanned
+        when extracting rules.
+    :param List[str] feature_names: List of feature names to be used for
+        generating our rule set. If None, then we will assume all input features
+        are named `h_0_0`, `h_0_1`, `h_0_2`, etc.
+    :param List[str] output_class_names: List of output class names to be used
+        for generating our rule set. If None, then we will assume all output
+        are named `h_{d+1}_0`, `h_{d+1}_1`, `h_{d+1}_2`, etc where `d` is the
+        number of hidden layers in the network.
+    :param int trials: The number of sampling trials to use when using bagging
+        for C5.0 in intermediate and clause-wise rule extraction.
+    :param int block_size: The hidden layer sampling frequency. That is, how
+        often will we use a hidden layer in the input network to extract an
+        intermediate rule set from it.
+    :param Or[int, float] max_number_of_samples: The maximum number of samples
+        to use from the training data. This corresponds to how much we will
+        subsample the input training data before using it to construct
+        intermediate and clause-wise rules. If given as a number in [0, 1], then
+        this represents the fraction of the input set which will be used during
+        rule extraction. If None, then we will use the entire training set as
+        given.
+    :param float min_confidence: The minimum confidence we will require each
+        rule in an intermediate rule set to have for us to extract rules from
+        its clauses later on (i.e., we will drop all intermediate rules that
+        have a confidence less than this value).
+    :param str final_algorithm_name: One of ["C5.0", "CART", "random_forest"]
+        indicating which rule extraction algorithm to use for extracting rules
+        to approximate clauses in intermediate rules.
+    :param str intermediate_algorithm_name: One of ["C5.0", "CART",
+        "random_forest"] indicating which rule extraction algorithm to use for
+        extracting intermediate rules.
+    :param int estimators: If using random_forest for any rule extraction,
+        this value represents the number of trees we will grow in the forest.
+    :param bool ccp_prune: If using CART for any rule extraction,
+        this value indicate whether or not we perform CCP post-hoc pruning
+        in the trees we extract with CART before rule induction.
+    :param bool regression: Whether or not we are working in a regression task
+        rather than a classification task. If True, then CART or random_forest
+        must be used to extract intermediate rule sets (set by parameter
+        `intermediate_algorithm_name`).
+    :param bool balance_classes: Whether or not we will use class weights when
+        using C5.0 to approximate intermediate clauses using input activations.
+    :param int intermediate_tree_max_depth: max tree depth when using CART or
+        random_forest for intermediate rule set extraction.
+    :param int final_tree_max_depth: max tree depth when using CART or
+        random_forest for approximating clauses in intermediate rules using
+        input activations only.
+    :param bool eclectic: Whether or not ECLAIRE will use the input features
+        as a set of activations from which it can extract intermediate rule
+        sets from.
+    :param int max_intermediate_rules: If given, then we will constraint any
+        extracted intermediate rule set for any hidden layer to have at most
+        `max_intermediate_rules` in it. If an intermediate rule sets has more,
+        then we will drop as many rules as needed to get the rule set to this
+        limit. The dropping will be done based on the rule rankings as specified
+        by ranking mechanism `rule_score_mechanism`.
+    :param float intermediate_drop_percent: The fraction of rules in
+        intermediate rule sets we will drop based on their rankings as specified
+        by ranking mechanism `rule_score_mechanism`. We will drop the lowest
+        `intermediate_drop_percent` of all intermediate rule sets independently
+        of each other.
+    :param Or[str, RuleScoreMechanism] rule_score_mechanism: The name or enum
+        type of the rule scoring mechanism to be used when dropping rules in
+        intermediate rule sets.
+    :param bool per_class_elimination: If True, and one also requested to drop
+        intermediate rules either by setting `max_intermediate_rules` or by
+        using `intermediate_drop_percent`, then we will drop rules in a
+        per-class basis rather than in a global fashion. That means that all
+        rules are ranked only against rules that share their same conclusion.
+    :param Dict[str, Any] kwargs: The keywords arguments used for easier
+        integration with other rule extraction methods.
 
     :returns Ruleset: the set of rules extracted from the given model.
     """
+
+
     # First determine which rule extraction algorithm we will use in this
     # setting
     if final_algorithm_name.lower() in ["c5.0", "c5", "see5"]:
@@ -185,16 +274,14 @@ def extract_rules(
         elif max_number_of_samples < train_data.shape[0]:
             sample_fraction = max_number_of_samples / train_data.shape[0]
 
-    if sample_fraction and (train_labels is not None):
+    if sample_fraction:
         [(new_indices, _)] = stratified_k_fold_split(
             X=train_data,
-            y=train_labels,
             n_folds=1,
             test_size=(1 - sample_fraction),
             random_state=42,
         )
         train_data = train_data[new_indices, :]
-        train_labels = train_labels[new_indices]
 
     cache_model = ModelCache(
         keras_model=model,

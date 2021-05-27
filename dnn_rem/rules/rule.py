@@ -70,7 +70,7 @@ class Rule(object):
 
     def evaluate_score(self, data):
         """
-        Given a list of input neurons and their values, return the combined
+        Given a list of input activations and their values, return the combined
         proportion of clauses that satisfy the rule
         """
         total = len(self.premise)
@@ -90,7 +90,6 @@ class Rule(object):
                 result += 1
         return result
 
-
     def evaluate_score_and_explain(
         self,
         data,
@@ -98,7 +97,7 @@ class Rule(object):
         aggregator=RulePredictMechanism.AggregateAvg,
     ):
         """
-        Given a list of input neurons and their values, return the combined
+        Given a list of input activations and their values, return the combined
         score of clauses that satisfy the rule and a list with individual
         rules that this data point satisfied
         """

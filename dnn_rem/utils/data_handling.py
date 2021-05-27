@@ -8,7 +8,7 @@ from sklearn.model_selection import StratifiedKFold
 
 def stratified_k_fold_split(
     X,
-    y,
+    y=None,
     n_folds=1,
     test_size=0.2,
     random_state=None,
@@ -17,6 +17,12 @@ def stratified_k_fold_split(
     # Helper method to return a list with n_folds tuples (X_train, y_train)
     # after partitioning the given X, y dataset using stratified splits.
     result = []
+    if y is None:
+        # Then simply subsample X
+        num_samples = np.floor(test_size X.shape[0])
+        selected_rows = np.choice(x.shape[0], size=num_samples, replace=False)
+        return X[selected_rows, :]
+
     if (n_folds == 1) or regression:
         # Degenerate case: let's just dump all our indices as our single fold
         split_gen = ShuffleSplit(

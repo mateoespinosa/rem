@@ -1,6 +1,9 @@
 """
-Main implementation of the vanilla REM-D rule extraction algorithm for DNNs.
+Copy of implementation of REM-D used only for case study purposes.
+It produces an example log file indicating metrics from all parts of REM-D's
+run.
 """
+
 from collections import defaultdict
 from multiprocessing import Pool
 from tqdm import tqdm  # Loading bar for rule generation
@@ -55,7 +58,6 @@ def extract_rules(
     feature_names=None,
     output_class_names=None,
     preemptive_redundant_removal=False,  # False for original
-    top_k_activations=1,  # 1 for original
     intermediate_drop_percent=0,  # 0.0 for original
     initial_drop_percent=None,  # None for original
     rule_score_mechanism=RuleScoreMechanism.Accuracy,
@@ -68,21 +70,54 @@ def extract_rules(
     """
     Extracts a set of rules which imitates given the provided model using the
     algorithm described in the paper.
+    Same as normal REM-D but in includes annotations to be able to study
+    intermediate points of its execution. Used for research purposes
+    exclusively.
 
-    :param tf.keras.Model model: The model we want to imitate using our ruleset.
-    :param np.array train_data: 2D data matrix containing all the training
-        points used to train the provided keras model.
-    :param logging.verbosity verbosity: The verbosity in which we want to run
-        this algorithm.
-    :param str last_activation: an explicit function name to apply to the
-        activations of the last layer of the given model before rule extraction.
-        This is needed in case the network's last activation function got merged
-        into the network's loss. If None, then no activation is done. Otherwise,
-        it must be either "sigmoid" or "softmax".
-    :param bool winnow: whether or not to use winnowing for C5.0
-    :param int threshold_decimals: how many decimal points to use for
-        thresholds. If None, then no truncation is done.
-    :param int min_cases: minimum number of cases for a split to happen in C5.0
+    :param keras.Model model: An input instantiated Keras Model object from
+        which we will extract rules from.
+    :param np.ndarray train_data: A tensor of shape [N, m] with N training
+        samples which have m features each.
+    :param logging.VerbosityLevel verbosity: The verbosity level to use for this
+        function.
+    :param str last_activation: Either "softmax" or "sigmoid" indicating which
+        activation function should be applied to the last layer of the given
+        model if last function is fused with loss. If None, then no activation
+        function is applied.
+    :param int threshold_decimals: The maximum number of decimals a threshold in
+        the generated ruleset may have. If None, then we impose no limit.
+    :param bool winnow_intermediate: Whether or not we use winnowing when using
+        C5.0 for intermediate hidden layers.
+    :param bool winnow_features: Whether or not we use winnowing when extracting
+        rules in the features layer.
+    :param int min_cases: The minimum number of samples we must have to perform
+        a split in a decision tree.
+    :param int num_workers: Maximum number of working processes to be spanned
+        when extracting rules.
+    :param List[str] feature_names: List of feature names to be used for
+        generating our rule set. If None, then we will assume all input features
+        are named `h_0_0`, `h_0_1`, `h_0_2`, etc.
+    :param List[str] output_class_names: List of output class names to be used
+        for generating our rule set. If None, then we will assume all output
+        are named `h_{d+1}_0`, `h_{d+1}_1`, `h_{d+1}_2`, etc where `d` is the
+        number of hidden layers in the network.
+    :param int trials: The number of sampling trials to use when using bagging
+        for C5.0 rule extraction.
+    :param int block_size: The hidden layer sampling frequency. That is, how
+        often will we use a hidden layer in the input network to extract an
+        intermediate rule set from it.
+    :param bool merge_repeated_terms: If set, we will only extract rules to
+        approximate a term but not its negation. That way its negation's
+        substitution would come from using that tree's negative class.
+    :param Or[int, float] max_number_of_samples: The maximum number of samples
+        to use from the training data. This corresponds to how much we will
+        subsample the input training data before using it to construct
+        intermediate and clause-wise rules. If given as a number in [0, 1], then
+        this represents the fraction of the input set which will be used during
+        rule extraction. If None, then we will use the entire training set as
+        given.
+    :param Dict[str, Any] kwargs: The keywords arguments used for easier
+        integration with other rule extraction methods.
 
     :returns Ruleset: the set of rules extracted from the given model.
     """
@@ -175,11 +210,16 @@ def extract_rules(
                 # Obtain our cached predictions
                 predictors = cache_model.get_layer_activations(
                     layer_index=hidden_layer,
-                    # We never prune things from the input layer itself
-                    top_k=top_k_activations if hidden_layer else 1,
                 )
                 # DIFFERENCE POINT
-                _log_to_file("\tCurrently in hidden layer", hidden_layer, "with activations shape", predictors.shape, "and next layer is", next_hidden_layer)
+                _log_to_file(
+                    "\tCurrently in hidden layer",
+                    hidden_layer,
+                    "with activations shape",
+                    predictors.shape,
+                    "and next layer is",
+                    next_hidden_layer,
+                )
 
                 # We will generate an intermediate ruleset for this layer
                 intermediate_rules = Ruleset(
@@ -217,7 +257,12 @@ def extract_rules(
                     output_class_names=[output_class_name, None],
                 )
                 # DIFFERENCE POINT
-                _log_to_file("\t\tClass rule has a total of", num_terms, "terms and", temp_ruleset.num_clauses())
+                _log_to_file(
+                    "\t\tClass rule has a total of",
+                    num_terms,
+                    "terms and",
+                    temp_ruleset.num_clauses(),
+                )
 
                 # We preemptively extract all the activations of the next layer
                 # so that we can serialize the function below using dill.
@@ -248,7 +293,13 @@ def extract_rules(
                         f"{len(target)} training samples satisfied {term}."
                     )
                     # DIFFERENCE POINT
-                    _log_to_file("\t\t\tExtracting rules from term", term, "when a total of", f"{np.count_nonzero(target)}/{len(target)} training samples satisfied it.")
+                    _log_to_file(
+                        "\t\t\tExtracting rules from term",
+                        term,
+                        "when a total of",
+                        f"{np.count_nonzero(target)}/{len(target)} training",
+                        "samples satisfied it.",
+                    )
 
                     prior_rule_confidence = term_confidences[term]
                     rule_conclusion_map = {
@@ -269,7 +320,11 @@ def extract_rules(
                         trials=trials,
                     )
                     # DIFFERENCE POINT
-                    _log_to_file("\t\t\t\tWe extracted a total of", len(new_rules), "from this term")
+                    _log_to_file(
+                        "\t\t\t\tWe extracted a total of",
+                        len(new_rules),
+                        "from this term",
+                    )
 
                     if pbar:
                         pbar.update(1/num_terms)
@@ -324,11 +379,20 @@ def extract_rules(
                 # Time to do our simple reduction from our map above by
                 # accumulating all the generated rules into a single ruleset
                 # DIFFERENCE POINT
-                _log_to_file("\t\tThe summary of all extracted rule sets for all terms is:", list(map(len, new_rulesets)))
+                _log_to_file(
+                    "\t\tThe summary of all extracted rule sets for all "
+                    "terms is:", list(map(len, new_rulesets))
+                )
                 for ruleset in new_rulesets:
                     intermediate_rules.add_rules(ruleset)
                 # DIFFERENCE POINT
-                _log_to_file("\t\tOur intermediate ruleset has a total of", intermediate_rules.num_clauses(), "clauses and", intermediate_rules.num_terms(), "terms")
+                _log_to_file(
+                    "\t\tOur intermediate ruleset has a total of",
+                    intermediate_rules.num_clauses(),
+                    "clauses and",
+                    intermediate_rules.num_terms(),
+                    "terms",
+                )
 
                 logging.debug(
                     f'\tGenerated intermediate ruleset for layer '
@@ -348,19 +412,6 @@ def extract_rules(
                     total_rule=class_rule,
                     intermediate_rules=intermediate_rules,
                 )
-                # And clean it up
-                # # DIFFERENCE POINT
-                # class_rule.remove_unsatisfiable_clauses()
-                # # DIFFERENCE POINT
-                # for clause in class_rule.premise:
-                #     # DIFFERENCE POINT
-                #     clause.remove_redundant_terms()
-
-                # if not len(class_rule.premise):
-                #     pbar.write(
-                #         f"[WARNING] Found rule with empty premise of for "
-                #         f"class {output_class_name}."
-                #     )
 
                 # And then time to drop some intermediate rules in here!
                 temp_ruleset = Ruleset(
@@ -369,7 +420,13 @@ def extract_rules(
                     output_class_names=[output_class_name, None],
                 )
                 # DIFFERENCE POINT
-                _log_to_file("\t\tAfter substitution resulting class rule has", temp_ruleset.num_clauses(), "clauses in it and", temp_ruleset.num_terms(), "terms in it...")
+                _log_to_file(
+                    "\t\tAfter substitution resulting class rule has",
+                    temp_ruleset.num_clauses(),
+                    "clauses in it and",
+                    temp_ruleset.num_terms(),
+                    "terms in it...",
+                )
 
                 # Keep a collection of intermediate class rules to explore how
                 # much performance degrades as the we go into the network
@@ -415,7 +472,13 @@ def extract_rules(
                 output_class_names=[output_class_name, None],
             )
             # DIFFERENCE POINT
-            _log_to_file("\tAt the end of this class, we obtained a ruleset with", temp_ruleset.num_clauses(), "clauses in it and", temp_ruleset.num_terms(), "terms in it")
+            _log_to_file(
+                "\tAt the end of this class, we obtained a ruleset with",
+                temp_ruleset.num_clauses(),
+                "clauses in it and",
+                temp_ruleset.num_terms(),
+                "terms in it",
+            )
             dnf_rules.add(class_rule)
 
         pbar.set_description("Done extracting rules from neural network")
@@ -444,15 +507,32 @@ def extract_rules(
             train_labels,
             predicted_vals,
         )
-        _log_to_file("Train accuracy for intermediate ruleset of hidden layer", hidden_layer, "was", acc, "with ruleset having a total of", temp_ruleset.num_clauses(), "clauses and", temp_ruleset.num_terms(), "terms in it")
+        _log_to_file(
+            "Train accuracy for intermediate ruleset of hidden layer",
+            hidden_layer, "was",
+            acc,
+            "with ruleset having a total of",
+            temp_ruleset.num_clauses(),
+            "clauses and",
+            temp_ruleset.num_terms(),
+            "terms in it",
+        )
 
         fid = sklearn.metrics.accuracy_score(
             out_preds,
             predicted_vals,
         )
-        _log_to_file("Train fidelity for intermediate ruleset of hidden layer", hidden_layer, "was", fid)
+        _log_to_file(
+            "Train fidelity for intermediate ruleset of hidden layer",
+            hidden_layer,
+            "was",
+            fid,
+        )
 
-    _log_to_file("\n-------------------------------------- DONE --------------------------------------\n\n\n\n")
+    _log_to_file(
+        "\n-------------------------------------- DONE "
+        "--------------------------------------\n\n\n\n"
+    )
     return Ruleset(
         rules=dnf_rules,
         feature_names=feature_names,

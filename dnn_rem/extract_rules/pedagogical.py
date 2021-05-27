@@ -5,15 +5,14 @@ features with the model's outputs.
 """
 
 import numpy as np
-import logging
 import pandas as pd
+
 
 from dnn_rem.logic_manipulator.merge import merge
 from dnn_rem.rules.C5 import C5
+from dnn_rem.rules.cart import cart_rules, random_forest_rules
 from dnn_rem.rules.ruleset import Ruleset
 from dnn_rem.utils.data_handling import stratified_k_fold_split
-from dnn_rem.rules.cart import cart_rules, random_forest_rules
-
 
 ################################################################################
 ## Exposed Methods
@@ -23,8 +22,6 @@ from dnn_rem.rules.cart import cart_rules, random_forest_rules
 def extract_rules(
     model,
     train_data,
-    train_labels=None,
-    verbosity=logging.INFO,
     winnow=True,
     threshold_decimals=None,
     min_cases=15,
@@ -43,16 +40,48 @@ def extract_rules(
     Extracts a set of rules which imitates given the provided model in a
     pedagogical manner using C5 on the outputs and inputs of the network.
 
-    :param tf.keras.Model model: The model we want to imitate using our ruleset.
-    :param np.array train_data: 2D data matrix containing all the training
-        points used to train the provided keras model.
-    :param logging.verbosity verbosity: The verbosity in which we want to run
-        this algorithm.
-    :param bool winnow: whether or not to use winnowing for C5.0
-    :param int threshold_decimals: how many decimal points to use for
-        thresholds. If None, then no truncation is done.
-    :param int min_cases: minimum number of cases for a split to happen in C5.0
-    :returns Set[Rule]: the set of rules extracted from the given model.
+    :param keras.Model model: An input instantiated Keras Model object from
+        which we will extract rules from.
+    :param np.ndarray train_data: A tensor of shape [N, m] with N training
+        samples which have m features each.
+    :param logging.VerbosityLevel verbosity: The verbosity level to use for this
+        function.
+    :param int threshold_decimals: The maximum number of decimals a threshold in
+        the generated ruleset may have. If None, then we impose no limit.
+    :param bool winnow: Whether or not we use winnowing when using
+        C5.0 for rule extraction
+    :param int min_cases: The minimum number of samples we must have to perform
+        a split in a decision tree.
+    :param List[str] feature_names: List of feature names to be used for
+        generating our rule set. If None, then we will assume all input features
+        are named `h_0_0`, `h_0_1`, `h_0_2`, etc.
+    :param List[str] output_class_names: List of output class names to be used
+        for generating our rule set. If None, then we will assume all output
+        are named `h_{d+1}_0`, `h_{d+1}_1`, `h_{d+1}_2`, etc where `d` is the
+        number of hidden layers in the network.
+    :param Or[int, float] max_number_of_samples: The maximum number of samples
+        to use from the training data. This corresponds to how much we will
+        subsample the input training data before using it to construct
+        rules. If given as a number in [0, 1], then this represents the fraction
+        of the input set which will be used during rule extraction. If None,
+        then we will use the entire training set as given.
+    :param str tree_extraction_algorithm_name: One of ["C5.0", "CART",
+        "random_forest"] indicating which rule extraction algorithm to use for
+        extracting rules.
+    :param int trials: The number of sampling trials to use when using bagging
+        for C5.0 in rule extraction.
+    :param int tree_max_depth: max tree depth when using CART or random_forest
+        for rule set extraction.
+    :param bool ccp_prune: whether or not we do post-hoc CCP prune to CART trees
+        if CART is used for rule induction.
+    :param int estimators: The number of trees to use if using random_forest
+        for rule extraction.
+    :param bool regression: whether or not we are dealing with a regression
+        task or a classification task.
+    :param Dict[str, Any] kwargs: The keywords arguments used for easier
+        integration with other rule extraction methods.
+
+    :returns Ruleset: the set of rules extracted from the given model.
     """
 
     if tree_extraction_algorithm_name.lower() in ["c5.0", "c5", "see5"]:
@@ -94,16 +123,14 @@ def extract_rules(
         elif max_number_of_samples < train_data.shape[0]:
             sample_fraction = max_number_of_samples / train_data.shape[0]
 
-    if sample_fraction and (train_labels is not None):
+    if sample_fraction:
         [(new_indices, _)] = stratified_k_fold_split(
             X=train_data,
-            y=train_labels,
             n_folds=1,
             test_size=(1 - sample_fraction),
             random_state=42,
         )
         train_data = train_data[new_indices, :]
-        train_labels = train_labels[new_indices]
 
     # y = output classifications of neural network. C5 requires y to be a
     # pd.Series

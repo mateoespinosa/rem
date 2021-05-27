@@ -55,7 +55,7 @@ def _parse_C5_rule_str(
     :param int threshold_decimals: If provided, the number of decimals to
         truncate our thresholds when generating new rules.
 
-    :returns Set[Rule]: A set of rules representing the onces extracted from
+    :returns Set[Rule]: A set of rules representing the ones extracted from
         the given output of C5.0.
     """
     rules_set = set()

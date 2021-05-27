@@ -5,7 +5,11 @@ Represent components that make up a rule. All immutable and hashable.
 from enum import Enum
 import numpy as np
 
+
 class TermOperator(Enum):
+    """
+    Simple operator enum for comparing two real numbers.
+    """
     GreaterThan = '>'
     LessThanEq = '<='
 
@@ -136,12 +140,6 @@ class Term(object):
         Apply condition to a value
         """
         return self.operator.eval()(value, self.threshold)
-
-    def get_neuron_index(self):
-        """
-        Return index of variable specified in the term
-        """
-        return self.variable.index
 
     def to_json(self):
         result = {}

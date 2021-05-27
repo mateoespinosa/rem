@@ -115,6 +115,14 @@ class Ruleset(object):
 
         :param np.array X: 2D matrix of data points of which we want to obtain a
             prediction for.
+        :param bool use_label_names: If true, then it will output the string
+            representations of the predictions. Otherwise it will output their
+            encodings by default.
+        :param int num_workers: Number of parallel processes we can span to
+            evaluate this prediction more efficiently.
+        :param regression: whether or not this prediction is a regression task
+            or not. If so, then no majority voting is done and instead we do
+            averaging of all the rules the match.
 
         :returns np.array: 1D vector with as many entries as data points in X
             containing our predicted results.
@@ -130,6 +138,7 @@ class Ruleset(object):
                 "Expected provided data to be 2D but got "
                 "shape {X.shape} instead."
             )
+
         def _predict_samples(block_id, instances):
             result = []
             for i, instance in enumerate(instances):
@@ -661,17 +670,6 @@ class Ruleset(object):
             ruleset_str += str(rule) + '\n'
 
         return ruleset_str
-
-    def get_rule_by_conclusion(self, conclusion):
-        for rule in self.rules:
-            if conclusion == rule.conclusion:
-                return rule
-
-    def get_ruleset_conclusions(self):
-        conclusions = set()
-        for rule in self.rules:
-            conclusions.add(rule.conclusion)
-        return conclusions
 
     def to_file(self, path):
         with open(path, 'wb') as f:

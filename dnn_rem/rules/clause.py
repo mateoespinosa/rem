@@ -24,7 +24,6 @@ class ConjunctiveClause(object):
             self.terms = remove_redundant_terms(self.terms)
         self.confidence = confidence
         self.score = score
-        self.remove_redundant = remove_redundant
 
     def __str__(self):
         terms_str = [str(term) for term in sorted(self.terms, key=str)]

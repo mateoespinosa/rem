@@ -3,19 +3,19 @@ Implementation of DeepRED algorithm using C5.0 rather than C4.5 for intermediate
 rule extraction.
 """
 
-from multiprocessing import Pool
-from tqdm import tqdm  # Loading bar for rule generation
 import dill
 import logging
 import numpy as np
 
-from dnn_rem.rules.ruleset import Ruleset
-from dnn_rem.rules.rule import Rule
-from dnn_rem.rules.C5 import C5
 from dnn_rem.logic_manipulator.substitute_rules import substitute
+from dnn_rem.rules.C5 import C5
+from dnn_rem.rules.rule import Rule
+from dnn_rem.rules.ruleset import Ruleset
+from dnn_rem.utils.parallelism import serialized_function_execute
+from multiprocessing import Pool
+from tqdm import tqdm  # Loading bar for rule generation
 
 from .utils import ModelCache
-from dnn_rem.utils.parallelism import serialized_function_execute
 
 
 ################################################################################
@@ -25,18 +25,17 @@ from dnn_rem.utils.parallelism import serialized_function_execute
 def extract_rules(
     model,
     train_data,
-    train_labels=None,
     verbosity=logging.INFO,
     last_activation=None,
     threshold_decimals=None,
     winnow_intermediate=True,
     winnow_features=True,
     min_cases=15,
-    num_workers=1,  # 1 for original
+    num_workers=1,
     feature_names=None,
     output_class_names=None,
-    trials=1,  # 1 for original
-    block_size=1,  # 1 for original
+    trials=1,
+    block_size=1,
     **kwargs,
 ):
     """
@@ -49,20 +48,45 @@ def extract_rules(
     the variance in the ruleset sizes while also capturing correlations between
     terms when extracting a ruleset for the overall clause.
 
-    :param tf.keras.Model model: The model we want to imitate using our ruleset.
-    :param np.array train_data: 2D data matrix containing all the training
-        points used to train the provided keras model.
-    :param logging.verbosity verbosity: The verbosity in which we want to run
-        this algorithm.
-    :param str last_activation: an explicit function name to apply to the
-        activations of the last layer of the given model before rule extraction.
-        This is needed in case the network's last activation function got merged
-        into the network's loss. If None, then no activation is done. Otherwise,
-        it must be either "sigmoid" or "softmax".
-    :param bool winnow: whether or not to use winnowing for C5.0
-    :param int threshold_decimals: how many decimal points to use for
-        thresholds. If None, then no truncation is done.
-    :param int min_cases: minimum number of cases for a split to happen in C5.0
+    :param keras.Model model: An input instantiated Keras Model object from
+        which we will extract rules from.
+    :param np.ndarray train_data: A tensor of shape [N, m] with N training
+        samples which have m features each.
+    :param logging.VerbosityLevel verbosity: The verbosity level to use for this
+        function.
+    :param str last_activation: Either "softmax" or "sigmoid" indicating which
+        activation function should be applied to the last layer of the given
+        model if last function is fused with loss. If None, then no activation
+        function is applied.
+    :param int threshold_decimals: The maximum number of decimals a threshold in
+        the generated ruleset may have. If None, then we impose no limit.
+    :param bool winnow_intermediate: Whether or not we use winnowing when using
+        C5.0 for intermediate hidden layers.
+    :param bool winnow_features: Whether or not we use winnowing when extracting
+        rules in the features layer.
+    :param int min_cases: The minimum number of samples we must have to perform
+        a split in a decision tree.
+    :param int initial_min_cases: Initial minimum number of samples required for
+        a split when calling C5.0 for intermediate hidden layers. This
+        value will be linearly annealed given so that the last hidden layer uses
+        `initial_min_cases` and the features layer uses `min_cases`.
+        If None, then it defaults to min_cases.
+    :param int num_workers: Maximum number of working processes to be spanned
+        when extracting rules.
+    :param List[str] feature_names: List of feature names to be used for
+        generating our rule set. If None, then we will assume all input features
+        are named `h_0_0`, `h_0_1`, `h_0_2`, etc.
+    :param List[str] output_class_names: List of output class names to be used
+        for generating our rule set. If None, then we will assume all output
+        are named `h_{d+1}_0`, `h_{d+1}_1`, `h_{d+1}_2`, etc where `d` is the
+        number of hidden layers in the network.
+    :param int trials: The number of sampling trials to use when using bagging
+        for C5.0 in intermediate and clause-wise rule extraction.
+    :param int block_size: The hidden layer sampling frequency. That is, how
+        often will we use a hidden layer in the input network to extract an
+        intermediate rule set from it.
+    :param Dict[str, Any] kwargs: The keywords arguments used for easier
+        integration with other rule extraction methods.
 
     :returns Ruleset: the set of rules extracted from the given model.
     """

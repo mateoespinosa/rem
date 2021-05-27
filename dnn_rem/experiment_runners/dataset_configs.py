@@ -196,9 +196,7 @@ class TrivialCatDescriptor(DiscreteEncodingDescriptor):
 class OutputClass(object):
     """
     Represents the conclusion of a given rule. Immutable and Hashable.
-
-    Each output class has a name and its relevant encoding in the network
-    i.e. which output neuron it corresponds to
+    Each output class has a name and its relevant integer encoding
     """
 
     def __init__(self, name: str, encoding: int):
@@ -206,7 +204,7 @@ class OutputClass(object):
         self.encoding = encoding
 
     def __str__(self):
-        return f'OUTPUT_CLASS={self.name} (neuron name {self.encoding})'
+        return f'{self.name} (encoding {self.encoding})'
 
     def __eq__(self, other):
         return (

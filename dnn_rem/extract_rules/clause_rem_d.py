@@ -8,21 +8,21 @@ also capturing correlations between terms when extracting a ruleset for the
 overall clause.
 """
 
-from multiprocessing import Pool
-from tqdm import tqdm  # Loading bar for rule generation
 import dill
 import logging
 import numpy as np
 
-from .utils import ModelCache
 from dnn_rem.logic_manipulator.merge import merge
-from dnn_rem.logic_manipulator.substitute_rules import \
-    clausewise_substitute
+from dnn_rem.logic_manipulator.substitute_rules import clausewise_substitute
 from dnn_rem.rules.C5 import C5
 from dnn_rem.rules.rule import Rule
-from dnn_rem.rules.ruleset import Ruleset, RuleScoreMechanism
-from dnn_rem.utils.parallelism import serialized_function_execute
+from dnn_rem.rules.ruleset import Ruleset
 from dnn_rem.utils.data_handling import stratified_k_fold_split
+from dnn_rem.utils.parallelism import serialized_function_execute
+from multiprocessing import Pool
+from tqdm import tqdm  # Loading bar for rule generation
+
+from .utils import ModelCache
 
 
 ################################################################################
@@ -32,25 +32,19 @@ from dnn_rem.utils.data_handling import stratified_k_fold_split
 def extract_rules(
     model,
     train_data,
-    train_labels=None,
     verbosity=logging.INFO,
     last_activation=None,
     threshold_decimals=None,
     winnow_intermediate=True,
     winnow_features=True,
     min_cases=15,
-    initial_min_cases=None,  # None for original
-    num_workers=1,  # 1 for original
+    initial_min_cases=None,
+    num_workers=1,
     feature_names=None,
     output_class_names=None,
-    top_k_activations=1,  # 1 for original
-    intermediate_drop_percent=0,  # 0.0 for original
-    initial_drop_percent=None,  # None for original
-    rule_score_mechanism=RuleScoreMechanism.Accuracy,
-    trials=1,  # 1 for original
-    block_size=1,  # 1 for original
-    max_number_of_samples=None,  # None for original
-    min_confidence=0,  # 0 for original
+    trials=1,
+    block_size=1,
+    max_number_of_samples=None,
     **kwargs,
 ):
     """
@@ -63,23 +57,56 @@ def extract_rules(
     the variance in the ruleset sizes while also capturing correlations between
     terms when extracting a ruleset for the overall clause.
 
-    :param tf.keras.Model model: The model we want to imitate using our ruleset.
-    :param np.array train_data: 2D data matrix containing all the training
-        points used to train the provided keras model.
-    :param logging.verbosity verbosity: The verbosity in which we want to run
-        this algorithm.
-    :param str last_activation: an explicit function name to apply to the
-        activations of the last layer of the given model before rule extraction.
-        This is needed in case the network's last activation function got merged
-        into the network's loss. If None, then no activation is done. Otherwise,
-        it must be either "sigmoid" or "softmax".
-    :param bool winnow: whether or not to use winnowing for C5.0
-    :param int threshold_decimals: how many decimal points to use for
-        thresholds. If None, then no truncation is done.
-    :param int min_cases: minimum number of cases for a split to happen in C5.0
+    :param keras.Model model: An input instantiated Keras Model object from
+        which we will extract rules from.
+    :param np.ndarray train_data: A tensor of shape [N, m] with N training
+        samples which have m features each.
+    :param logging.VerbosityLevel verbosity: The verbosity level to use for this
+        function.
+    :param str last_activation: Either "softmax" or "sigmoid" indicating which
+        activation function should be applied to the last layer of the given
+        model if last function is fused with loss. If None, then no activation
+        function is applied.
+    :param int threshold_decimals: The maximum number of decimals a threshold in
+        the generated ruleset may have. If None, then we impose no limit.
+    :param bool winnow_intermediate: Whether or not we use winnowing when using
+        C5.0 for intermediate hidden layers.
+    :param bool winnow_features: Whether or not we use winnowing when extracting
+        rules in the features layer.
+    :param int min_cases: The minimum number of samples we must have to perform
+        a split in a decision tree.
+    :param int initial_min_cases: Initial minimum number of samples required for
+        a split when calling C5.0 for intermediate hidden layers. This
+        value will be linearly annealed given so that the last hidden layer uses
+        `initial_min_cases` and the features layer uses `min_cases`.
+        If None, then it defaults to min_cases.
+    :param int num_workers: Maximum number of working processes to be spanned
+        when extracting rules.
+    :param List[str] feature_names: List of feature names to be used for
+        generating our rule set. If None, then we will assume all input features
+        are named `h_0_0`, `h_0_1`, `h_0_2`, etc.
+    :param List[str] output_class_names: List of output class names to be used
+        for generating our rule set. If None, then we will assume all output
+        are named `h_{d+1}_0`, `h_{d+1}_1`, `h_{d+1}_2`, etc where `d` is the
+        number of hidden layers in the network.
+    :param int trials: The number of sampling trials to use when using bagging
+        for C5.0 in intermediate and clause-wise rule extraction.
+    :param int block_size: The hidden layer sampling frequency. That is, how
+        often will we use a hidden layer in the input network to extract an
+        intermediate rule set from it.
+    :param Or[int, float] max_number_of_samples: The maximum number of samples
+        to use from the training data. This corresponds to how much we will
+        subsample the input training data before using it to construct
+        intermediate and clause-wise rules. If given as a number in [0, 1], then
+        this represents the fraction of the input set which will be used during
+        rule extraction. If None, then we will use the entire training set as
+        given.
+    :param Dict[str, Any] kwargs: The keywords arguments used for easier
+        integration with other rule extraction methods.
 
     :returns Ruleset: the set of rules extracted from the given model.
     """
+
     # First we will instantiate a cache of our given keras model to obtain all
     # intermediate activations
 
@@ -92,16 +119,14 @@ def extract_rules(
         elif max_number_of_samples < train_data.shape[0]:
             sample_fraction = max_number_of_samples / train_data.shape[0]
 
-    if sample_fraction and (train_labels is not None):
+    if sample_fraction:
         [(new_indices, _)] = stratified_k_fold_split(
             X=train_data,
-            y=train_labels,
             n_folds=1,
             test_size=(1 - sample_fraction),
             random_state=42,
         )
         train_data = train_data[new_indices, :]
-        train_labels = train_labels[new_indices]
 
     cache_model = ModelCache(
         keras_model=model,
@@ -111,19 +136,9 @@ def extract_rules(
         output_class_names=output_class_names,
     )
 
-    if initial_drop_percent is None:
-        # Then we do a constant dropping rate through the entire network
-        initial_drop_percent = intermediate_drop_percent
-
     if initial_min_cases is None:
         # Then we do a constant min cases through the entire network
         initial_min_cases = min_cases
-
-    if isinstance(rule_score_mechanism, str):
-        # Then let's turn it into its corresponding enum
-        rule_score_mechanism = RuleScoreMechanism.from_string(
-            rule_score_mechanism
-        )
 
     # Now time to actually extract our set of rules
     dnf_rules = set()
@@ -166,8 +181,6 @@ def extract_rules(
                 # Obtain our cached predictions
                 predictors = cache_model.get_layer_activations(
                     layer_index=hidden_layer,
-                    # We never prune things from the input layer itself
-                    top_k=top_k_activations if hidden_layer else 1,
                 )
 
                 # We will generate an intermediate ruleset for this layer
@@ -314,61 +327,6 @@ def extract_rules(
                         f"[WARNING] Found rule with empty premise of for "
                         f"class {output_class_name}."
                     )
-                # And prune all rules that have a confidence below the given
-                # minimum required
-                if min_confidence:
-                    new_clauses = []
-                    num_removed = 0
-                    for clause in class_rule.premise:
-                        if clause.confidence >= min_confidence:
-                            new_clauses.append(clause)
-                        else:
-                            num_removed += 1
-                    print(
-                        f"Removed {num_removed} out of "
-                        f"{len(class_rule.premise)} clauses because they had "
-                        f"a confidence below {min_confidence}."
-                    )
-                    class_rule.premise = set(new_clauses)
-
-                # And then time to drop some intermediate rules in here!
-                temp_ruleset = Ruleset(
-                    rules=[class_rule],
-                    feature_names=list(predictors.columns),
-                    output_class_names=[output_class_name, None],
-                )
-
-                if (
-                    (train_labels is not None) and
-                    (intermediate_drop_percent) and
-                    (temp_ruleset.num_clauses() > 1) and
-                    (hidden_layer > 0)
-                ):
-                    # Then let's do some rule dropping for compressing our
-                    # generated ruleset and improving the complexity of the
-                    # resulting algorithm
-                    term_target = []
-                    for label in train_labels:
-                        if label == output_class_idx:
-                            term_target.append(output_class_name)
-                        else:
-                            term_target.append(None)
-                    temp_ruleset.rank_rules(
-                        X=cache_model.get_layer_activations(
-                            layer_index=hidden_layer
-                        ).to_numpy(),
-                        y=term_target,
-                        score_mechanism=rule_score_mechanism,
-                        use_label_names=True,
-                    )
-
-                    slope = (intermediate_drop_percent - initial_drop_percent)
-                    slope = slope/(len(input_hidden_acts) - 1)
-                    eff_drop_rate = intermediate_drop_percent - (
-                        slope * hidden_layer
-                    )
-                    temp_ruleset.eliminate_rules(eff_drop_rate)
-                    class_rule = next(iter(temp_ruleset.rules))
 
             # Finally add this class rule to our solution ruleset
             dnf_rules.add(class_rule)
