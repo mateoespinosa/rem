@@ -3,8 +3,10 @@ Main repository for work our work in ECLAIRE, a novel decompositional rule extra
 
 ## Credits
 
-A lot of the code and structure of the project is based on the work by Shams et al. made available in: [https://github.com/ZohrehShams/IntegrativeRuleExtractionMethodology](https://github.com/ZohrehShams/IntegrativeRuleExtractionMethodology). This has been summarized in the publication ["REM: An Integrative Rule Extraction Methodology for Explainable Data Analysis in Healthcare
-"](https://www.biorxiv.org/content/10.1101/2021.01.22.427799v2.abstract) by Shams et al.
+A lot of the code and structure of the project is based on the work by Shams et al. made publicly available at [https://github.com/ZohrehShams/IntegrativeRuleExtractionMethodology](https://github.com/ZohrehShams/IntegrativeRuleExtractionMethodology) as part of their publication ["REM: An Integrative Rule Extraction Methodology for Explainable Data Analysis in Healthcare
+"](https://www.biorxiv.org/content/10.1101/2021.01.22.427799v2.abstract).
+
+Furthermore, this project has been build extensively on top of TensorFlow open-source code as well as with extensive use of code open-sourced by Flexx.
 
 
 ## Setup
@@ -525,6 +527,13 @@ At the end of the experiment, you should expect to find this file structure in t
 
 If no output directory is provided, then we will use the same directory as the one containing our dataset.
 
+## Recreating Results
+
+To recreate any of the results reported this dissertation, you can call
+```bash
+python run_experiment.py --config experiment_configs/<dataset_name>/<method_name>_best_config.yaml
+```
+and that should generate the results reported in our paper (up to possible some small marginal differences due to non-determinism).
 
 ## Using Custom Models
 
