@@ -32,8 +32,8 @@ def build_parser():
     """
     parser = argparse.ArgumentParser(
         description=(
-            'Lunches CamRuleViz GUI for visualizing rulesets extracted using '
-            'REM-D.'
+            'Lunches REMIX for visualizing rulesets extracted using '
+            'any of our rule extraction methods.'
         ),
     )
 
@@ -41,8 +41,9 @@ def build_parser():
         '--rules',
         '-r',
         help=(
-            "Valid .rules file containing serialized ruleset extracted by REM-D "
-            "from some neural network and a given task."
+            "Valid .rules file containing serialized ruleset extracted by "
+            "any of our rule extractors from some neural network and a given "
+            "task."
         ),
         metavar="my_rules.rules",
         default=None,
@@ -53,7 +54,7 @@ def build_parser():
         help=(
             "Valid .csv file containing the dataset used to generate the "
             "given rules. If no descriptor is given, then it will assume all"
-            "entires are reals and the last column is the target."
+            "entries are reals and the last column is the target."
         ),
         metavar="data.csv",
         default=None,
@@ -80,16 +81,6 @@ def build_parser():
     )
 
     parser.add_argument(
-        '--max_entries',
-        '-m',
-        metavar="entries",
-        type=int,
-        help=(
-            "Maximum number of entries to display in a summary histogram."
-        ),
-        default=15,
-    )
-    parser.add_argument(
         "-d",
         "--debug",
         action="store_true",
@@ -98,10 +89,6 @@ def build_parser():
     )
 
     return parser
-
-
-class FancyTabLayout(ui.TabLayout):
-    pass
 
 
 ################################################################################
@@ -162,7 +149,6 @@ class RulesetLoadWindow(flx.PyComponent):
                 ui.Widget(flex=1)  # Filler
 
             ui.Widget(flex=1)  # Filler
-
 
     @flx.reaction('upload_ruleset.loading_error')
     def _ruleset_loading_error(self, *events):
@@ -245,7 +231,7 @@ class RuleVizWindow(flx.PyComponent):
                         "padding-top: 20px;"
                     ),
                 )
-            with FancyTabLayout(flex=1):
+            with ui.TabLayout(flex=1):
                 self.add_tab(RuleStatisticsComponent())
                 self.add_tab(PredictComponent(
                     self.root.state.ruleset,
@@ -268,10 +254,6 @@ class RuleVizWindow(flx.PyComponent):
 
     @flx.reaction("tabs*.ruleset_update")
     def update_view(self, *events):
-        print(
-            "Time to update other tabs given that the ruleset got updated:",
-            events
-        )
         for event in events:
             for i, tab in enumerate(self.tabs):
                 if tab.id == event["source_id"]:
@@ -288,7 +270,6 @@ class CamRuleState(object):
         ruleset=None,
         dataset=None,
         show_tools=False,
-        max_entries=15,
         merge_branches=False,
     ):
         self.ruleset = ruleset
@@ -298,7 +279,6 @@ class CamRuleState(object):
             self.original_ruleset = None
         self.dataset = dataset
         self.show_tools = show_tools
-        self.max_entries = max_entries
         self._feature_ranges = {}
         self.merge_branches = merge_branches
 
@@ -347,14 +327,12 @@ class CamRuleViz(flx.PyComponent):
         ruleset=None,
         dataset=None,
         show_tools=False,
-        max_entries=15,
         merge_branches=False,
     ):
         self.state = CamRuleState(
             ruleset=ruleset,
             dataset=dataset,
             show_tools=show_tools,
-            max_entries=max_entries,
             merge_branches=merge_branches,
         )
         with ui.VBox(title="RuleViz"):
@@ -416,7 +394,6 @@ def main():
         ruleset,
         dataset,
         args.show_tools,
-        args.max_entries,
     )
 
     app.launch('browser')  # show it now in a browser
@@ -430,4 +407,3 @@ def main():
 
 if __name__ == '__main__':
     sys.exit(main())
-

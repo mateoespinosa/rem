@@ -1,3 +1,8 @@
+"""
+Rule set loader class abstracts a widget capable of loading a
+Ruleset object from a serialized file.
+"""
+
 from flexx import flx, ui, app
 from dnn_rem.rules.rule import Rule
 from gui_window import CamvizWindow
@@ -6,6 +11,11 @@ from uploader import FileUploader
 
 
 class RulesetUploader(CamvizWindow):
+    """
+    Simple flexx widget to allow the upload and deserialization of a Ruleset
+    object from a path given by the user.
+    """
+
     text = flx.StringProp("Upload Ruleset", settable=True)
     css_class = flx.StringProp("upload-button", settable=True)
 
@@ -51,13 +61,15 @@ class RulesetUploader(CamvizWindow):
 
 
 if __name__ == '__main__':
+    """
+    Testing code for this widet.
+    """
 
     class MyApp(flx.PyComponent):
         def init(self):
             with flx.VBox():
                 self.uploader = RulesetUploader(text="Try me")
                 self.state = flx.Label(text="unloaded")
-
 
         @flx.reaction('uploader.ruleset_load_started')
         def _load_start(self, *events):

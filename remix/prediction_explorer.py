@@ -1,18 +1,19 @@
-from flexx import flx, ui
-from gui_window import CamvizWindow
 from collections import defaultdict
-from pscript.stubs import d3, window, Infinity, Math
-from dnn_rem.rules.term import TermOperator
 from dnn_rem.rules.rule import RulePredictMechanism
 from dnn_rem.rules.ruleset import Ruleset
-from sklearn.neighbors import KernelDensity
-import numpy as np
-from rule_statistics import _CLASS_PALETTE
+from dnn_rem.rules.term import TermOperator
+from flexx import flx, ui
+from gui_window import CamvizWindow
+from io import StringIO
+from pscript.stubs import d3, window, Infinity, Math
 from rule_explorer import HierarchicalTreeViz, ruleset_hierarchy_tree
 from rule_list import ClassRuleList
+from rule_statistics import _CLASS_PALETTE
+from sklearn.neighbors import KernelDensity
 from uploader import FileUploader
-from io import StringIO
+import numpy as np
 import pandas as pd
+
 
 ###############################################################################
 ## Graphical Path Visualization Component

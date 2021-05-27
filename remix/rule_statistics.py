@@ -1,3 +1,8 @@
+"""
+File containing widgets to extract global statistics from a given
+rule set.
+"""
+
 import bokeh
 import numpy as np
 
@@ -25,6 +30,17 @@ _CLASS_PALETTE = Pastel2[8]
 
 
 def _plot_rule_distribution(ruleset, show_tools=True, add_labels=False):
+    """
+    Helper function to generate a Bokeh plot for the rule distribution in the
+    given rule set.
+
+    :param Ruleset ruleset: The ruleset whose rule distribution we want to plot.
+    :param bool show_tools: Whether or not we want the Bokeh diagram to show a
+        toolset.
+    :param bool add_labels: Whether or not we want to add a label box to each
+        wedge of the distribution plot.
+    :returns Bokeh.Plot: the resulting Bokeh doughnut plot.
+    """
     rules_per_class_map = defaultdict(int)
     for rule in ruleset.rules:
         for clause in rule.premise:
@@ -50,7 +66,6 @@ def _plot_rule_distribution(ruleset, show_tools=True, add_labels=False):
         }
     )
     result_plot = figure(
-        # x_range=(-0.5, 1.0),
         toolbar_location=None if (not show_tools) else "right",
         plot_width=_PLOT_WIDTH,
         plot_height=_PLOT_HEIGHT,
@@ -108,9 +123,25 @@ def _plot_rule_distribution(ruleset, show_tools=True, add_labels=False):
 def _plot_term_distribution(
     ruleset,
     show_tools=True,
-    max_entries=float("inf"),
     dataset=None,
 ):
+    """
+    Helper function to generate the term distribution from a given ruleset.
+    Returns a function that, when given the number of requested entries,
+    returns a Bokeh plot showing that many entries for the term
+    distribution of the given rule set.
+
+    :param Ruleset ruleset: The ruleset whose term distribution we want to plot.
+    :param bool show_tools: Whether or not we want the Bokeh diagram to show a
+        toolset.
+    :param DatasetDescriptor dataset: An optional dataset descriptor used to
+        decorate the output plot in case some of the features are categorical in
+        nature.
+    :returns Tuple[Fun[(int), Bokeh.Plot], int]: a tuple containing the
+        generator function and the total number of terms found in the given
+        ruleset.
+    """
+
     num_used_rules_per_term_map = defaultdict(lambda: defaultdict(int))
     all_terms = set()
     class_names = sorted(ruleset.output_class_map.keys())
@@ -157,7 +188,7 @@ def _plot_term_distribution(
         title = f"Top {min(num_entries, len(used_terms))} used terms"
         if len(used_terms) != len(all_terms):
             title += (
-                f" (out of {len(all_terms)} unique terms used in all the ruleset)"
+                f" (out of {len(all_terms)} unique terms used in all rules)"
             )
         result_plot = figure(
             x_range=used_terms,
@@ -174,7 +205,9 @@ def _plot_term_distribution(
             source=source,
             line_color='white',
             color=_CLASS_PALETTE[:len(class_names)],
+            legend_label=list(map(lambda x: "Class: " + x, class_names)),
         )
+        result_plot.yaxis.axis_label = 'Count'
 
         num_used_rules_per_term = np.zeros([len(used_terms)], dtype=np.int32)
         for data_row, vals in data.items():
@@ -212,7 +245,6 @@ def _plot_term_distribution(
 def _plot_feature_distribution(
     ruleset,
     show_tools=True,
-    max_entries=float("inf"),
 ):
     num_used_rules_per_feat_map = defaultdict(lambda: defaultdict(int))
     all_features = set()
@@ -267,7 +299,9 @@ def _plot_feature_distribution(
             source=source,
             line_color='white',
             color=_CLASS_PALETTE[:len(class_names)],
+            legend_label=list(map(lambda x: "Class: " + x, class_names)),
         )
+        result_plot.yaxis.axis_label = 'Count'
         result_plot.xgrid.grid_line_color = None
         result_plot.y_range.start = 0
         num_used_rules_per_feat = np.zeros([len(used_features)], dtype=np.int32)
@@ -298,7 +332,6 @@ def _plot_feature_distribution(
 def _plot_rule_length_distribution(
     ruleset,
     show_tools=True,
-    max_entries=float("inf"),
     num_bins=10,
 ):
     class_rule_lengths = [
@@ -336,7 +369,7 @@ def _plot_rule_length_distribution(
                 fill_color=_CLASS_PALETTE[ruleset.output_class_map[cls_name]],
                 line_color="black",
                 alpha=0.5,
-                legend_label=cls_name,
+                legend_label=("Class: " + cls_name),
             )
     result_plot.y_range.start = 0
     result_plot.legend.location = "center_right"
@@ -366,14 +399,23 @@ def _plot_rule_length_distribution(
 
 
 class RuleStatisticsComponent(CamvizWindow):
+    """
+    Main widget for handling the global cohort-level view of a given ruleset.
+    This view will simply provide general statistics and patterns that are
+    immediately found in the main ruleset.
+    """
+
+    # We will use this property to handle groups of statistics
     groups = flx.ListProp(settable=True)
+    # We will use this property to handle rows of groups
     rows = flx.ListProp(settable=True)
+    # And we will use this property to keep track of all plots in the current
+    # widget
     plots = flx.ListProp(settable=True)
 
     def init(self):
         self.ruleset = self.root.state.ruleset
         self.show_tools = self.root.state.show_tools
-        self.max_entries = self.root.state.max_entries
         with ui.VSplit(
             title="Cohort Summary",
             style=(
@@ -466,7 +508,6 @@ class RuleStatisticsComponent(CamvizWindow):
                         _plot_rule_length_distribution(
                             ruleset=self.ruleset,
                             show_tools=self.show_tools,
-                            max_entries=self.max_entries,
                         ),
                     )
             with self.rows[1]:
@@ -475,7 +516,6 @@ class RuleStatisticsComponent(CamvizWindow):
                         _plot_feature_distribution(
                             ruleset=self.ruleset,
                             show_tools=self.show_tools,
-                            max_entries=self.max_entries,
                         )
                     flx.Label(
                         text="Feature Distribution",
@@ -509,7 +549,6 @@ class RuleStatisticsComponent(CamvizWindow):
                         _plot_term_distribution(
                             ruleset=self.ruleset,
                             show_tools=self.show_tools,
-                            max_entries=self.max_entries,
                             dataset=self.root.state.dataset,
                         )
                     flx.Label(
