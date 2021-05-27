@@ -13,7 +13,7 @@ from tqdm import tqdm  # Loading bar for rule generation
 import logging
 import numpy as np
 
-from .rem_d import ModelCache
+from .utils import ModelCache
 from dnn_rem.rules.rule import Rule
 from dnn_rem.rules.ruleset import Ruleset, RuleScoreMechanism
 from dnn_rem.rules.cart import cart_rules, random_forest_rules

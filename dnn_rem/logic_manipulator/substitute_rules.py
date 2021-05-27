@@ -4,14 +4,12 @@ Methods for making rule substitution.
 
 import itertools
 import logging
-# TODO: DELETE THIS
 import numpy as np
 
 from ..rules.clause import ConjunctiveClause
 from ..rules.rule import Rule
 
 
-# TODO: DELETE THIS
 def _log_to_file(*args):
     print(*args)
     with open('xor_rem_d_example.log', 'a') as f:
@@ -75,6 +73,7 @@ def substitute(total_rule, intermediate_rules, conf_threshold=0):
         premise=new_premise_clauses,
         conclusion=total_rule.conclusion,
     )
+
 
 def substitute_efficient(total_rule, intermediate_rules, conf_threshold=0):
     """
@@ -159,7 +158,12 @@ def substitute_study(total_rule, intermediate_rules, conf_threshold=0):
         intermediate rules into total_rule.
     """
     # TODO: DELETE THIS
-    _log_to_file("\t\t\tStarting substitution with class rule with", len(total_rule.premise), "clauses in it and", len(set([t for r in total_rule.premise for t in r.terms])), "different terms")
+    _log_to_file(
+        "\t\t\tStarting substitution with class rule with",
+        len(total_rule.premise), "clauses in it and",
+        len(set([t for r in total_rule.premise for t in r.terms])),
+        "different terms",
+    )
     new_premise_clauses = set()
     # for each clause in the total rule
     logging.debug(
@@ -192,8 +196,14 @@ def substitute_study(total_rule, intermediate_rules, conf_threshold=0):
             f"{i + 1}/{len(total_rule.premise)} with sets of size "
             f"{list(map(len, conj_new_premise_clauses))}"
         )
-        # TODO: DELETE THIS
-        _log_to_file("\t\t\t\tAbout to perform a Cartesian product", f"{i + 1}/{len(total_rule.premise)} with sets of size {list(map(len, conj_new_premise_clauses))} for rule with {len(old_premise_clause.terms)} original terms in it resulting in a volume of size {np.prod(list(map(len, conj_new_premise_clauses)))}")
+        _log_to_file(
+            "\t\t\t\tAbout to perform a Cartesian product",
+            f"{i + 1}/{len(total_rule.premise)} with sets of "
+            f"size {list(map(len, conj_new_premise_clauses))} for rule "
+            f"with {len(old_premise_clause.terms)} original terms in it "
+            f"resulting in a volume of "
+            f"size {np.prod(list(map(len, conj_new_premise_clauses)))}"
+        )
 
         # given tuples of ConjunctiveClauses that are all now conjunctions,
         # union terms into a single clause
@@ -214,13 +224,19 @@ def substitute_study(total_rule, intermediate_rules, conf_threshold=0):
     result = Rule(
         premise=new_premise_clauses,
         conclusion=total_rule.conclusion,
-        # # TODO: DELETE THIS
-        # remove_unsatisfiable=False,
     )
 
     og_clause_nums = len(new_premise_clauses)
     end_clause_nums = len(result.premise)
-    _log_to_file("\t\t\tWe removed a total of", og_clause_nums - end_clause_nums, "out of", og_clause_nums, f"intermediate clauses as they were redundant ({100 * (og_clause_nums - end_clause_nums)/og_clause_nums:.2f}% of them)")
+    _log_to_file(
+        "\t\t\tWe removed a total of",
+        og_clause_nums - end_clause_nums,
+        "out of",
+        og_clause_nums,
+        f"intermediate clauses as they were redundant "
+        f"({100 * (og_clause_nums - end_clause_nums)/og_clause_nums:.2f}% of "
+        f"them)"
+    )
     return result
 
 

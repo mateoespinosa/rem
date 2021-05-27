@@ -35,7 +35,6 @@ class RulePredictMechanism(Enum):
     Count = 4
 
 
-
 class Rule(object):
     """
     Represents a rule in DNF form i.e.
@@ -149,7 +148,6 @@ class Rule(object):
             # the average score is always 1.
             total_correct_score = total_correct_score/total if total else 0
         return total_correct_score, explanation
-
 
     @classmethod
     def from_term_set(cls, premise, conclusion, confidence):

@@ -1,5 +1,5 @@
 """
-Helper methods
+Helper methods for C5.0 parsing
 """
 
 import json

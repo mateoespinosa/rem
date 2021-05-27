@@ -74,20 +74,15 @@ def evaluate(
     # Compute Comprehensibility
     comprehensibility_results = metrics.comprehensibility(ruleset)
 
-    # Overlapping features
-    n_overlapping_features = metrics.overlapping_features(ruleset)
-
     # And wrap them all together
     if regression:
         results = dict(
-            n_overlapping_features=n_overlapping_features,
             mse_fid=fid,
             loss=loss,
         )
     else:
         results = dict(
             acc=acc,
-            n_overlapping_features=n_overlapping_features,
             auc=auc,
             fid=fid,
         )

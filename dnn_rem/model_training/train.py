@@ -15,7 +15,6 @@ from dnn_rem.compression.vanilla_magnitude_compress import \
 ## Metric Functions
 ################################################################################
 
-
 class LogitAUC(tf.keras.metrics.AUC):
     """
     Custom AUC metric that operates in logit activations (i.e. does not

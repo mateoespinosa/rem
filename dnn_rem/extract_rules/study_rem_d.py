@@ -4,7 +4,7 @@ Main implementation of the vanilla REM-D rule extraction algorithm for DNNs.
 from collections import defaultdict
 from multiprocessing import Pool
 from tqdm import tqdm  # Loading bar for rule generation
-# TODO: DELETE THIS
+# DIFFERENCE POINT
 import sklearn
 import dill
 import logging
@@ -25,150 +25,16 @@ from dnn_rem.logic_manipulator.merge import merge
 from dnn_rem.utils.data_handling import stratified_k_fold_split
 from dnn_rem.utils.parallelism import serialized_function_execute
 
+from .utils import ModelCache
+
 ################################################################################
 ## Helper Classes
 ################################################################################
 
-# TODO: DELETE THIS
 def _log_to_file(*args):
     print(*args)
     with open('xor_rem_d_example.log', 'a') as f:
         print(*args, file=f)  # Python 3.x
-
-class ModelCache(object):
-    """
-    Represents trained neural network model. Used as a cache mechanism for
-    storing intermediate activation values of an executed model.
-    """
-
-    def __init__(
-        self,
-        keras_model,
-        train_data,
-        activations_path=None,
-        last_activation=None,
-        feature_names=None,
-        output_class_names=None,
-    ):
-        self._model = keras_model
-        # We will dump intermediate activations into this path if and only
-        # if it is provided
-        self._activations_path = activations_path
-
-        # Keeps in memory a map between layer ID and the activations it
-        # generated when we processed the given training data
-        self._activation_map = {}
-        self._feature_names = feature_names
-        self._output_class_names = output_class_names
-
-        self._compute_layerwise_activations(
-            train_data=train_data,
-            last_activation=last_activation,
-        )
-
-    def __len__(self):
-        """
-        Returns the number of layers in this cache.
-        """
-        return len(self._model.layers)
-
-    def _compute_layerwise_activations(self, train_data, last_activation=None):
-        """
-        Store sampled activations for each layer in CSV files
-        """
-        # Run the network once with the whole data, and pick up intermediate
-        # activations
-
-        feature_extractor = keras.Model(
-            inputs=self._model.inputs,
-            outputs=[layer.output for layer in self._model.layers]
-        )
-        # Run this model which will output all intermediate activations
-        all_features = feature_extractor.predict(train_data)
-
-        # And now label each intermediate activation using our
-        # h_{layer}_{activation} notation
-        for layer_index, (layer, activation) in enumerate(zip(
-            self._model.layers,
-            all_features,
-        )):
-            # e.g. h_1_0, h_1_1, ..
-            out_shape = layer.output_shape
-            if isinstance(out_shape, list):
-                if len(out_shape) == 1:
-                    # Then we will allow degenerate singleton inputs
-                    [out_shape] = out_shape
-                else:
-                    # Else this is not a sequential model!!
-                    raise ValueError(
-                        f"We encountered some branding in input model with "
-                        f"layer at index {layer_index}"
-                    )
-            neuron_labels = []
-            for i in range(out_shape[-1]):
-                if (layer_index == 0) and (self._feature_names is not None):
-                    neuron_labels.append(self._feature_names[i])
-                elif (layer_index == (len(self) - 1)) and (
-                    self._output_class_names is not None
-                ):
-                    neuron_labels.append(self._output_class_names[i])
-                else:
-                    neuron_labels.append(f'h_{layer_index}_{i}')
-
-            # For the last layer, let's make sure it is turned into a
-            # probability distribution in case the operation was merged into
-            # the loss function. This is needed when the last activation (
-            # e.g., softmax) is merged into the loss function (
-            # e.g., softmax_cross_entropy).
-            if last_activation and (layer_index == (len(self) - 1)):
-                if last_activation == "softmax":
-                    activation = activation_fns.softmax(activation, axis=-1)
-                elif last_activation == "sigmoid":
-                    # Else time to use sigmoid function here instead
-                    activation = activation_fns.expit(activation)
-                else:
-                    raise ValueError(
-                        f"We do not support last activation {last_activation}"
-                    )
-
-            self._activation_map[layer_index] = pd.DataFrame(
-                data=activation,
-                columns=neuron_labels,
-            )
-
-            if self._activations_path is not None:
-                self._activation_map[layer_index].to_csv(
-                    f'{self._activations_path}{layer_index}.csv',
-                    index=False,
-                )
-        logging.debug('Computed layerwise activations.')
-
-    def get_layer_activations(self, layer_index, top_k=1):
-        """
-        Return activation values given layer index
-        """
-        result = self._activation_map[layer_index]
-        if (top_k != 1):
-            np_preds = result.to_numpy()
-            top_inds = np.argsort(np.mean(np.abs(np_preds), axis=0))
-            top_k = 0.1
-            top_k_indices = top_inds[-int(np.ceil(len(top_inds) * top_k)):]
-            result = result.iloc[:, top_k_indices]
-        return result
-
-    def get_layer_activations_of_neuron(self, layer_index, neuron_index):
-        """
-        Return activation values given layer index, only return the column for
-        a given neuron index
-        """
-        neuron_key = f'h_{layer_index}_{neuron_index}'
-        if (layer_index == 0) and self._feature_names:
-            neuron_key = self._feature_names[neuron_index]
-        if (layer_index == (len(self) - 1)) and self._output_class_names:
-            neuron_key = self._output_class_names[neuron_index]
-
-        return self.get_layer_activations(layer_index)[neuron_key]
-
 
 
 ################################################################################
@@ -221,7 +87,7 @@ def extract_rules(
     :returns Ruleset: the set of rules extracted from the given model.
     """
 
-    # TODO: DELETE THIS
+    # DIFFERENCE POINT
     intermediate_ruleset_map = defaultdict(list)
 
     # Determine whether we want to subsample our training dataset to make it
@@ -298,7 +164,7 @@ def extract_rules(
             )
             intermediate_ruleset_map[output_layer].append(class_rule)
 
-            # TODO: DELETE THIS
+            # DIFFERENCE POINT
             _log_to_file("*"*50, "Starting with class", output_class_name, "*"*50)
             # Extract layer-wise rules
 
@@ -312,7 +178,7 @@ def extract_rules(
                     # We never prune things from the input layer itself
                     top_k=top_k_activations if hidden_layer else 1,
                 )
-                # TODO: DELETE THIS
+                # DIFFERENCE POINT
                 _log_to_file("\tCurrently in hidden layer", hidden_layer, "with activations shape", predictors.shape, "and next layer is", next_hidden_layer)
 
                 # We will generate an intermediate ruleset for this layer
@@ -340,17 +206,17 @@ def extract_rules(
                     terms = remove_redundant_terms(terms)
                 num_terms = len(terms)
 
-                # TODO: DELETE THIS
+                # DIFFERENCE POINT
                 next_layer_acts = cache_model.get_layer_activations(
                     layer_index=next_hidden_layer
                 )
-                # TODO: DELETE THIS
+                # DIFFERENCE POINT
                 temp_ruleset = Ruleset(
                     rules=[class_rule],
                     feature_names=list(next_layer_acts.columns),
                     output_class_names=[output_class_name, None],
                 )
-                # TODO: DELETE THIS
+                # DIFFERENCE POINT
                 _log_to_file("\t\tClass rule has a total of", num_terms, "terms and", temp_ruleset.num_clauses())
 
                 # We preemptively extract all the activations of the next layer
@@ -381,7 +247,7 @@ def extract_rules(
                         f"\tA total of {np.count_nonzero(target)}/"
                         f"{len(target)} training samples satisfied {term}."
                     )
-                    # TODO: DELETE THIS
+                    # DIFFERENCE POINT
                     _log_to_file("\t\t\tExtracting rules from term", term, "when a total of", f"{np.count_nonzero(target)}/{len(target)} training samples satisfied it.")
 
                     prior_rule_confidence = term_confidences[term]
@@ -402,7 +268,7 @@ def extract_rules(
                         min_cases=min_cases,
                         trials=trials,
                     )
-                    # TODO: DELETE THIS
+                    # DIFFERENCE POINT
                     _log_to_file("\t\t\t\tWe extracted a total of", len(new_rules), "from this term")
 
                     if pbar:
@@ -457,11 +323,11 @@ def extract_rules(
 
                 # Time to do our simple reduction from our map above by
                 # accumulating all the generated rules into a single ruleset
-                # TODO: DELETE THIS
+                # DIFFERENCE POINT
                 _log_to_file("\t\tThe summary of all extracted rule sets for all terms is:", list(map(len, new_rulesets)))
                 for ruleset in new_rulesets:
                     intermediate_rules.add_rules(ruleset)
-                # TODO: DELETE THIS
+                # DIFFERENCE POINT
                 _log_to_file("\t\tOur intermediate ruleset has a total of", intermediate_rules.num_clauses(), "clauses and", intermediate_rules.num_terms(), "terms")
 
                 logging.debug(
@@ -476,18 +342,18 @@ def extract_rules(
                     f"Substituting rules for layer {hidden_layer} with output "
                     f"class {output_class_name}"
                 )
-                # TODO: DELETE THIS
+                # DIFFERENCE POINT
                 _log_to_file("\t\tStarting substitution into total rule...")
                 class_rule = substitute_study(
                     total_rule=class_rule,
                     intermediate_rules=intermediate_rules,
                 )
                 # And clean it up
-                # # TODO: DELETE THIS
+                # # DIFFERENCE POINT
                 # class_rule.remove_unsatisfiable_clauses()
-                # # TODO: DELETE THIS
+                # # DIFFERENCE POINT
                 # for clause in class_rule.premise:
-                #     # TODO: DELETE THIS
+                #     # DIFFERENCE POINT
                 #     clause.remove_redundant_terms()
 
                 # if not len(class_rule.premise):
@@ -502,12 +368,12 @@ def extract_rules(
                     feature_names=list(predictors.columns),
                     output_class_names=[output_class_name, None],
                 )
-                # TODO: DELETE THIS
+                # DIFFERENCE POINT
                 _log_to_file("\t\tAfter substitution resulting class rule has", temp_ruleset.num_clauses(), "clauses in it and", temp_ruleset.num_terms(), "terms in it...")
 
                 # Keep a collection of intermediate class rules to explore how
                 # much performance degrades as the we go into the network
-                # TODO: DELETE THIS
+                # DIFFERENCE POINT
                 intermediate_ruleset_map[hidden_layer].append(class_rule)
 
                 if (
@@ -542,20 +408,20 @@ def extract_rules(
                     class_rule = next(iter(temp_ruleset.rules))
 
             # Finally add this class rule to our solution ruleset
-            # TODO: DELETE THIS
+            # DIFFERENCE POINT
             temp_ruleset = Ruleset(
                 rules=[class_rule],
                 feature_names=list(predictors.columns),
                 output_class_names=[output_class_name, None],
             )
-            # TODO: DELETE THIS
+            # DIFFERENCE POINT
             _log_to_file("\tAt the end of this class, we obtained a ruleset with", temp_ruleset.num_clauses(), "clauses in it and", temp_ruleset.num_terms(), "terms in it")
             dnf_rules.add(class_rule)
 
         pbar.set_description("Done extracting rules from neural network")
 
     # Time to analyze performance degradation as the depth of the layer advances
-    # TODO: DELETE THIS
+    # DIFFERENCE POINT
     out_preds = np.argmax(
         cache_model.get_layer_activations(layer_index=output_layer).to_numpy(),
         axis=-1,

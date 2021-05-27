@@ -1,11 +1,6 @@
 """
-Implementation of clause-wise REM-D algorithm. This algorithm acts in a
-similar manner to vanilla REM-D but extracts rules at a clause-wise level rather
-than at a term-wise level. This helps the model avoiding the exponential
-explosion of terms that arises from distribution term-wise clauses during
-substitution. It also helps reducing the variance in the ruleset sizes while
-also capturing correlations between terms when extracting a ruleset for the
-overall clause.
+Implementation of DeepRED algorithm using C5.0 rather than C4.5 for intermediate
+rule extraction.
 """
 
 from multiprocessing import Pool
@@ -17,10 +12,9 @@ import numpy as np
 from dnn_rem.rules.ruleset import Ruleset
 from dnn_rem.rules.rule import Rule
 from dnn_rem.rules.C5 import C5
-from dnn_rem.logic_manipulator.substitute_rules import \
-    substitute
+from dnn_rem.logic_manipulator.substitute_rules import substitute
 
-from .rem_d import ModelCache
+from .utils import ModelCache
 from dnn_rem.utils.parallelism import serialized_function_execute
 
 

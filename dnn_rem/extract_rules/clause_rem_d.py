@@ -14,7 +14,7 @@ import dill
 import logging
 import numpy as np
 
-from .rem_d import ModelCache
+from .utils import ModelCache
 from dnn_rem.logic_manipulator.merge import merge
 from dnn_rem.logic_manipulator.substitute_rules import \
     clausewise_substitute

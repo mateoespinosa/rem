@@ -1,5 +1,5 @@
 """
-Methods for redundancy removal in sets of clauses.
+Methods for removing unnecessary terms in sets of terms
 """
 
 from ..rules.term import Term, TermOperator
@@ -8,7 +8,12 @@ from .utils import terms_set_to_variable_dict
 
 def remove_redundant_terms(terms):
     """
-    Remove redundant terms from a clause, returning only the necessary terms
+    Remove redundant terms from the given Iterable. A term is considered to be
+    redundant if its threshold is already covered by another term in the
+    Iterable.
+
+    :returns Iterable[Term]: a set of terms mapping an equivalent function as
+        the input but without unnecessary terms in it.
     """
     # We generate a map {variable name (str): {TermOperator: [Float]}}
     variable_conditions = terms_set_to_variable_dict(terms)

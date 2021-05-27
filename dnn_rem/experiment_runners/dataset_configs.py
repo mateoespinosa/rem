@@ -41,6 +41,7 @@ AVAILABLE_DATASETS = [
     'mb_imagevec50_ER',
     'MiniBooNE',
     'MNIST',
+    'MNIST-Complete',
     'PARTNER-Clinical',
     'PARTNER-Genomic',
     'SARCOS',
@@ -646,6 +647,16 @@ def get_data_configuration(dataset_name):
             OutputClass(name='0', encoding=0),
             OutputClass(name='1-9', encoding=1),
         )
+        return DatasetDescriptor(
+            name=dataset_name,
+            output_classes=output_classes,
+            target_col='digit',
+        )
+    if dataset_name == 'mnist-complete':
+        output_classes = [
+            OutputClass(name=str(i), encoding=i)
+            for i in range(10)
+        ]
         return DatasetDescriptor(
             name=dataset_name,
             output_classes=output_classes,

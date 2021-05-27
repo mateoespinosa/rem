@@ -18,7 +18,6 @@ def merge(rules):
     terms), this method will return an equivalent rule set in DNF.
 
     :param Set[Rule] rules: A set of rules we are merging.
-
     :returns Set[Rule]: An equivalent set of rules to the provided one in DNF.
     """
 

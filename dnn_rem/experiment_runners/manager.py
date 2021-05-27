@@ -65,7 +65,7 @@ def split_deserializer(path):
         lines = file.readlines()
         assert len(lines) % 2 == 0, (
            f"Expected even number of lines in file {path} but got {len(lines)} "
-           "instead."
+           f"instead."
         )
         for i in range(len(lines) // 2):
             result.append((
@@ -214,6 +214,7 @@ class ExperimentManager(object):
         )
         self.NN_INIT_SPLIT_INDICES_FP = os.path.join(
             self.experiment_dir,
+            'neural_network_initialisation',
             'data_complete_split_indices.txt'
         )
 
@@ -587,13 +588,13 @@ f
         # Create directory: <n>_folds/trained_models
         os.makedirs(self.N_FOLD_MODELS_DP, exist_ok=True)
 
-        # Initialise split indices file for folds
+        # Initialize split indices file for folds
         os.makedirs(
             pathlib.Path(self.N_FOLD_CV_SPLIT_INDICES_FP).parent,
             exist_ok=True,
         )
 
-        # Initialise split indices for train/test split
+        # Initialize split indices for train/test split
         os.makedirs(
             pathlib.Path(self.NN_INIT_SPLIT_INDICES_FP).parent,
             exist_ok=True,

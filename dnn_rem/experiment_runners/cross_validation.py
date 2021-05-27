@@ -7,7 +7,7 @@ import sklearn
 import tensorflow as tf
 
 from dnn_rem.evaluate_rules.evaluate import evaluate, evaluate_estimator
-from dnn_rem.model_training.build_and_train_model import load_model
+from dnn_rem.model_training.train import load_model
 from dnn_rem.utils.resources import resource_compute
 from dnn_rem.rules.ruleset import Ruleset
 
@@ -202,9 +202,6 @@ def cross_validate_re(manager):
             results_df.loc[fold, 're_n_rules_per_class'] = str(
                 re_results.get('n_rules_per_class', 0)
             )
-        results_df.loc[fold, 'n_overlapping_features'] = str(
-            re_results.get('n_overlapping_features', 0)
-        )
         results_df.loc[fold, 'min_n_terms'] = str(
             re_results.get('min_n_terms', 0)
         )

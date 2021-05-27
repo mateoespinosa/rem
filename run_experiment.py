@@ -15,7 +15,7 @@ import yaml
 import cProfile
 
 
-from dnn_rem.model_training import generate_data
+from dnn_rem.model_training import train_dnns
 from dnn_rem.experiment_runners.cross_validation import cross_validate_re
 from dnn_rem.experiment_runners.manager import (
     ExperimentManager, EXPERIMENT_STAGES
@@ -295,7 +295,7 @@ def main():
             "Starting experiment with data being dumped at",
             manager.experiment_dir,
         )
-        generate_data.run(
+        train_dnns.run(
             manager=manager,
             use_grid_search=manager.GRID_SEARCH_PARAMS.get("enable", False),
         )

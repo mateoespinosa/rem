@@ -36,7 +36,6 @@ class RuleScoreMechanism(Enum):
     # level
     Confidence = 3
 
-
     @staticmethod
     def from_string(mechanism_name):
         search_name = mechanism_name.lower()
@@ -560,7 +559,6 @@ class Ruleset(object):
                     conclusion=conclusion,
                 ))
             self.rules = merge(self.rules)
-
 
     def get_rule_premises_by_conclusion(self, conclusion):
         """

@@ -11,7 +11,7 @@ import numpy as np
 import sklearn
 import tensorflow as tf
 
-from .build_and_train_model import model_fn
+from .train import model_fn
 
 
 def deserialize_best_params(best_params_file):

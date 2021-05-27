@@ -16,7 +16,7 @@ import numpy as np
 import pandas as pd
 import sklearn
 
-from .rem_d import ModelCache
+from .utils import ModelCache
 from dnn_rem.utils.parallelism import serialized_function_execute
 from dnn_rem.rules.rule import Rule
 from dnn_rem.rules.ruleset import Ruleset, RuleScoreMechanism
@@ -43,13 +43,13 @@ def extract_rules(
     winnow_features=True,
     min_cases=15,
     intermediate_end_min_cases=None,
-    initial_min_cases=None,  # None for original
-    num_workers=1,  # 1 for original
+    initial_min_cases=None,
+    num_workers=1,
     feature_names=None,
     output_class_names=None,
-    trials=1,  # 1 for original
-    block_size=1,  # 1 for original
-    max_number_of_samples=None,  # None for original
+    trials=1,
+    block_size=1,
+    max_number_of_samples=None,
     min_confidence=0,
     final_algorithm_name="C5.0",
     intermediate_algorithm_name="C5.0",

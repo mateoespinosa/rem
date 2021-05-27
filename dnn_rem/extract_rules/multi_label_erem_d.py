@@ -9,7 +9,7 @@ import logging
 import numpy as np
 import pandas as pd
 
-from .rem_d import ModelCache
+from .utils import ModelCache
 from dnn_rem.utils.parallelism import serialized_function_execute
 from dnn_rem.rules.rule import Rule
 from dnn_rem.rules.ruleset import Ruleset

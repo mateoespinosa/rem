@@ -15,7 +15,7 @@ import pandas as pd
 import sklearn
 import tensorflow as tf
 
-from .build_and_train_model import run_train_loop, load_model
+from .train import run_train_loop, load_model
 from .grid_search import (
     grid_search as grid_search_fn, deserialize_best_params,
     serialize_best_params
@@ -30,6 +30,12 @@ def _save_model_and_return(model, path):
 
 
 def run(manager, use_grid_search=False):
+    """
+    Trains all DNNs for the given number of folds as dictated by the manager.
+    :param ExperimentManager manager: The main experiment manager.
+    :param bool use_grid_search: Whether or not we will perform a grid search
+        on the DNN architectures.
+    """
 
     # 1. Grid search over neural network hyper params to find optimal neural
     #    network hyper-parameters

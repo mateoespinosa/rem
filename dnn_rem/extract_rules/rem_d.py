@@ -1,172 +1,24 @@
 """
 Main implementation of the vanilla REM-D rule extraction algorithm for DNNs.
 """
-from collections import defaultdict
+
 from multiprocessing import Pool
 from tqdm import tqdm  # Loading bar for rule generation
 import dill
 import logging
 import numpy as np
-import pandas as pd
-import scipy.special as activation_fns
-import tensorflow.keras.models as keras
 from sklearn.model_selection import StratifiedShuffleSplit
-
 from dnn_rem.rules.rule import Rule
 from dnn_rem.rules.ruleset import Ruleset, RuleScoreMechanism
 from dnn_rem.rules.C5 import C5
 from dnn_rem.logic_manipulator.substitute_rules import \
     substitute
 from dnn_rem.logic_manipulator.delete_redundant_terms import \
-    global_most_general_replacement, remove_redundant_terms
+    remove_redundant_terms
 from dnn_rem.logic_manipulator.merge import merge
 from dnn_rem.utils.data_handling import stratified_k_fold_split
 from dnn_rem.utils.parallelism import serialized_function_execute
-
-################################################################################
-## Helper Classes
-################################################################################
-
-class ModelCache(object):
-    """
-    Represents trained neural network model. Used as a cache mechanism for
-    storing intermediate activation values of an executed model.
-    """
-
-    def __init__(
-        self,
-        keras_model,
-        train_data,
-        activations_path=None,
-        last_activation=None,
-        feature_names=None,
-        output_class_names=None,
-    ):
-        self._model = keras_model
-        # We will dump intermediate activations into this path if and only
-        # if it is provided
-        self._activations_path = activations_path
-
-        # Keeps in memory a map between layer ID and the activations it
-        # generated when we processed the given training data
-        self._activation_map = {}
-        self._feature_names = feature_names
-        self._output_class_names = output_class_names
-
-        self._compute_layerwise_activations(
-            train_data=train_data,
-            last_activation=last_activation,
-        )
-
-    def __len__(self):
-        """
-        Returns the number of layers in this cache.
-        """
-        return len(self._model.layers)
-
-    def _compute_layerwise_activations(self, train_data, last_activation=None):
-        """
-        Store sampled activations for each layer in CSV files
-        """
-        # Run the network once with the whole data, and pick up intermediate
-        # activations
-
-        feature_extractor = keras.Model(
-            inputs=self._model.inputs,
-            outputs=[layer.output for layer in self._model.layers]
-        )
-        # Run this model which will output all intermediate activations
-        all_features = feature_extractor.predict(train_data)
-
-        # And now label each intermediate activation using our
-        # h_{layer}_{activation} notation
-        for layer_index, (layer, activation) in enumerate(zip(
-            self._model.layers,
-            all_features,
-        )):
-            # e.g. h_1_0, h_1_1, ..
-            out_shape = layer.output_shape
-            if isinstance(out_shape, list):
-                if len(out_shape) == 1:
-                    # Then we will allow degenerate singleton inputs
-                    [out_shape] = out_shape
-                else:
-                    # Else this is not a sequential model!!
-                    raise ValueError(
-                        f"We encountered some branding in input model with "
-                        f"layer at index {layer_index}"
-                    )
-            neuron_labels = []
-            for i in range(out_shape[-1]):
-                if (layer_index == 0) and (self._feature_names is not None):
-                    neuron_labels.append(self._feature_names[i])
-                elif (layer_index == (len(self) - 1)) and (
-                    self._output_class_names is not None
-                ):
-                    neuron_labels.append(self._output_class_names[i])
-                else:
-                    neuron_labels.append(f'h_{layer_index}_{i}')
-
-            # For the last layer, let's make sure it is turned into a
-            # probability distribution in case the operation was merged into
-            # the loss function. This is needed when the last activation (
-            # e.g., softmax) is merged into the loss function (
-            # e.g., softmax_cross_entropy).
-            if last_activation and (layer_index == (len(self) - 1)):
-                if last_activation == "softmax":
-                    activation = activation_fns.softmax(activation, axis=-1)
-                elif last_activation == "sigmoid":
-                    # Else time to use sigmoid function here instead
-                    activation = activation_fns.expit(activation)
-                else:
-                    raise ValueError(
-                        f"We do not support last activation {last_activation}"
-                    )
-
-            self._activation_map[layer_index] = pd.DataFrame(
-                data=activation,
-                columns=neuron_labels,
-            )
-
-            if self._activations_path is not None:
-                self._activation_map[layer_index].to_csv(
-                    f'{self._activations_path}{layer_index}.csv',
-                    index=False,
-                )
-        logging.debug('Computed layerwise activations.')
-
-    def get_layer_activations(self, layer_index, top_k=1):
-        """
-        Return activation values given layer index
-        """
-        result = self._activation_map[layer_index]
-        if (top_k != 1):
-            np_preds = result.to_numpy()
-            top_inds = np.argsort(np.mean(np.abs(np_preds), axis=0))
-            top_k = 0.1
-            top_k_indices = top_inds[-int(np.ceil(len(top_inds) * top_k)):]
-            result = result.iloc[:, top_k_indices]
-        return result
-
-    def get_num_activations(self, layer_index):
-        """
-        Return the number of activations for the layer at the given index.
-        """
-        return self._activation_map[layer_index].shape[-1]
-
-    def get_layer_activations_of_neuron(self, layer_index, neuron_index):
-        """
-        Return activation values given layer index, only return the column for
-        a given neuron index
-        """
-        neuron_key = f'h_{layer_index}_{neuron_index}'
-        if (layer_index == 0) and self._feature_names:
-            neuron_key = self._feature_names[neuron_index]
-        if (layer_index == (len(self) - 1)) and self._output_class_names:
-            neuron_key = self._output_class_names[neuron_index]
-
-        return self.get_layer_activations(layer_index)[neuron_key]
-
+from .utils import ModelCache
 
 
 ################################################################################
@@ -187,10 +39,6 @@ def extract_rules(
     feature_names=None,
     output_class_names=None,
     preemptive_redundant_removal=False,  # False for original
-    top_k_activations=1,  # 1 for original
-    intermediate_drop_percent=0,  # 0.0 for original
-    initial_drop_percent=None,  # None for original
-    rule_score_mechanism=RuleScoreMechanism.Accuracy,
     trials=1,  # 1 for original
     block_size=1,  # 1 for original
     merge_repeated_terms=False,  # False for original
@@ -249,16 +97,6 @@ def extract_rules(
         output_class_names=output_class_names,
     )
 
-    if initial_drop_percent is None:
-        # Then we do a constant dropping rate through the entire network
-        initial_drop_percent = intermediate_drop_percent
-
-    if isinstance(rule_score_mechanism, str):
-        # Then let's turn it into its corresponding enum
-        rule_score_mechanism = RuleScoreMechanism.from_string(
-            rule_score_mechanism
-        )
-
     # Now time to actually extract our set of rules
     dnf_rules = set()
 
@@ -300,8 +138,6 @@ def extract_rules(
                 # Obtain our cached predictions
                 predictors = cache_model.get_layer_activations(
                     layer_index=hidden_layer,
-                    # We never prune things from the input layer itself
-                    top_k=top_k_activations if hidden_layer else 1,
                 )
 
                 # We will generate an intermediate ruleset for this layer
@@ -438,7 +274,6 @@ def extract_rules(
                     f'{intermediate_rules.num_terms()} different terms in it.'
                 )
 
-
                 # Merge rules with current accumulation
                 pbar.set_description(
                     f"Substituting rules for layer {hidden_layer} with output "
@@ -454,44 +289,6 @@ def extract_rules(
                         f"[WARNING] Found rule with empty premise of for "
                         f"class {output_class_name}."
                     )
-
-                # And then time to drop some intermediate rules in here!
-                temp_ruleset = Ruleset(
-                    rules=[class_rule],
-                    feature_names=list(predictors.columns),
-                    output_class_names=[output_class_name, None],
-                )
-
-                if (
-                    (train_labels is not None) and
-                    (intermediate_drop_percent) and
-                    (temp_ruleset.num_clauses() > 1)
-                ):
-                    # Then let's do some rule dropping for compressing our
-                    # generated ruleset and improving the complexity of the
-                    # resulting algorithm
-                    term_target = []
-                    for label in train_labels:
-                        if label == output_class_idx:
-                            term_target.append(output_class_name)
-                        else:
-                            term_target.append(None)
-                    temp_ruleset.rank_rules(
-                        X=cache_model.get_layer_activations(
-                            layer_index=hidden_layer
-                        ).to_numpy(),
-                        y=term_target,
-                        score_mechanism=rule_score_mechanism,
-                        use_label_names=True,
-                    )
-
-                    slope = (intermediate_drop_percent - initial_drop_percent)
-                    slope = slope/(output_layer - 1)
-                    eff_drop_rate = intermediate_drop_percent - (
-                        slope * hidden_layer
-                    )
-                    temp_ruleset.eliminate_rules(eff_drop_rate)
-                    class_rule = next(iter(temp_ruleset.rules))
 
             # Finally add this class rule to our solution ruleset
             dnf_rules.add(class_rule)
