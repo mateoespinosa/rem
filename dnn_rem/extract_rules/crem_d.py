@@ -308,7 +308,7 @@ def extract_rules(
 
                         # And do the multi-process pooling call
                         new_rulesets = pool.map(
-                            _serialized_function_execute,
+                            serialized_function_execute,
                             serialized_terms,
                         )
 

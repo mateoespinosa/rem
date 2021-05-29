@@ -605,3 +605,10 @@ The colors used for each class follow the same color-coding as done in the other
 
 The rule editor allows you to delete rules in the rule set that was loaded while also giving you an explicit text view of every rule in this rule set.
 
+
+## Tests
+We have also included a simple test that verifies the basic functionality of all the main tools and methods we introduce in this codebase. This testing suite is no way comprehensive but it helps making sure the main pathways are at least exercised and working. To run these tests, you need to run pytest as:
+
+```bash
+pytest test/test_rule_extractors.py -s
+```

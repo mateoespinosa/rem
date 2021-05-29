@@ -207,7 +207,7 @@ def extract_rules(
                 y=targets,
                 threshold_decimals=threshold_decimals,
                 min_cases=min_cases,
-                max_depth=max_depth,
+                max_depth=tree_max_depth,
                 ccp_prune=ccp_prune,
             )
 

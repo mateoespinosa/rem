@@ -370,7 +370,7 @@ def conditional_substitute(
             for premise_clause in premise_clause_tuple:
                 # new_clause = new_clause.union(premise_clause)
                 total_confidence += premise_clause.confidence
-                new_terms = new_terms.union(premise_clause)
+                new_terms = new_terms.union(premise_clause.terms)
             new_clause = ConjunctiveClause(
                 terms=new_terms,
                 confidence=(total_confidence / len(premise_clause_tuple)),

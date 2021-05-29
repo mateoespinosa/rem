@@ -26,7 +26,7 @@ def extract_rules(
     min_cases=15,
     feature_names=None,
     output_class_names=None,
-    tree_extraction_algorithm_name="random_forest",
+    tree_extraction_algorithm_name="C5.0",
     ccp_prune=True,
     estimators=30,
     regression=False,
