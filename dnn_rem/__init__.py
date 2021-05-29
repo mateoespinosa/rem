@@ -5,3 +5,4 @@ from dnn_rem.evaluate_rules import *
 from dnn_rem.rules import *
 from dnn_rem.model_training import *
 from dnn_rem.logic_manipulator import *
+from dnn_rem.data import *

@@ -9,8 +9,9 @@ import sys
 import pandas as pd
 
 from dnn_rem.experiment_runners.dataset_configs import (
-    get_data_configuration, DatasetDescriptor, AVAILABLE_DATASETS
+    get_data_configuration, AVAILABLE_DATASETS
 )
+from dnn_rem.data.descriptors import DatasetDescriptor
 from dnn_rem.rules.ruleset import Ruleset
 from flexx import flx, ui
 from io import StringIO
