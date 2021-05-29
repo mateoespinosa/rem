@@ -3,14 +3,15 @@ Rule set loader class abstracts a widget capable of loading a
 Ruleset object from a serialized file.
 """
 
-from flexx import flx, ui, app
 from dnn_rem.rules.rule import Rule
-from gui_window import CamvizWindow
 from dnn_rem.rules.ruleset import Ruleset
+from flexx import flx, ui, app
+
+from gui_window import RemixWindow
 from uploader import FileUploader
 
 
-class RulesetUploader(CamvizWindow):
+class RulesetUploader(RemixWindow):
     """
     Simple flexx widget to allow the upload and deserialization of a Ruleset
     object from a path given by the user.
@@ -34,18 +35,31 @@ class RulesetUploader(CamvizWindow):
 
     @flx.reaction('upload_ruleset.load_started')
     def _ruleset_load_started(self, event):
+        """
+        Reaction to when the loading started.
+        """
         return self.ruleset_load_started(event)
 
     @flx.emitter
     def ruleset_load_started(self, event):
+        """
+        Emitter to indicate parent that loading has started.
+        """
         return event
 
     @flx.emitter
     def ruleset_load_ended(self):
+        """
+        Emitter to indicate parent that loading has ended.
+        """
         return {'ruleset': self.ruleset}
 
     @flx.reaction('upload_ruleset.file_loaded')
     def _open_data_path(self, *events):
+        """
+        Reaction to file being fully open. It will then read the ruleset from
+        the binary blob and indicate the loading has ended.
+        """
         data_bin_str = events[-1]['filedata']
         try:
             self.ruleset.from_binary_blob(data_bin_str)
@@ -57,6 +71,9 @@ class RulesetUploader(CamvizWindow):
 
     @flx.emitter
     def loading_error(self, event):
+        """
+        Emitter for when an error occurred while loading the rule set.
+        """
         return event
 
 

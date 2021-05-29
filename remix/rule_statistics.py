@@ -6,15 +6,15 @@ rule set.
 import bokeh
 import numpy as np
 
-from flexx import flx, ui
-from collections import defaultdict
-from gui_window import CamvizWindow
 from bokeh.models import ColumnDataSource, HoverTool, LabelSet
-from bokeh.palettes import Category20, Category20c, Set3, Pastel2
+from bokeh.palettes import Pastel2
 from bokeh.plotting import figure
-from bokeh.transform import factor_cmap
-from bokeh.models.tickers import AdaptiveTicker
 from bokeh.transform import cumsum
+from bokeh.transform import factor_cmap
+from collections import defaultdict
+from flexx import flx, ui
+
+from gui_window import RemixWindow
 
 ################################################################################
 ## Global Variables
@@ -39,6 +39,7 @@ def _plot_rule_distribution(ruleset, show_tools=True, add_labels=False):
         toolset.
     :param bool add_labels: Whether or not we want to add a label box to each
         wedge of the distribution plot.
+
     :returns Bokeh.Plot: the resulting Bokeh doughnut plot.
     """
     rules_per_class_map = defaultdict(int)
@@ -246,6 +247,22 @@ def _plot_feature_distribution(
     ruleset,
     show_tools=True,
 ):
+    """
+    Helper function to generate the feature distribution from a given ruleset as
+    how much a given feature is used by terms in the given rule set.
+    Returns a function that, when given the number of requested entries,
+    returns a Bokeh plot showing that many terms use a given feature of the
+    given rule set.
+
+    :param Ruleset ruleset: The ruleset object whose feature term distribution
+        we want to plot.
+    :param bool show_tools: Whether or not we will show Bokeh tools when
+        generating our plots.
+
+    :returns Tuple[Fun[(int), Bokeh.Plot], int]: a tuple containing the
+        generator function and the total number of features used by terms the
+        given ruleset.
+    """
     num_used_rules_per_feat_map = defaultdict(lambda: defaultdict(int))
     all_features = set()
     for rule in ruleset.rules:
@@ -334,6 +351,18 @@ def _plot_rule_length_distribution(
     show_tools=True,
     num_bins=10,
 ):
+    """
+    Helper function that produces a distribution Bokeh plot of the length of
+    rules in the given rule set.
+
+    :param Ruleset ruleset: The ruleset whose rule length distribution (in
+        number of terms) we want to plot.
+    :param bool show_tools: Whether or not we will show Bokeh tools when
+        generating our plots.
+    :param int num_bins: The number bins to use for the distribution bar plot.
+
+    :returns Bokeh.Plot: the resulting Bokeh bar plot.
+    """
     class_rule_lengths = [
         [] for _ in ruleset.output_class_map
     ]
@@ -398,7 +427,7 @@ def _plot_rule_length_distribution(
 ################################################################################
 
 
-class RuleStatisticsComponent(CamvizWindow):
+class RuleStatisticsComponent(RemixWindow):
     """
     Main widget for handling the global cohort-level view of a given ruleset.
     This view will simply provide general statistics and patterns that are
@@ -453,6 +482,9 @@ class RuleStatisticsComponent(CamvizWindow):
 
     @flx.action
     def add_plot(self, title, plot):
+        """
+        Adds a Bokeh plot with the given title to our grid of plots.
+        """
         with ui.Widget(
             title=title,
             style=(
@@ -474,8 +506,13 @@ class RuleStatisticsComponent(CamvizWindow):
 
     @flx.action
     def _construct_plots(self):
+        """
+        Action to be called to construct all plots in our visualization.
+        """
+
         with self.container:
             with self.rows[0]:
+                # First row has [class distribution, rule length distribution]
                 with ui.VBox():
                     flx.Label(
                         text="Rule Class Distribution",
@@ -511,6 +548,7 @@ class RuleStatisticsComponent(CamvizWindow):
                         ),
                     )
             with self.rows[1]:
+                # Second row has [feature distribution, term distribution]
                 with ui.VBox():
                     new_activation, num_features = \
                         _plot_feature_distribution(
@@ -616,6 +654,10 @@ class RuleStatisticsComponent(CamvizWindow):
 
     @flx.action
     def reset(self):
+        """
+        Resets the entire visualization to use the possibly updated new rule
+        set instead.
+        """
         for group in self.groups:
             group.set_parent(None)
         for row in self.rows:

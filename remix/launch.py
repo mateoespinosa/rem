@@ -1,102 +1,40 @@
+"""
+Main lunch script for REMIZ including the arg parser and the server startup
+code.
+"""
+
 import argparse
 import os
 import sys
-from io import StringIO
 import pandas as pd
 
+from dnn_rem.experiment_runners.dataset_configs import (
+    get_data_configuration, DatasetDescriptor, AVAILABLE_DATASETS
+)
 from dnn_rem.rules.ruleset import Ruleset
-from feature_explorer import FeatureExplorerComponent
 from flexx import flx, ui
+from io import StringIO
+from pscript.stubs import window
+
+from feature_explorer import FeatureExplorerComponent
+from prediction_explorer import PredictComponent
 from rule_explorer import RuleExplorerComponent
 from rule_list import RuleListComponent
 from rule_statistics import RuleStatisticsComponent
 from ruleset_loader import RulesetUploader
 from uploader import FileUploader
 
-from prediction_explorer import PredictComponent
-from dnn_rem.experiment_runners.dataset_configs import (
-    get_data_configuration, DatasetDescriptor, AVAILABLE_DATASETS
-)
-from pscript.stubs import window
-
 
 ################################################################################
-## Helper Functions
-################################################################################
-
-def build_parser():
-    """
-    Helper function to build our program's argument parser.
-
-    :returns ArgumentParser: The parser for our program's configuration.
-    """
-    parser = argparse.ArgumentParser(
-        description=(
-            'Lunches REMIX for visualizing rulesets extracted using '
-            'any of our rule extraction methods.'
-        ),
-    )
-
-    parser.add_argument(
-        '--rules',
-        '-r',
-        help=(
-            "Valid .rules file containing serialized ruleset extracted by "
-            "any of our rule extractors from some neural network and a given "
-            "task."
-        ),
-        metavar="my_rules.rules",
-        default=None,
-    )
-
-    parser.add_argument(
-        '--data',
-        help=(
-            "Valid .csv file containing the dataset used to generate the "
-            "given rules. If no descriptor is given, then it will assume all"
-            "entries are reals and the last column is the target."
-        ),
-        metavar="data.csv",
-        default=None,
-    )
-
-    parser.add_argument(
-        '--data_descriptor',
-        help=(
-            "Valid name of supported dataset descriptor corresponding to the "
-            "loaded data."
-        ),
-        metavar="descriptor_name",
-        default=None,
-    )
-
-    parser.add_argument(
-        '--show_tools',
-        '-t',
-        action="store_true",
-        help=(
-            "Whether or not we display Bokeh tools in summary plots."
-        ),
-        default=False,
-    )
-
-    parser.add_argument(
-        "-d",
-        "--debug",
-        action="store_true",
-        default=False,
-        help="starts debug mode in the GUI.",
-    )
-
-    return parser
-
-
-################################################################################
-## Main Application
+## Core REMIX Flexx Widgets
 ################################################################################
 
 
 class RulesetLoadWindow(flx.PyComponent):
+    """
+    Widget for loading up a rule set from a given file when the application
+    is started without a rule set in it.
+    """
     def init(self):
         self.ruleset = Ruleset()
         self.dataset = None
@@ -217,14 +155,17 @@ class RulesetLoadWindow(flx.PyComponent):
         }
 
 
-class RuleVizWindow(flx.PyComponent):
+class RemixCore(flx.PyComponent):
+    """
+    Core REMIX widget when rule set has been loaded into the app.
+    """
     tabs = flx.ListProp(settable=True)
 
     def init(self):
-        with flx.VBox(title="RuleViz"):
+        with flx.VBox(title="Remix"):
             with flx.HBox():
                 flx.Label(
-                    text="RuleViz",
+                    text="REMIX",
                     style=(
                         "font-family: 'Josefin Sans', sans-serif;"
                         "font-size: 500%;"
@@ -265,6 +206,14 @@ class RuleVizWindow(flx.PyComponent):
 
 
 class CamRuleState(object):
+    """
+    Class representing the global state that is shared across all windows of
+    the REMIX visualization.
+    This state includes the ruleset, the dataset descriptor (if given), and
+    some minor flags defining how certain visualization aspects should be
+    handled.
+    """
+
     def __init__(
         self,
         ruleset=None,
@@ -298,6 +247,17 @@ class CamRuleState(object):
             self.set_ruleset(other)
 
     def get_feature_range(self, feature, empirical=True):
+        """
+        Returns the range of feature with name `feature`.
+
+        :param str feature: The name of the feature of interest.
+        :param bool empirical: Whether or not to use the empirical bounds
+            found from this feature in the provided data.
+
+        :return Tuple[float, float]: The (min, max) inclusive bound for the
+            requested feature.
+        """
+
         if empirical and (feature in self._feature_ranges):
             return self._feature_ranges[feature]
         if self.dataset is None:
@@ -318,7 +278,12 @@ class CamRuleState(object):
         return result
 
 
-class CamRuleViz(flx.PyComponent):
+class Remix(flx.PyComponent):
+    """
+    Primary and main REMIXZ widget describing our entire visualization
+    application.
+    """
+
     windows = flx.ListProp(settable=True)
     current_window = flx.IntProp(0, settable=True)
 
@@ -335,12 +300,12 @@ class CamRuleViz(flx.PyComponent):
             show_tools=show_tools,
             merge_branches=merge_branches,
         )
-        with ui.VBox(title="RuleViz"):
+        with ui.VBox(title="Remix"):
             with ui.StackLayout(flex=1) as self.stack:
                 self._mutate_windows(
                     [
                         RulesetLoadWindow() if ruleset is None
-                        else RuleVizWindow()
+                        else RemixCore()
                     ],
                     'insert',
                     len(self.windows),
@@ -356,7 +321,7 @@ class CamRuleViz(flx.PyComponent):
         with self:
             with self.stack:
                 self._mutate_windows(
-                    [RuleVizWindow()],
+                    [RemixCore()],
                     'insert',
                     len(self.windows),
                 )
@@ -364,6 +329,81 @@ class CamRuleViz(flx.PyComponent):
             (self.current_window + 1) % len(self.windows)
         )
         self.stack.set_current(self.current_window)
+
+
+################################################################################
+## Helper Functions
+################################################################################
+
+def build_parser():
+    """
+    Helper function to build our program's argument parser.
+
+    :returns ArgumentParser: The parser for our program's configuration.
+    """
+    parser = argparse.ArgumentParser(
+        description=(
+            'Lunches REMIX for visualizing rulesets extracted using '
+            'any of our rule extraction methods.'
+        ),
+    )
+
+    parser.add_argument(
+        'rules',
+        help=(
+            "Valid .rules file containing serialized ruleset extracted by "
+            "any of our rule extractors from some neural network and a given "
+            "task."
+        ),
+        metavar="my_rules.rules",
+        default=None,
+    )
+
+    parser.add_argument(
+        '--data',
+        help=(
+            "Valid .csv file containing the dataset used to generate the "
+            "given rules. If no descriptor is given, then it will assume all"
+            "entries are reals and the last column is the target."
+        ),
+        metavar="data.csv",
+        default=None,
+    )
+
+    parser.add_argument(
+        '--data_descriptor',
+        help=(
+            "Valid name of supported dataset descriptor corresponding to the "
+            "loaded data."
+        ),
+        metavar="descriptor_name",
+        default=None,
+    )
+
+    parser.add_argument(
+        '--show_tools',
+        '-t',
+        action="store_true",
+        help=(
+            "Whether or not we display Bokeh tools in summary plots."
+        ),
+        default=False,
+    )
+
+    parser.add_argument(
+        "-d",
+        "--debug",
+        action="store_true",
+        default=False,
+        help="starts debug mode in the GUI.",
+    )
+
+    return parser
+
+
+################################################################################
+## Main Application
+################################################################################
 
 
 def main():
@@ -390,7 +430,7 @@ def main():
     flx.assets.associate_asset(__name__, 'style.css', style)
 
     app = flx.App(
-        CamRuleViz,
+        Remix,
         ruleset,
         dataset,
         args.show_tools,

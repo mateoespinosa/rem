@@ -1,15 +1,27 @@
-from flexx import flx, ui
-from gui_window import CamvizWindow
-from collections import defaultdict
-from pscript.stubs import d3, window, Math
-from dnn_rem.rules.term import TermOperator
-from sklearn.neighbors import KernelDensity
+"""
+This file will contain widgets for analyzing and visualizing how each
+feature is thresholded.
+"""
 import numpy as np
+
+from collections import defaultdict
+from dnn_rem.rules.term import TermOperator
+from flexx import flx, ui
+from pscript.stubs import d3, window, Math
+from sklearn.neighbors import KernelDensity
+
+from gui_window import RemixWindow
 from rule_statistics import _CLASS_PALETTE
+
+################################################################################
+## Helper Functions
+################################################################################
+
 
 def _js_round(x, num=0):
     mult = 10 ** num
     return Math.round(x * mult) / mult
+
 
 def _bound_str(d):
     return (
@@ -20,7 +32,17 @@ def _bound_str(d):
         ("]" if d["right_inclusive"] else ")")
     )
 
+################################################################################
+## Helper Widgets
+################################################################################
+
+
 class FeatureBoundView(flx.Widget):
+    """
+    Low-level widget view for showing a feature's bounds on top of its
+    empirical distribution in the given dataset.
+    """
+
     CSS = """
         path {
             fill: none;
@@ -685,6 +707,10 @@ def _collapse_intervals(intervals, fuse_intervals=False):
 
 
 class FeatureBoundComponent(flx.PyWidget):
+    """
+    Widget for describing the bounds for a given feature in the application-wide
+    shared rule set.
+    """
     feature = flx.AnyProp(settable=True)
     feature_limits = flx.TupleProp(settable=True)
     class_name = flx.StringProp(settable=True)
@@ -716,7 +742,9 @@ class FeatureBoundComponent(flx.PyWidget):
                         bound = (self.feature_limits[0], term.threshold)
                     self.interval_map[rule.conclusion].append({
                             "color": _CLASS_PALETTE[
-                                self.classes.index(rule.conclusion) % len(_CLASS_PALETTE)
+                                self.classes.index(rule.conclusion) % len(
+                                    _CLASS_PALETTE
+                                )
                             ],
                             "bounds": bound,
                             "left_inclusive": False,
@@ -821,7 +849,19 @@ class FeatureBoundComponent(flx.PyWidget):
         self.view.update_plot()
 
 
-class FeatureExplorerComponent(CamvizWindow):
+################################################################################
+## REMIX Widget Definition
+################################################################################
+
+
+class FeatureExplorerComponent(RemixWindow):
+    """
+    This widget will define a REMIX window where one is able to explore how
+    each individual feature is thresholded by rules in the rule set shared
+    across the entire application.
+
+    For us to use this widget, a valid dataset must be provided.
+    """
 
     def init(self):
         self.ruleset = self.root.state.ruleset
@@ -838,6 +878,7 @@ class FeatureExplorerComponent(CamvizWindow):
         with ui.VBox(
             title="Feature Explorer",
         ):
+            # Simple header first
             with ui.HBox(0.15):
                 ui.Widget(flex=1)  # filler
                 ui.Label(
@@ -859,7 +900,7 @@ class FeatureExplorerComponent(CamvizWindow):
                 flex=0.7,
             )
 
-            # Add the control panel
+            # Finally, a simple control panel
             with ui.HBox(
                 css_class='threshold-visualizer-control-panel',
                 flex=0.05,
@@ -895,6 +936,10 @@ class FeatureExplorerComponent(CamvizWindow):
 
     @flx.reaction('feature_selection.user_selected')
     def select_feature(self, *events):
+        """
+        Reaction to a change in the feature selected for analysis.
+        """
+
         new_feature = events[-1]['key']
         self.feature_view.set_feature(new_feature)
         self.feature_view.set_feature_limits(
@@ -907,6 +952,10 @@ class FeatureExplorerComponent(CamvizWindow):
 
     @flx.reaction('class_selection.user_selected')
     def select_class(self, *events):
+        """
+        Reaction to the change in the selected class being updated.
+        """
+
         new_cls_name = events[-1]['key']
         if new_cls_name == "all classes":
             new_cls_name = ""
@@ -916,5 +965,9 @@ class FeatureExplorerComponent(CamvizWindow):
 
     @flx.action
     def reset(self):
-        # TODO
+        """
+        Resets the entire widget to be updated using the state of the rule set
+        shared across the entire application.
+        """
+        # TODO (mateoespinosa): implement this once it becomes relevant
         pass

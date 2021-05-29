@@ -1,10 +1,31 @@
-from flexx import flx, ui
+"""
+Widgets to visualize rule sets in their list representation with all rules
+listed in a scrollable pane. It also allows inserting editing options to each
+rule for more user interaction.
+"""
+
 from dnn_rem.rules.rule import Rule
-from gui_window import CamvizWindow
 from dnn_rem.rules.ruleset import Ruleset
+from flexx import flx, ui
+
+from gui_window import RemixWindow
 from ruleset_loader import RulesetUploader
 
+################################################################################
+## Helper Functions
+################################################################################
+
+
 def _clause_to_str(clause, dataset=None):
+    """
+    Simple helper function to turn a given clause into an readable HTML string.
+
+    :param ConjunctiveClause clause: The Clause we are interested in
+        transforming in to an HTML representation.
+    :param DatasetDescriptor dataset: An optional dataset descriptor providing
+        annotations for the features used in the given clause.
+    :type       dataset:  { type_description }
+    """
     result = ""
     terms = []
     for term in clause.terms:
@@ -20,8 +41,17 @@ def _clause_to_str(clause, dataset=None):
         terms.append(new_term_str)
     return " <span style='color: #758a7d;'>AND</span> ".join(terms)
 
+################################################################################
+## Flexx Helper Widgets
+################################################################################
+
 
 class RuleView(flx.Widget):
+    """
+    Lower-level widget for displaying a single rule in a horizontal text
+    representation.
+    """
+
     CSS = """
     .flx-RuleView {
         border-style: dashed;
@@ -33,16 +63,29 @@ class RuleView(flx.Widget):
         background-color: #eefafe;
     }"""
 
+    # Property: the precedent/antecedent of this rule
     precedent = flx.StringProp(settable=True)
+    # Property: the conclusion of this rule
     conclusion = flx.StringProp(settable=True)
+    # Property: the score of this rule
     score = flx.FloatProp(settable=True)
+    # Property: the confidence of this rule
     confidence = flx.FloatProp(settable=True)
+
+    # Property: unique index given to the clause of this rule
     clause_idx = flx.IntProp(settable=True)
+    # Property: unique index given to this rule
     rule_idx = flx.IntProp(settable=True)
+    # Property: true index in list of all rules of parent rule set.
     true_idx = flx.IntProp(settable=True)
+    # Property: whether or not this rule will be editable.
     editable = flx.BoolProp(True, settable=True)
+
+    # Property: button used for deleting this rule.
     delete_button = flx.ComponentProp(settable=True)
+    # Property: button used for editing this rule (TODO: implement this)
     edit_button = flx.ComponentProp(settable=True)
+    # Property: button used for ranking this rule (TODO: implement this)
     rank_button = flx.ComponentProp(settable=True)
 
     def init(self):
@@ -67,12 +110,14 @@ class RuleView(flx.Widget):
                 "</span>"
             )
             if self.editable:
-                self._mutate_edit_button(flx.Button(
-                    text="edit",
-                    flex=0.07,
-                    css_class="rule-list-delete-button",
-                    style="padding: 0;",
-                ))
+                # TODO: In future work, we will allow direct editing of a rule
+                #       and its conditions.
+                # self._mutate_edit_button(flx.Button(
+                #     text="edit",
+                #     flex=0.07,
+                #     css_class="rule-list-delete-button",
+                #     style="padding: 0;",
+                # ))
                 self._mutate_delete_button(flx.Button(
                     text="delete",
                     flex=0.07,
@@ -82,6 +127,10 @@ class RuleView(flx.Widget):
 
     @flx.emitter
     def rule_removed(self):
+        """
+        Emitter produced when this rule was removed.
+        """
+
         return {
             'conclusion': self.conclusion,
             'clause_idx': self.clause_idx,
@@ -93,21 +142,36 @@ class RuleView(flx.Widget):
 
     @flx.reaction('!delete_button.pointer_click')
     def delete_rule(self, *events):
+        """
+        Reaction to delete button which will trigger the removal of this rule.
+        """
+
         self.rule_removed()
         self.set_parent(None)
 
     @flx.reaction('true_idx')
     def _update_labels(self, *events):
+        """
+        Reaction to changes in the true_idx which will force its index label to
+        be corrected accordingly.
+        """
+
         self.index_label.set_html(
             f'{self.true_idx + 1}.'
         )
 
     @flx.emitter
     def pointer_click(self, e):
+        """
+        Emitter produced when the user clicks on this rule visualization.
+        """
         return e
 
     @flx.reaction('rule_text.pointer_click')
     def __on_pointer_click(self, *events):
+        """
+        Reaction to when the text containing the rule itself is clicked,
+        """
         self.rule_text.node.blur()
         for event in events:
             self.pointer_click({
@@ -116,7 +180,17 @@ class RuleView(flx.Widget):
 
 
 class ClassRuleList(flx.PyWidget):
+    """
+    Core simple widget showing a list of rules and allowing for possible editing
+    of the same. Each rule will be listed into a scrollable pane.
+    """
+
+    # Property: the list of rule visualizations. Needs to be a property so that
+    #           we can attach listeners to emissions from individual rules.
     rules = flx.ListProp([], settable=True)
+
+    # Property: whether or not this object is editable and its rules can be
+    #           modified.
     editable = flx.BoolProp(True, settable=True)
 
     def init(self, ruleset):
@@ -155,6 +229,11 @@ class ClassRuleList(flx.PyWidget):
         score,
         confidence,
     ):
+        """
+        Helper function to add a single given rule widget into this rule list.
+        """
+
+        # Generate the widget visualization of this rule
         new_rule = RuleView(
             rule_idx=rule_idx,
             clause_idx=clause_idx,
@@ -168,6 +247,8 @@ class ClassRuleList(flx.PyWidget):
             confidence=confidence,
             editable=self.editable,
         )
+
+        # And insert it
         self._mutate_rules(
             [new_rule],
             'insert',
@@ -176,12 +257,19 @@ class ClassRuleList(flx.PyWidget):
 
     @flx.emitter
     def ruleset_update(self, rule_idx):
+        """
+        Update the rule set as rule with index rule_idx has been
+        modified/removed.
+        """
         return {
             "rule_idx": rule_idx
         }
 
     @flx.reaction('rules*.rule_text.pointer_click')
     def _clicked_rule(self, *events):
+        """
+        Reaction to clicking on a single rule in this list.
+        """
         for e in events:
             rule = e["source"]
             self.pointer_click({
@@ -196,10 +284,20 @@ class ClassRuleList(flx.PyWidget):
 
     @flx.emitter
     def pointer_click(self, e):
+        """
+        Emitter when someone clicks on the list. Used for other applications
+        which may want to know this.
+        """
         return e
 
     @flx.reaction('rules*.rule_removed')
     def remove_rule(self, *events):
+        """
+        Removes rule with index event["rule_idx"] and clause with index
+        event["clause_idx"] from this list. This is a reaction to the "delete"
+        button in each rule.
+        """
+
         # Time to remove the rule from our ruleset
         for event in events:
             rule_idx = event["rule_idx"]
@@ -234,6 +332,10 @@ class ClassRuleList(flx.PyWidget):
 
     @flx.action
     def reset(self):
+        """
+        Resets the whole rule list widget to be updated given the
+        new rule set.
+        """
         old_rules = self.rules[:]
         self._mutate_rules([])
         self.clause_orderings = []
@@ -260,16 +362,26 @@ class ClassRuleList(flx.PyWidget):
 
     @flx.action
     def clear(self):
+        """
+        Clears the entire rule list.
+        """
+
         # Detach every rule from its parent
         for rule in self.rules:
             rule.set_parent(None)
 
     @flx.reaction('editable')
     def update_list(self, *events):
+        """
+        Updates this list if the editable property changes.
+        """
         self.reset()
 
     @flx.action
     def set_ruleset(self, ruleset):
+        """
+        Sets the ruleset to be used in this visualization.
+        """
         self.ruleset = ruleset
         self.rule_objs = sorted(
             list(self.ruleset.rules),
@@ -278,7 +390,22 @@ class ClassRuleList(flx.PyWidget):
         self.reset()
 
 
-class RuleListComponent(CamvizWindow):
+
+
+################################################################################
+## Main REMIX Widget
+################################################################################
+
+
+class RuleListComponent(RemixWindow):
+    """
+    This class describes a simple Flexx widget for listing and visualizing
+    the list of rules in the given rule set while also allowing for editing.
+
+    In future iterations, we expect this widget to provide capabilities for
+    introducing new rules as well as exporting and merging rule sets.
+    """
+
     def init(self, ruleset):
         self.ruleset = ruleset
         self.current_rule_idx = 0
@@ -311,29 +438,34 @@ class RuleListComponent(CamvizWindow):
                     style="padding-bottom: 30%;",
                 ):
                     with ui.VBox(flex=1):
-                        self.export_button = ui.Button(
-                            text="Export Ruleset",
-                            css_class='tool-bar-button',
-                        )
-                        self.merge_button = RulesetUploader(
-                            text="Merge Ruleset",
-                            css_class='tool-bar-button',
-                        )
+                        # TODO: In future support rule set exporting
+                        # self.export_button = ui.Button(
+                        #     text="Export Ruleset",
+                        #     css_class='tool-bar-button',
+                        # )
+
+                        # TODO: In future support rule set merging
+                        # self.merge_button = RulesetUploader(
+                        #     text="Merge Ruleset",
+                        #     css_class='tool-bar-button',
+                        # )
                         self.reset_button = ui.Button(
                             text="Reset Ruleset",
                             css_class='tool-bar-button',
                         )
-                ui.Widget(flex=0.25)  # Filler
-                with ui.GroupWidget(
-                    title="Ruleset",
-                    css_class="file-edit-group",
-                    flex=0.25,
-                ):
-                    with ui.VBox(flex=1):
-                        self.add_rule_button = ui.Button(
-                            text="Add Rule",
-                            css_class='tool-bar-button',
-                        )
+
+                # TODO: In future support for rule addition
+                # ui.Widget(flex=0.25)  # Filler
+                # with ui.GroupWidget(
+                #     title="Ruleset",
+                #     css_class="file-edit-group",
+                #     flex=0.25,
+                # ):
+                #     with ui.VBox(flex=1):
+                #         self.add_rule_button = ui.Button(
+                #             text="Add Rule",
+                #             css_class='tool-bar-button',
+                #         )
                 ui.Widget(flex=1)  # Filler
 
             first_rule = self.rules[self.current_rule_idx]
@@ -362,6 +494,12 @@ class RuleListComponent(CamvizWindow):
 
     @flx.reaction('class_selector.user_selected')
     def _current_view(self, *events):
+        """
+        Handler for the class view selector change.
+        """
+
+        # Simple change all the rules to the ones corresponding to the
+        # selected class
         rule = self.rules[events[-1]['index']]
         self.current_rule_idx = events[-1]['index']
         self.class_ruleset.set_ruleset(
@@ -381,21 +519,30 @@ class RuleListComponent(CamvizWindow):
 
     @flx.reaction('reset_button.pointer_click')
     def _reset_ruleset(self, *events):
-        print("Reseting ruleset...")
+        """
+        Handler for reset button.
+        """
+
         self.root.state.reset_ruleset()
         # And propagate this reset everywhere
         self.ruleset_update({"source_id": self.id})
         self.reset()
 
-    @flx.reaction('merge_button.ruleset_load_ended')
-    def _merge_ruleset(self, *events):
-        for event in events:
-            self.root.state.merge_ruleset(event['ruleset'])
-        self.ruleset_update({"source_id": None})
-        self.reset()
+    # TODO: In future, add merge button to allow the merging of two or more
+    #       rule sets.
+    # @flx.reaction('merge_button.ruleset_load_ended')
+    # def _merge_ruleset(self, *events):
+    #     for event in events:
+    #         self.root.state.merge_ruleset(event['ruleset'])
+    #     self.ruleset_update({"source_id": None})
+    #     self.reset()
 
     @flx.reaction('class_ruleset.ruleset_update')
     def bypass_update(self, *events):
+        """
+        Bypasses an update done in one of the rules to the parent so that
+        it can be communicated across windows.
+        """
         for event in events:
             event = event.copy()
             event["source_id"] = self.id
@@ -411,6 +558,11 @@ class RuleListComponent(CamvizWindow):
 
     @flx.action
     def reset(self):
+        """
+        Resets the entire rule list widget using the newly updated rule set
+        object.
+        """
+
         # Reset the class ruleset itself
         rule = self.rules[self.current_rule_idx]
         self.class_ruleset.set_ruleset(

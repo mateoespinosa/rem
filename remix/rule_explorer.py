@@ -1,12 +1,17 @@
+"""
+Module with widgets for visually exploring rulesets using a hierarchical tree.
+"""
+
 from flexx import flx, ui
-from gui_window import CamvizWindow
-from pscript.stubs import d3, window, console
-from dnn_rem.rules.ruleset import Ruleset
-from dnn_rem.rules.clause import ConjunctiveClause
-from dnn_rem.rules.rule import Rule
-from collections import defaultdict
+from hierarchical_tree import ruleset_hierarchy_tree
+from pscript.stubs import d3, window
+
+from gui_window import RemixWindow
 from rule_statistics import _CLASS_PALETTE
 
+################################################################################
+## Flexx Assets
+################################################################################
 
 flx.assets.associate_asset(__name__, 'https://d3js.org/d3.v6.min.js')
 flx.assets.associate_asset(
@@ -14,271 +19,26 @@ flx.assets.associate_asset(
     'https://d3js.org/d3-scale-chromatic.v1.min.js',
 )
 
+################################################################################
+## Global Variables
+################################################################################
+
+# Max radius allowed for a single node in a tree's visualization
 _MAX_RADIUS = 100
 
-_MIN_DX = 10
 
-
-def _htmlify(s):
-    for plain, html_code in [
-        ("<=", "&leq;"),
-        (">=", "&geq;"),
-    ]:
-        s = s.replace(plain, html_code)
-    return s
-
-
-def _get_term_counts(ruleset):
-    num_used_rules_per_term_map = defaultdict(int)
-    all_terms = set()
-    for rule in ruleset.rules:
-        for clause in rule.premise:
-            for term in clause.terms:
-                all_terms.add(term)
-                num_used_rules_per_term_map[term] += 1
-
-    all_terms = list(all_terms)
-    # Make sure we display most used rules first
-    used_terms = sorted(
-        all_terms,
-        key=lambda x: -num_used_rules_per_term_map[x],
-    )
-    return used_terms, num_used_rules_per_term_map
-
-
-def _partition_ruleset(ruleset, term):
-    contain_ruleset = Ruleset(
-        rules=set(),
-        feature_names=ruleset.feature_names,
-        output_class_names=list(ruleset.output_class_map.keys()),
-    )
-    disjoint_ruleset = Ruleset(
-        rules=set(),
-        feature_names=ruleset.feature_names,
-        output_class_names=list(ruleset.output_class_map.keys()),
-    )
-    for rule in ruleset.rules:
-        for clause in rule.premise:
-            found_term = False
-            for c_term in clause.terms:
-                if c_term == term:
-                    found_term = True
-                    break
-            if found_term:
-                # Then we found the term that we are looking for in this
-                # rule! That means we will add it while also modifying it so
-                # that the term is not included in its premise
-                contain_ruleset.rules.add(Rule(
-                    premise=set([
-                        ConjunctiveClause(
-                            terms=set(
-                                [t for t in clause.terms if t != term]
-                            ),
-                            confidence=clause.confidence,
-                            score=clause.score,
-                        ),
-                    ]),
-                    conclusion=rule.conclusion,
-                ))
-            else:
-                # Then add this guy into the disjoint ruleset
-                disjoint_ruleset.rules.add(Rule(
-                    premise=set([clause]),
-                    conclusion=rule.conclusion,
-                ))
-
-    return contain_ruleset, disjoint_ruleset
-
-
-def _extract_hierarchy_node(ruleset, dataset=None, merge=False):
-    if not len(ruleset):
-        return []
-    if len(ruleset) == 1:
-        # [BASE CASE]
-        # Then simply output this rule (which is expected to have exactly one
-        # clause)
-        rule = next(iter(ruleset.rules))
-        clause = next(iter(rule.premise)) if len(rule.premise) else None
-        conclusion_node = {
-            "name": _htmlify(str(rule.conclusion)),
-            "children": [],
-            "score": clause.score if clause is not None else 0,
-        }
-        if (clause is not None) and len(clause.terms):
-            if merge:
-                # Then we still have some terms left but we will not partition
-                # on them as it will simply generate a chain
-                return [
-                    {
-                        "name": _htmlify(" AND ".join(
-                            map(
-                                lambda x: x.to_cat_str(dataset)
-                                if dataset is not None else str(x),
-                                clause.terms
-                            )
-                        )),
-                        "children": [conclusion_node],
-                    },
-                ]
-            else:
-                first = None
-                current = None
-                for term in clause.terms:
-                    if current is None:
-                        current = {
-                            "name": _htmlify(
-                                term.to_cat_str(dataset)
-                                if dataset is not None else str(term)
-                            ),
-                            "children": [],
-                        }
-                        first = current
-                    else:
-                        next_elem = {
-                            "name": _htmlify(
-                                term.to_cat_str(dataset)
-                                if dataset is not None else str(term)
-                            ),
-                            "children": [],
-                        }
-                        current["children"].append(next_elem)
-                        current = next_elem
-                # Finally add the conclusion
-                current["children"].append(conclusion_node)
-                return [first]
-
-        # Else this is our terminal case and we add the conclusion node and
-        # nothing else
-        return [conclusion_node]
-
-    # [RECURSIVE CASE]
-
-    # Sort our nodes by the greedy metric of interest
-    sorted_terms, term_count_map = _get_term_counts(
-        ruleset=ruleset,
-    )
-
-    # Look at the first little bastard as this is
-    # the best split in order
-    next_term = sorted_terms[0]
-    # Partition our ruleset around the current term
-    contain_ruleset, disjoint_ruleset = _partition_ruleset(
-        ruleset=ruleset,
-        term=next_term,
-    )
-
-    # Construct the node for this term recursively by including it
-    # in the exclude list
-    next_node = {
-        "name": _htmlify(
-            next_term.to_cat_str(dataset)
-            if dataset is not None else str(next_term)
-        ),
-        "children": _extract_hierarchy_node(
-            ruleset=contain_ruleset,
-            dataset=dataset,
-            merge=merge,
-        ),
-    }
-
-    # And return the result of adding this guy to our list and the
-    # children resulting from the rules that do not contain it
-    return [next_node] + _extract_hierarchy_node(
-        ruleset=disjoint_ruleset,
-        dataset=dataset,
-        merge=merge,
-    )
-
-
-def _compute_tree_properties(tree, depth=0, merge=False):
-    tree["depth"] = depth
-    if len(tree["children"]) == 0:
-        # Then this is a leaf!
-        tree["num_descendants"] = 0
-        tree["class_counts"] = {
-            tree["name"]: 1,
-        }
-        return tree
-    if (depth != 0) and len(tree["children"]) == 1 and merge and (
-        len(tree["children"][0]["children"]) != 0
-    ):
-        # Then we can collapse this into a single node for ease of visibility
-        # in this graph
-        old_child = tree["children"][0]
-        tree["children"] = old_child["children"]
-        tree["name"] += " AND " + old_child["name"]
-
-    # Else proceed recursively
-    tree["num_descendants"] = 0
-    tree["class_counts"] = {}
-    class_counts = tree["class_counts"]
-    for child in tree["children"]:
-        child = _compute_tree_properties(child, depth=(depth + 1))
-        tree["num_descendants"] += child["num_descendants"] + 1
-        for class_name, count in child["class_counts"].items():
-            class_counts[class_name] = count + class_counts.get(
-                class_name,
-                0
-            )
-    return tree
-
-
-def ruleset_hierarchy_tree(ruleset, dataset=None, merge=False):
-    tree = {
-        "name": "ruleset",
-        "children": _extract_hierarchy_node(
-            ruleset=ruleset,
-            dataset=dataset,
-            merge=merge,
-        ),
-    }
-    return _compute_tree_properties(tree, merge=merge)
-
-
-def _max_depth(tree):
-    result = 1
-    for child in tree["children"]:
-        result = max(result, _max_depth(child) + 1)
-    return result
-
-
-def _max_name_length(tree):
-    result = len(tree["name"])
-    for child in tree["children"]:
-        result = max(result, _max_depth(child))
-    return result
-
-
-def _max_num_childs_at_depth(tree, depth):
-    if depth == 0:
-        if hasattr(tree, "data"):
-            return tree.data.num_descendants
-        return tree["num_descendants"]
-    result = 0
-    if hasattr(tree, "children") and (tree.children):
-        for child in tree.children:
-            result = max(
-                result,
-                _max_num_childs_at_depth(child, depth - 1)
-            )
-    return result
-
-
-def _max_visible_depth(tree):
-    if hasattr(tree, "children") and tree.children:
-        result = 0
-        for child in tree.children:
-            result = max(result, _max_visible_depth(child) + 1)
-        return result
-    return 0
-
-
-def _fully_expanded_depth(tree):
-    # TODO: implement this
-    return _max_visible_depth(tree)
+################################################################################
+## HTML/SVG Construction Helper Functions
+################################################################################
 
 
 def _diagonal(s, d):
+    """
+    Helper function to produce an SVG diagonal from point s to point d.
+    :param Point s: with coordinates (s.x, s.y)
+    :param Point d: with coordinates (d.x, d.y)
+    :return svg.Path: path containing the diagonal.
+    """
     path = (
         f'M {s.y} {s.x}'
         f'C {(s.y + d.y) / 2} {s.x},'
@@ -288,10 +48,31 @@ def _diagonal(s, d):
     return path
 
 
+################################################################################
+## Flexx Helper Widgets
+################################################################################
+
+
 class HierarchicalTreeViz(flx.Widget):
+    """
+    Widget for visualizing a D3 hierarchical tree with data in each node and
+    labels on its leaves.
+    """
+
+    # Property: D3 data representation of the hierarchical tree we will
+    #           visualize
     data = flx.AnyProp(settable=True)
+
+    # Property: whether or not we want a node in the tree to have a fixed
+    #           radius.
     fixed_node_radius = flx.FloatProp(0, settable=True)
+
+    # Property: all the available class names which each leaf in the tree may
+    #           have.
     class_names = flx.ListProp([], settable=True)
+
+    # Property: distance to be used between different branches in this tree that
+    #           do not share the same parent.
     branch_separator = flx.FloatProp(0.2, settable=True)
 
     CSS = """
@@ -311,6 +92,11 @@ class HierarchicalTreeViz(flx.Widget):
     """
 
     def init(self):
+        """
+        During initialization, we will load the entire tree after everything
+        has been allocated in Flexx and then we will proceed and expand the
+        tree.
+        """
         self.node.id = self.id
         self.svg = None
         self.tooltip = None
@@ -325,48 +111,85 @@ class HierarchicalTreeViz(flx.Widget):
 
     @flx.action
     def expand_tree(self):
+        """
+        Action to entirely expand this tree.
+        """
         self._expand_tree()
 
     @flx.action
     def collapse_tree(self):
+        """
+        Action to entirely collapse this tree.
+        """
         self._collapse_tree()
 
     @flx.action
     def clear(self):
+        """
+        Clears this entire widget by removing the visualization tree from it.
+        """
         if self.svg:
             self.svg.selectAll("g.node").remove()
             self.svg.selectAll("path.link").remove()
 
     @flx.action
-    def highlight_route(self, route):
-        self._color_route(route=route, color="firebrick")
+    def highlight_path(self, path):
+        """
+        Highlights the given path.
+        :param List[Tuple[d3.Node, d3.Node]] path: A valid path in the current
+            hierarchical tree defined as a list of arcs from source node to
+            destination node
+        """
+        self._color_path(path=path, color="firebrick")
 
     @flx.action
-    def unhighlight_route(self, route):
-        self._color_route(route=route, color="#555")
+    def unhighlight_path(self, path):
+        """
+        Unhighlights the given path to the default color.
+        :param List[Tuple[d3.Node, d3.Node]] path: A valid path in the current
+            hierarchical tree defined as a list of arcs from source node to
+            destination node
+        """
+        self._color_path(path=path, color="#555")
 
     @flx.action
     def zoom_fit(self, duration=500):
+        """
+        Action to force the tree to fit its allocated window size.
+        :param int duration:  The duration of the transition in miliseconds.
+        """
         self._zoom_fit(duration)
 
     def _zoom_fit(self, duration=500):
+        """
+        Zooms in or out to make the tree fit in the space allocated by this
+        widget's parent.
+
+        :param int duration: The duration of the zoom transition in
+            miliseconds.
+        """
+
+        # First find the bounds we were given
         bounds = self.svg.node().getBBox()
+
+        # Compute the full size using our parent
         parent = self.svg.node().parentElement
         full_width = parent.clientWidth or parent.parentNode.clientWidth
         full_height = parent.clientHeight or parent.parentNode.clientHeight
         width = bounds.width
         height = bounds.height
+        # Find the mid points
         mid_x = bounds.x + width / 2
         mid_y = bounds.y + height / 2
         if (width == 0) or (height == 0):
             return
+
+        # And do the rescaling and translation
         scale = 0.85 / max(width / full_width, height / full_height)
         translate = [
             full_width / 2 - scale * mid_x,
             full_height / 2 - scale * mid_y
         ]
-
-        console.trace("zoom_fit", translate, scale)
 
         transform = d3.zoomIdentity.translate(
             translate[0],
@@ -375,6 +198,7 @@ class HierarchicalTreeViz(flx.Widget):
             scale
         )
 
+        # This is where the zoom call actually happens for our SVG object
         w, h = self.size
         zoom = d3.zoom().extent(
             [[0, 0], [w, h]]
@@ -388,6 +212,7 @@ class HierarchicalTreeViz(flx.Widget):
             )
         )
 
+        # And make it smooth by using a translation
         self.svg.transition().duration(
             duration
         ).call(
@@ -395,7 +220,16 @@ class HierarchicalTreeViz(flx.Widget):
             transform,
         )
 
-    def _color_route(self, route, color="#555"):
+    def _color_path(self, path, color="#555"):
+        """
+        Colors the given path using the given color.
+
+        :param List[Tuple[d3.Node, d3.Node]] path: A valid path in the current
+            hierarchical tree defined as a list of arcs from source node to
+            destination node.
+        :param str color: A valid HTML color represented as a string to use for
+            coloring the path.
+        """
         if not self.svg:
             # Then nothing to color in here!
             return
@@ -403,7 +237,10 @@ class HierarchicalTreeViz(flx.Widget):
         # Transition links to their new color!
         self.link_update.transition().attr(
             "stroke",
-            lambda d: color if (d.data.name, d.parent.data.name) in route else "#555",
+            lambda d: (
+                color if (d.data.name, d.parent.data.name) in path
+                else "#555"
+            ),
         ).attr(
             "d",
             lambda d: _diagonal(d, d.parent),
@@ -411,20 +248,31 @@ class HierarchicalTreeViz(flx.Widget):
 
     @flx.reaction
     def _resize(self):
+        """
+        Resizes tree accordingly if the parent's size has changed.
+        """
+
         w, h = self.size
         if len(self.node.children) > 0:
+            # if the tree is currently being shown and initialized, then let's
+            # change its size attributes
+            # Starting with the global svg object
             x = d3.select('#' + self.id)
             x.attr("align", "center")
             svg = self.node.children[0]
             svg.setAttribute('width', w)
             svg.setAttribute('height', h)
 
+            # Now the main group needs to have its translation function adjusted
             x.select("svg").select("g").attr(
                 "transform",
                 f'translate({w//3}, {h//2})'
             )
             graph = x.select("svg").select("g")
 
+
+            # Finally, let's adjust the zooming so that it is smoother and
+            # makes use of the given amount of space.
             def _zoomed(e):
                 trans = e.transform
                 graph.attr(
@@ -444,7 +292,7 @@ class HierarchicalTreeViz(flx.Widget):
             )
             x.select("svg").call(self.zoom)
 
-            # And time to redraw our graph
+            # Time to redraw our graph
             self._draw_graph(self.root_tree)
 
     def _draw_graph(
@@ -452,8 +300,20 @@ class HierarchicalTreeViz(flx.Widget):
         current,
         node_size=None,
         duration=750,
-        show_circles=False,
     ):
+        """
+        Draw the entire tree in a hierarchical fashion. We do this in a two
+        pass fashion where on the first pass we compute the bounding box
+        neeeded for each node to avoid overlapping and on the second pass we
+        actually draw them.
+
+        Solution inspired by: https://observablehq.com/@d3/collapsible-tree
+
+        :param D3.Node current: The current root node we will be
+            drawing.
+        :param int node_size: The size of the current node we are visualizing.
+        :param int duration: The duration of each transition in miliseconds.
+        """
         ########################################################################
         ## Dimensions setup
         ########################################################################
@@ -462,6 +322,7 @@ class HierarchicalTreeViz(flx.Widget):
         if self.fixed_node_radius:
             _node_radius = lambda d: self.fixed_node_radius
         else:
+            # Compute the radius of the descendants
             _node_radius_descendants = lambda num: num/max_num_children
             _node_radius = lambda d: (
                 max(
@@ -538,7 +399,6 @@ class HierarchicalTreeViz(flx.Widget):
                 d,
                 node_size,
                 duration,
-                show_circles,
             )
 
         # Create our nodes with our recursive clicking function
@@ -562,6 +422,10 @@ class HierarchicalTreeViz(flx.Widget):
             lambda d: 'pointer' if d.children or d._children else 'default',
         )
 
+        ########################################################################
+        ## Draw Children Distribution for Given Node
+        ########################################################################
+
         # Use the same colors as in the other class plots for consistency
         colors = lambda i: _CLASS_PALETTE[i % len(_CLASS_PALETTE)]
 
@@ -570,7 +434,9 @@ class HierarchicalTreeViz(flx.Widget):
             lambda d: d.value
         )
 
-        def arc_generator(d):
+        def pie_arc_generator(d):
+            # Generates the arc corresponding to the given class for a node with
+            # data `d`.
             entries = []
             idx = 0
             i = 0
@@ -587,7 +453,9 @@ class HierarchicalTreeViz(flx.Widget):
                 chunks[idx]
             )
 
-        def _derp(d):
+        def _pie_data_handler(d):
+            # Generates the data necessary to produce our pie chart for each
+            # node with data `d`.
             entries = []
             total_sum = 0
             for key, val in d.data.class_counts.items():
@@ -607,7 +475,7 @@ class HierarchicalTreeViz(flx.Widget):
             _class_to_color[cls_name] = colors(i)
 
         pie_data = node_enter.selectAll("g").data(
-            _derp
+            _pie_data_handler
         )
         pie_enter = pie_data.enter().append("path").attr(
             "class",
@@ -623,11 +491,12 @@ class HierarchicalTreeViz(flx.Widget):
             lambda d: _class_to_color[d.key],
         ).attr(
             "d",
-            arc_generator,
+            pie_arc_generator,
         ).style(
             "opacity",
             1,
         ).on(
+            # When the mouse is over, show the tooltip for its distribution.
             "mouseover",
             lambda event, d: self.tooltip.style(
                 "visibility",
@@ -651,18 +520,6 @@ class HierarchicalTreeViz(flx.Widget):
             "mouseout",
             lambda event, d: self.tooltip.style("visibility", "hidden")
         )
-
-        if show_circles:
-            node_enter.append("circle").attr(
-                "r",
-                _node_radius,
-            ).style(
-                "stroke",
-                lambda d: 2 if d._children else 0.5,
-            ).style(
-                "fill",
-                lambda d: colors(d.data.depth + 1),
-            )
 
         # Add text with low opacity for now
         node_enter.append("text").attr(
@@ -695,19 +552,6 @@ class HierarchicalTreeViz(flx.Widget):
             "fill",
             lambda d: _class_to_color[d.key],
         )
-
-        if show_circles:
-            # Show circles once transition is over
-            node_update.select("circle.node").attr(
-                "r",
-                _node_radius,
-            ).style(
-                "fill",
-                lambda d: colors(d.data.depth + 1),
-            ).style(
-                "stroke",
-                lambda d: 2 if d._children else 0.5,
-            )
 
         # And also their text
         node_update.select("text").style(
@@ -750,7 +594,6 @@ class HierarchicalTreeViz(flx.Widget):
                 current,
                 [dx, dy],
                 duration,
-                show_circles,
             )
             return
 
@@ -763,14 +606,7 @@ class HierarchicalTreeViz(flx.Widget):
             lambda d: f"translate({current.y}, {current.x})",
         ).remove()
 
-        if show_circles:
-            # Then make the circle transparent
-            node_exit.select("circle").attr(
-                "r",
-                1e-6,
-            )
-
-        # Then make the circle transparent
+        # Then make the path transparent
         node_exit.select("g.path").attr(
             "opacity",
             1e-6,
@@ -785,6 +621,7 @@ class HierarchicalTreeViz(flx.Widget):
         ########################################################################
         ## Draw Links
         ########################################################################
+
         link = self.svg.selectAll("path.link").data(
             links,
             lambda d: d.id,
@@ -844,15 +681,20 @@ class HierarchicalTreeViz(flx.Widget):
             d.y0 = d.y
         nodes.forEach(_save_positions)
 
-
     @flx.reaction('data')
     def reload_viz(self, *events):
+        """
+        Reaction to changes in the data which force a redraw of this tree.
+        """
         if self.svg:
             self.svg.selectAll("g.node").remove()
             self.svg.selectAll("path.link").remove()
             self._load_viz()
 
     def _init_viz(self):
+        """
+        Preamble to initialize the visualization of the hierarchical tree.
+        """
         x = d3.select('#' + self.id)
         width, height = self.size
         width = max(width, 600)
@@ -883,7 +725,12 @@ class HierarchicalTreeViz(flx.Widget):
             "hidden",
         ).text("")
 
-    def _load_viz(self, expand=False):
+    def _load_viz(self):
+        """
+        Loads the visualization and sets up the size according to the Flexx
+        size given to the parent.
+        """
+
         self._id_count = 0
         _, height = self.size
         self.root_tree = d3.hierarchy(
@@ -895,7 +742,15 @@ class HierarchicalTreeViz(flx.Widget):
         self._expand_tree()
 
     def _collapse_tree(self, root_too=False):
+        """
+        Collapses the hierarchical tree so that only one level remains visible.
+
+        :param bool root_too: Whether or not we want to collapse the root too
+            or not.
+        """
+
         def _collapse(d):
+            # Recursively collapse node with data `d`.
             if d.children:
                 d._children = d.children
                 d._children.forEach(_collapse)
@@ -904,14 +759,23 @@ class HierarchicalTreeViz(flx.Widget):
                 # Then make sure we collapse all inner children here as well
                 # in case things have been partially collapsed
                 d._children.forEach(_collapse)
+
+        # Time to call this accordingly
         if root_too:
             _collapse(self.root_tree)
         elif self.root_tree.children:
             self.root_tree.children.forEach(_collapse)
+
+        # And redraw everything
         self._draw_graph(self.root_tree)
 
     def _expand_tree(self):
+        """
+        Fully expands the hierarchical tree so all levels are visible.
+        """
+
         def _expand_node(d):
+            # Recursive function to expand node with data `d`.
             if hasattr(d, "_children") and (d._children):
                 d.children = d._children
                 d._children = None
@@ -924,29 +788,42 @@ class HierarchicalTreeViz(flx.Widget):
             ):
                 self.root_tree.children = self.root_tree._children
                 self.root_tree._children = None
+
+        # Time to call the function in our tree
         if self.root_tree.children:
             self.root_tree.children.forEach(_expand_node)
+
+        # And redraw everything
         self._draw_graph(self.root_tree)
 
+################################################################################
+## Main REMIX Widget
+################################################################################
 
-class RuleExplorerComponent(CamvizWindow):
-
-    def _compute_hierarchical_tree(self):
-        return ruleset_hierarchy_tree(
-            ruleset=self.root.state.ruleset,
-            dataset=self.root.state.dataset,
-            merge=self.root.state.merge_branches,
-        )
+class RuleExplorerComponent(RemixWindow):
+    """
+    This class describes a widget able of visually representing a rule set in
+    a tree format for clarity purposes.
+    This visualization contains controls for collapsing and expanding the tree
+    which can be useful.
+    """
 
     def init(self):
         with ui.VSplit(
             title="Rule Explorer",
         ):
+            # Add the actual tree visualization
             self.tree = HierarchicalTreeViz(
-                data=self._compute_hierarchical_tree(),
+                data=ruleset_hierarchy_tree(
+                    ruleset=self.root.state.ruleset,
+                    dataset=self.root.state.dataset,
+                    merge=self.root.state.merge_branches,
+                ),
                 class_names=self.root.state.ruleset.output_class_names(),
                 flex=0.95,
             )
+
+            # And include a control panel to make visualization easier
             with ui.HBox(0.05):
                 ui.Widget(flex=1)
                 self.expand_button = flx.Button(
@@ -970,18 +847,38 @@ class RuleExplorerComponent(CamvizWindow):
 
     @flx.reaction('expand_button.pointer_click')
     def _expand_clicked(self, *events):
+        """
+        Reaction for when expand button has been clicked. Make the whole tree
+        visualizer expand.
+        """
         self.tree.expand_tree()
         self.tree.zoom_fit()
 
     @flx.reaction('collapse_button.pointer_click')
     def _collapse_clicked(self, *events):
+        """
+        Reaction for when the collapse button has been clicked. Make the whole
+        tree visualizer collapse to a single hierarchy level.
+        """
         self.tree.collapse_tree()
         self.tree.zoom_fit()
 
     @flx.reaction('fit_button.pointer_click')
     def _fit_clicked(self, *events):
+        """
+        Reaction to click in fit screen button. Zoom out the tree so that it
+        fits the screen.
+        """
         self.tree.zoom_fit()
 
     @flx.action
     def reset(self):
-        self.tree.set_data(self._compute_hierarchical_tree())
+        """
+        Resets this entire widget by updating the tree to use the new shared
+        rule set in its hierarchical tree format.
+        """
+        self.tree.set_data(ruleset_hierarchy_tree(
+            ruleset=self.root.state.ruleset,
+            dataset=self.root.state.dataset,
+            merge=self.root.state.merge_branches,
+        ))
