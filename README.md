@@ -533,7 +533,7 @@ To recreate any of the results reported this dissertation, you can call
 ```bash
 python run_experiment.py --config experiment_configs/<dataset_name>/<method_name>_best_config.yaml
 ```
-and that should generate the results reported in our paper (up to possible some small marginal differences due to non-determinism).
+and that should generate the results reported in our paper (up to possible some smallmarginal differences due to non-determinism).
 
 ## Using Custom Models
 
@@ -554,3 +554,54 @@ y_pred = ruleset.predict(X_test)
 # You can see the learned ruleset by printing it
 print(ruleset)
 ```
+
+## Visualizing Rule Sets
+
+You can visualize, inspect, and make predictions with an extracted rule set using `remix`, our interactive visualization and inspection tool. To do this, you will need to first serialize the rule set into a file which can be loaded into `remix`. You can do this by using
+```python
+ruleset.to_file("path_to_file.rules")
+```
+where a serialization path is provided. Note that by convention we use the `.rules` extension to serialize rule set files.
+
+Once a file has been serialized, you can use `remix` by calling:
+```bash
+python remix/launch.py <path_to_file.rules>
+```
+and this will open up a new window in your default browser. This visualization tool includes 4 main windows as described below.
+
+### Cohort Analysis Window
+
+![Cohort Analysis Window](images/cohort_explorer.gif)
+
+The cohort-wide analysis window provides a global view of the rule set in the form of 4 main plots:
+1. A doughnut plot showing how many rules are used for each class in this rule set. This gives you an insight as to weather one class required more rules to be able to be identified than other classes. If you **hover** on top of a wedge of this plot you can get precise numbers of the number of rules for each class.
+2. A bar plot showing the rule length distribution across all rule sets. You can toggle between the distributions of specific classes by **clicking** on a class' color in the plot's legend.
+3. A bar plot showing how much a given feature is used across multiple rules in the rule set. These are sorted so that most used features are shown in the left. Note that each bar is split by taking into account the class that a rule using that feature predicts. To show more or less features, you can use the combo box on top of this plot to change how many features are displayed. To see specific counts, you can **hover** on top of any of the bars.
+4. A bar plot showing how many unique terms are used in total across the entire rule set where each bar is further partitioned into separate classes. As in the feature plot, you can control how many terms are shown in the plot by changing this in the combo box on top of the plot. You can also see specific numbers for each feature by **hovering** on top of each bar.
+
+Note that all of these plots are color-coded so that each possible output conclusion class in the input rule set is assigned one color.
+
+### Prediction Window
+
+![Prediction Window](images/prediction_explorer.gif)
+
+This window will allow you to make new predictions by manually providing features of the sample you are trying to produce or by uploading a CVS file with the sample in it. Each prediction is further supported using two different views:
+1. A visual tree representation of all the rules that got triggered by the sample where each intermediate note represents a term and each terminal node represents a specific rule's conclusion. In order to highlight connections across multiple rules, this graph is constructed in a greedy manner where we try and group terms that are more common in activated rules first.
+2. A text representation where all the activated rules and their conclusions are explicitly shown.
+
+Note that you can change how the prediction is done if you wish to use something else than majority class (e.g., highest confidence rule only). 
+
+### Rule Explorer
+
+![Rule Explorer Window](images/rule_explorer.gif)
+
+This tree visualization offers a complete view of the rule set that was loaded into REMIX. As in the prediction window, this visualization of the entire rule set groups terms in a greedy fashion to construct an n-ary tree where each rule maps to a full root-to-leaf path. Note that each intermediate node also contains a pie chart that shows the distribution of rules beneath that node. If you hover on top of each node, further information about it will be provided.
+
+The colors used for each class follow the same color-coding as done in the other windows.
+
+### Rule Editor
+
+![Rule Editor Window](images/rule_list.gif)
+
+The rule editor allows you to delete rules in the rule set that was loaded while also giving you an explicit text view of every rule in this rule set.
+
