@@ -90,12 +90,12 @@ class ModelCache(object):
             # If it is the first layer and we were given a list of feature
             # names, then let's make sure this list at least makes sense
             if (layer_index == 0) and (self._feature_names is not None):
-                if len(self._feature_names) != len(activation.shape[-1]):
+                if len(self._feature_names) != activation.shape[-1]:
                     raise ValueError(
                         f"Expected input DNN to have {len(self._feature_names)}"
                         f" activations in it as we were given that many "
                         f"feature names but instead it has "
-                        f"{len(activation.shape[-1])} input features."
+                        f"{activation.shape[-1]} input features."
                     )
 
             # Similarly, if it is the last layer and we were given a list of
@@ -103,13 +103,13 @@ class ModelCache(object):
             if (layer_index == (len(self) - 1)) and (
                 self._output_class_names is not None
             ):
-                if len(self._output_class_names) != len(activation.shape[-1]):
+                if len(self._output_class_names) != activation.shape[-1]:
                     raise ValueError(
                         f"Expected input DNN to have "
                         f"{len(self._output_class_names)} output activations "
                         f"in it as we were given that many "
                         f"output class names but instead it has "
-                        f"{len(activation.shape[-1])} output activations."
+                        f"{activation.shape[-1]} output activations."
                     )
 
             # Now time to name the different activations in this layer

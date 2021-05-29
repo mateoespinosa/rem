@@ -225,28 +225,31 @@ def prune_low_magnitude_layer_block(
 ## Helper methods
 ################################################################################
 
-def insert_layer_nonseq(
+def insert_layer(
     model,
     layer_select,
     new_layer_fn,
     insert_layer_name=None,
-    position='replace',
 ):
-
+    # Based on answer to question:
+    #   https://stackoverflow.com/questions/49492255/how-to-replace-or-insert-intermediate-layer-in-keras-model
     # Auxiliary dictionary to describe the network graph
-    network_dict = {'input_layers_of': {}, 'new_output_tensor_of': {}}
+    network_dict = {
+        'in_edges': {},
+        'out_edges': {},
+    }
 
     # Set the input layers of each layer
-    for layer in model.layers:
-        for node in layer._outbound_nodes:
-            layer_name = node.outbound_layer.name
-            if layer_name not in network_dict['input_layers_of']:
-                network_dict['input_layers_of'][layer_name] = set([layer.name])
+    for src_layer in model.layers:
+        for node in src_layer._outbound_nodes:
+            dst_name = node.outbound_layer.name
+            if dst_name not in network_dict['in_edges']:
+                network_dict['in_edges'][dst_name] = set([src_layer.name])
             else:
-                network_dict['input_layers_of'][layer_name].add(layer.name)
+                network_dict['in_edges'][dst_name].add(src_layer.name)
 
     # Set the output tensor of the input layer
-    network_dict['new_output_tensor_of'][model.layers[0].name] = model.input
+    network_dict['out_edges'][model.layers[0].name] = model.input
 
     # Iterate over all layers after the input
     model_outputs = []
@@ -255,41 +258,32 @@ def insert_layer_nonseq(
 
         # Determine input tensors
         layer_input = [
-            network_dict['new_output_tensor_of'][layer_aux]
-            for layer_aux in network_dict['input_layers_of'][layer.name]
+            network_dict['out_edges'][layer_aux]
+            for layer_aux in network_dict['in_edges'][layer.name]
         ]
         if len(layer_input) == 1:
             layer_input = layer_input[0]
 
-        # Insert layer if name matches the regular expression
+        # Insert layer if name matches given function
         if layer_select(layer):
-            if position == 'replace':
-                x = layer_input
-            elif position == 'after':
-                x = layer(layer_input)
-            elif position == 'before':
-                pass
-            else:
-                raise ValueError('position must be: before, after or replace')
+            x = layer_input
 
             new_layer, previous_removed_activations = new_layer_fn(
                 layer=layer,
                 shape=(
-                    list(map(lambda y: tuple(y.shape), x)) if isinstance(x, list)
-                    else x.shape
+                    list(map(lambda y: tuple(y.shape), x))
+                    if isinstance(x, list) else x.shape
                 ),
                 name=insert_layer_name,
                 prev_removed=previous_removed_activations,
             )
             x = new_layer(x)
-            if position == 'before':
-                x = layer(x)
         else:
             x = layer(layer_input)
 
         # Set new output tensor (the original one, or the one of the inserted
         # layer)
-        network_dict['new_output_tensor_of'][layer.name] = x
+        network_dict['out_edges'][layer.name] = x
 
         # Save tensor in output list if it is output in initial model
         if layer.name in model.output_names:
@@ -323,6 +317,11 @@ def weight_magnitude_compress(
     remove_neurons=True,
     ignore_layer_fn=lambda l: False,
 ):
+    """
+    Prunes weights from a given neural network using a magnitude-based metric.
+    It then retrains the model to recover some of the lost accuracy.
+    """
+
     logging.info(f"Running compression loop to reach target {target_sparsity}")
     pruned_model = prune_low_magnitude_layer_block(
         model,
@@ -355,7 +354,8 @@ def weight_magnitude_compress(
             patience=patience,
             restore_best_weights=True,
             verbose=(
-            1 if logging.getLogger().getEffectiveLevel() == logging.DEBUG else 0
+                1 if logging.getLogger().getEffectiveLevel() == logging.DEBUG
+                else 0
             ),
             mode='max',
         ))
@@ -367,7 +367,8 @@ def weight_magnitude_compress(
         validation_data=val_data,
         callbacks=callbacks,
         verbose=(
-            1 if logging.getLogger().getEffectiveLevel() == logging.DEBUG else 0
+            1 if logging.getLogger().getEffectiveLevel() == logging.DEBUG
+            else 0
         ),
     )
 
@@ -405,11 +406,10 @@ def weight_magnitude_compress(
             result.set_weights(new_weights)
             return result, output_remove_mask
 
-        resulting_model = insert_layer_nonseq(
+        resulting_model = insert_layer(
             model=resulting_model,
             layer_select=lambda l: isinstance(l, tf.keras.layers.Dense),
             new_layer_fn=_remove_useless_neurons_dense,
-            position='replace',
         )
 
     resulting_model.compile(
@@ -436,6 +436,10 @@ def neuron_magnitude_compress(
     remove_neurons=True,
     ignore_layer_fn=lambda l: False,
 ):
+    """
+    Prunes neurons from a given neural network using a magnitude-based metric.
+    It then retrains the model to recover some of the lost accuracy.
+    """
     def _dense_block_size(l, **kwargs):
         if not isinstance(l, tf.keras.layers.Dense):
             # Then we do a plain weight-level block sparsity

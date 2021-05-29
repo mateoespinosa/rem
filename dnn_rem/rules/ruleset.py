@@ -60,6 +60,7 @@ class Ruleset(object):
         feature_names=None,
         output_class_names=None,
         default_class=None,
+        regression=False,
     ):
         self.rules = rules or set()
         self.feature_names = feature_names
@@ -68,6 +69,7 @@ class Ruleset(object):
             range(len(output_class_names or [])),
         ))
         self.default_class = default_class
+        self.regression = regression
 
     def copy(self):
         # Perform a deep copy using pickle serialization
@@ -107,7 +109,6 @@ class Ruleset(object):
         X,
         use_label_names=False,
         num_workers=1,
-        regression=False,
     ):
         """
         Predicts the labels corresponding to unseen data points X given a set of
@@ -120,9 +121,6 @@ class Ruleset(object):
             encodings by default.
         :param int num_workers: Number of parallel processes we can span to
             evaluate this prediction more efficiently.
-        :param regression: whether or not this prediction is a regression task
-            or not. If so, then no majority voting is done and instead we do
-            averaging of all the rules the match.
 
         :returns np.array: 1D vector with as many entries as data points in X
             containing our predicted results.
@@ -229,7 +227,8 @@ class Ruleset(object):
                 for block_instances in enumerate(blocks):
                     # Let's serialize our (function, args) tuple
                     serialized_terms.append(dill.dumps((
-                        _regress_samples if regression else _predict_samples,
+                        _regress_samples
+                        if self.regression else _predict_samples,
                         (*block_instances,)
                     )))
 
@@ -243,7 +242,7 @@ class Ruleset(object):
                     result.extend(partial)
                 return np.array(result)
         # Else we will do it in this same process in one jump
-        return np.array(_regress_samples(1, X)) if regression else (
+        return np.array(_regress_samples(1, X)) if self.regression else (
             np.array(_predict_samples(1, X))
         )
 

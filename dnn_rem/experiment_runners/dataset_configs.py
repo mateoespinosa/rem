@@ -1,6 +1,7 @@
 """
 Configurations of the different supported datasets for training.
 """
+
 from collections import namedtuple
 from sklearn.preprocessing import MinMaxScaler
 import logging
@@ -504,6 +505,7 @@ def get_data_configuration(dataset_name):
             OutputClass(name='Versicolor', encoding=1),
             OutputClass(name='Virginica', encoding=2),
         )
+
         # Helper method for preprocessing our data
         def preprocess_fun(X_train, y_train, X_test=None, y_test=None):
             return replace_categorical_outputs(
@@ -537,6 +539,7 @@ def get_data_configuration(dataset_name):
                 encoding=i - ord('A'),
             ) for i in range(ord('A'), ord('Z') + 1, 1)
         ]
+
         def preprocess_fun(X_train, y_train, X_test=None, y_test=None):
             return replace_categorical_outputs(
                 X_train=X_train,
@@ -986,7 +989,9 @@ def get_data_configuration(dataset_name):
                 "BMI": RealDescriptor(min_val=0, units="kg/m^2"),
                 "anthracycline": TrivialCatDescriptor(["No", "Yes"]),
                 "PARTNER": TrivialCatDescriptor(["No", "Yes"]),
-                "treatment_group": TrivialCatDescriptor(["Control", "Olaparib"]),
+                "treatment_group": TrivialCatDescriptor(
+                    ["Control", "Olaparib"]
+                ),
                 "TILs": RealDescriptor(min_val=0, max_val=1),
                 "EGFR": TrivialCatDescriptor(["Negative", "Positive"]),
                 "CK5_6": TrivialCatDescriptor(["Negative", "Positive"]),

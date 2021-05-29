@@ -130,13 +130,13 @@ def grid_search(X, y, manager=None, X_val=None, y_val=None, num_outputs=2):
         )
     else:
         batch_sizes = [16, 32]
-        epochs = [50, 100, 150]
-        learning_rates = [1e-3, 1e-4]
+        epochs = [50, 100, 150, 200]
+        learning_rates = [1e-3]
         layer_sizes = (
             [128, 64, 32],
             [64, 32],
         )
-        activations = ["tanh", "elu"]
+        activations = ["tanh", "elu", "relu"]
         loss_functions = ["softmax_xentr", "sigmoid_xentr"]
         dropout_rates = [0, 0.2]
 

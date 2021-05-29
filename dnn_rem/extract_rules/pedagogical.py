@@ -186,4 +186,5 @@ def extract_rules(
         dnf_rules,
         feature_names=feature_names,
         output_class_names=output_class_names,
+        regression=regression,
     )

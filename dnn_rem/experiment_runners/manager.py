@@ -88,20 +88,21 @@ class ExperimentManager(object):
     as we work through our experiments.
 
     Our results directory will follow the following structure:
-        <dataset-name>
-            data.csv
-
         <results-directory>
+            config.yaml
             cross_validation/
                 <n>_folds/
                     rule_extraction/
-                        <rule ex mode>/
+                        <method name>/
                             results.csv
                             rules_extracted/
                                 fold_<n>.rules
+                                fold_<n>.rules.txt
                     trained_models/
                         fold_<n>_model.h5
                     data_split_indices.txt
+                summary.txt
+            data_complete_split_indices.txt
     """
 
     def __init__(self, config, start_rerun_stage=None, initialize=True):
@@ -176,7 +177,7 @@ class ExperimentManager(object):
             'data_split_indices.txt'
         )
 
-        # <dataset_name>/cross_validation/<n>_folds/rule_extraction/<rule_ex_mode>/rules_extracted/
+        # <dataset_name>/cross_validation/<n>_folds/rule_extraction/<method>/rules_extracted/
         self.N_FOLD_RULE_EX_MODE_DP = os.path.join(
             self.N_FOLD_CV_DP,
             'rule_extraction',

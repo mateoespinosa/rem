@@ -159,7 +159,6 @@ def cross_validate_re(manager):
                     axis=1
                 ) if (not regression) else nn_model.predict(X_test),
                 num_workers=manager.EVALUATE_NUM_WORKERS,
-                regression=regression,
                 multi_class=(len(manager.DATASET_INFO.output_classes) > 2),
             )
         else:

@@ -2,11 +2,11 @@
 Methods used for evaluating the performance of a given set of rules.
 """
 
-import sklearn
-import logging
 import numpy as np
+import sklearn
 
 from . import metrics
+
 
 def evaluate(
     ruleset,
@@ -14,7 +14,6 @@ def evaluate(
     y_test,
     high_fidelity_predictions=None,
     num_workers=1,
-    regression=False,
     multi_class=False,
 ):
     """
@@ -30,6 +29,10 @@ def evaluate(
     :param np.ndarray y_test: testing labels of X_test for evaluation.
     :param np.ndarray high_fidelity_predictions: labels predicted for X_test
         using a high fidelity method that is not our ruleset.
+    :param int num_workers: maximum number of subprocesses we can span when
+        evaluating the input rule set.
+    :param bool multi_class: whether or not we are dealing with a multi-class
+        problem or not.
 
     :returns Dict[str, object]: A dictionary containing several statistics and
         metrics of the current run.
@@ -39,9 +42,8 @@ def evaluate(
     predicted_labels = ruleset.predict(
         X_test,
         num_workers=num_workers,
-        regression=regression,
     )
-    if not regression:
+    if not ruleset.regression:
         # Compute Accuracy
         acc = sklearn.metrics.accuracy_score(y_test, predicted_labels)
 
@@ -61,7 +63,7 @@ def evaluate(
 
     # Compute Fidelity
     if high_fidelity_predictions is not None:
-        if regression:
+        if ruleset.regression:
             fid = sklearn.metrics.mean_squared_error(
                 high_fidelity_predictions,
                 predicted_labels,
@@ -75,7 +77,7 @@ def evaluate(
     comprehensibility_results = metrics.comprehensibility(ruleset)
 
     # And wrap them all together
-    if regression:
+    if ruleset.regression:
         results = dict(
             mse_fid=fid,
             loss=loss,
@@ -100,7 +102,7 @@ def evaluate_estimator(
     multi_class=False,
 ):
     """
-    Evaluates the performance of the given decision tree given the provided
+    Evaluates the performance of the given decision tree using the provided
     test dataset. It compares this results to a higher fidelity prediction
     of these labels (e.g. coming from a neural network)
 
