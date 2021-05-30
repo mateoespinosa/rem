@@ -262,12 +262,23 @@ class Ruleset(object):
 
         :param np.array X: 2D matrix of data points of which we want to obtain a
             prediction for.
+        :param bool use_label_names: If true, then it will output the string
+            representations of the predictions. Otherwise it will output their
+            encodings by default.
+        :param bool only_positive: if True, then we will only produce as an
+            explanations activated rules whose conclusion is the output
+            predicted class.
+        :param bool use_confidence: if set, then we will use confidence values
+            for individual rules to compute a single best predicting rule.
+        :param RulePredictMechanism aggregator: mechanism used to aggregate
+            scores/confidences of activated rules in this rule set.
 
-        :returns Tuple[np.array, List[List[Rule]]]: A tuple containing (1) a 1D
-            vector with as many entries as data points in X with the predicted
-            results and (2) a list with as many entries as datapoints in X with
-            each entry being a list of Rules that were activated by that
-            datapoint.
+        :returns Tuple[np.array, List[List[Rule]], List[float]]: A tuple
+            containing (1) a 1D vector with as many entries as data points in X
+            with the predicted results, (2) a list with as many entries as
+            datapoints in X with each entry being a list of Rules that were
+            activated by that datapoint, and (3) a vector of scores that
+            resulted in the predictions provided in this tuple.
         """
         X = np.atleast_2d(X)
         if use_label_names:
@@ -462,12 +473,24 @@ class Ruleset(object):
         )
 
     def num_clauses(self):
+        """
+        Computes the number of unique rules with a single conjunctive clause as
+        their premise in this rule set.
+
+        :return int: number of unique rules with single conjunctive clause.
+        """
         result = 0
         for rule in self.rules:
             result += len(rule.premise)
         return result
 
     def all_clauses(self):
+        """
+        Computes a set with the clauses in the premises of all rules in this
+        rule set.
+
+        :return Set[ConjunctiveClause]: set of all premises for all rules.
+        """
         result = set()
         for rule in self.rules:
             for clause in rule.premise:
@@ -475,6 +498,12 @@ class Ruleset(object):
         return result
 
     def num_terms(self):
+        """
+        Computes the number of unique terms in this rule set.
+
+        :return int: number of unique terms.
+        """
+
         seen_terms = set()
         for rule in self.rules:
             for clause in rule.premise:
@@ -483,6 +512,11 @@ class Ruleset(object):
         return len(seen_terms)
 
     def add_rules(self, rules):
+        """
+        Adds the given rules into this rule set.
+
+        :param Set[Rule] rules: A set of rules to be added.
+        """
         self.rules = self.rules.union(rules)
 
     def eliminate_rules(
@@ -498,6 +532,14 @@ class Ruleset(object):
 
         :param float percent: A value in [0, 1] indicating the percent of
             rules we will drop.
+        :param max_num: if given, then this is the maximum number of rules we
+            will allow in this rule set. If rule set has more rules, then we
+            will drop the lowest ranked ones until we hit this target.
+        :param bool by_confidence: If True, then we will drop rules by
+            confidence rather than by their given scores.
+        :param bool per_class: If per_class is set to True, then rule
+            elimination is done on a class-basis. Otherwise, it is done on a
+            global basis.
         """
         if percent == 0:
             # Then nothing to see here
@@ -589,6 +631,7 @@ class Ruleset(object):
         Return a set of conjunctive clauses that all imply a given conclusion
         while conditioned on the truth value of the given condition variable.
         """
+
         premises = set()
         condition = condition or {}
         for rule in self.rules:
@@ -664,6 +707,10 @@ class Ruleset(object):
         return terms
 
     def __str__(self):
+        """
+        Pretty print representation of this rule set.
+        """
+
         ruleset_str = '\n'
         for rule in sorted(self.rules, key=str):
             ruleset_str += str(rule) + '\n'
@@ -671,24 +718,47 @@ class Ruleset(object):
         return ruleset_str
 
     def to_file(self, path):
+        """
+        Serializes this rule set into a file with the given path.
+        """
+
         with open(path, 'wb') as f:
             pickle.dump(self, f)
         return self
 
     def remove_rule(self, delete_rule):
+        """
+        Removes the rule given by `delete_rule`. If not in the rule set, then
+        this acts as a NoOp.
+
+        :param Rule delete_rule: The rule we want to delete.
+        """
         for rule in self.rules:
             if rule.conclusion != delete_rule.conclusion:
                 continue
             rule.premise = rule.premise.difference(delete_rule.premise)
 
     def from_file(self, path):
+        """
+        Deserializes Ruleset from file which was generated by serializing it
+        with `to_file(...)`
+
+        :param str path: A valid path containing a serialized Ruleset object.
+        """
         with open(path, 'rb') as f:
             deserialized = pickle.load(f)
         self._load_from_deserialized(deserialized)
         return self
 
     def _load_from_deserialized(self, deserialized):
+        """
+        Helper function to load Ruleset from deserialized file.
+
+        :param Any deserialized: Deserialized object from pickle load.
+        """
         if isinstance(deserialized, tuple):
+            # This is the case when we run experiments as we also save the
+            # resources needed to generate this rule set.
             deserialized = deserialized[0]
         self.rules = deserialized.rules
         self.feature_names = deserialized.feature_names
@@ -697,11 +767,19 @@ class Ruleset(object):
         self.output_class_map = deserialized.output_class_map
 
     def from_binary_blob(self, blob):
+        """
+        Loads rule set from a binary blob representing it.
+
+        :param Bytes blob: A binary blob representing a Ruleset object.
+        """
         deserialized = pickle.loads(blob)
         self._load_from_deserialized(deserialized)
         return self
 
     def to_json(self, **kwargs):
+        """
+        Serializes rule set to JSON object.
+        """
         result = {}
         result["rules"] = []
         for rule in self.rules:

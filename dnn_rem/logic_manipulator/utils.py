@@ -20,7 +20,7 @@ def terms_set_to_variable_dict(terms):
 
     for term in terms:
         variable = term.variable
-        if not variable in variable_conditions:  # unseen variable name
+        if variable not in variable_conditions:  # unseen variable name
             variable_conditions[variable] = {
                 TermOp: set()
                 for TermOp in TermOperator

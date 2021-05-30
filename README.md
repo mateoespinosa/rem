@@ -547,11 +547,18 @@ X_train, y_train = ...
 keras_model = ...
 # Extract rules from that trained model
 ruleset = eclaire.extract_rules(keras_model, X_train)
+
 # And try and make predictions using this ruleset
 X_test = ...
 y_pred = ruleset.predict(X_test)
 
-# You can see the learned ruleset by printing it
+
+# Or you can also obtain an explanation from a prediction
+# Where `explanations` is a list of activated rules for each sample and
+# `scores` is a vector containing their corresponding aggregated scores.
+y_pred, explanations, scores = ruleset.predict_and_explain(X_test)
+
+# You can also see the learned ruleset by printing it
 print(ruleset)
 ```
 
