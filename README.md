@@ -562,6 +562,69 @@ y_pred, explanations, scores = ruleset.predict_and_explain(X_test)
 print(ruleset)
 ```
 
+## Extracting Counterfactuals
+
+You can extract counterfactuals for your test point of interest using various methods of neighbour finding.
+
+```python
+from dnn_rem.counter_factuals.utils import (
+    class_based_instances,
+    normalised_explanation_match_matrix,
+    datapoint_to_explanation_map,
+    evaluate_local_model,
+    result_summary,
+)
+from joblib import Parallel, delayed
+import numpy as np
+
+# Read data from some source
+X_train, X_test, y_train, y_test = ...
+
+# Load the extracted ruleset from Keras model trained on the data
+ruleset = ...
+
+# Map train and test datapoints to their prediction explanations
+train_dict = datapoint_to_explanation_map(ruleset=ruleset, points=X_train)
+test_dict = datapoint_to_explanation_map(ruleset=ruleset, points=X_test)
+
+# Map train points to their classes predicted by the ruleset
+class_instances = class_based_instances(ruleset=ruleset, X_train=X_train)
+
+# Find the normalised explanation-based distance between test points and trainpoints
+norm_exp_matrix = normalised_explanation_match_matrix(
+    X_train=X_train,
+    X_test=X_test,
+    train_exp_dict=train_dict,
+    test_exp_dict=test_dict
+)
+
+# Define the neighbour finding methods and the random seeds of interest 
+neighbour_finder_methods =  ["random", "explanation_match", "euclidean_distance"]
+random_seeds = [...]
+
+# Find the average cf_fidelity and cf_hit of local models built for predicting counterfactuals for each test point
+results = Parallel(n_jobs=-1)(
+    delayed(evaluate_local_model)(
+        X_train=X_train,
+        X_test=X_test,
+        x_test_index=x_test_index,
+        instances_of_the_same_class=class_instances,
+        ruleset=ruleset,
+        matrix=norm_exp_matrix,
+        neighbour_finder=neighbour_finder,
+        seed=random_seed
+    )
+    for neighbour_finder in neighbour_finder_methods
+    for random_seed in random_seeds
+    for x_test_index in range(len(X_test))
+)
+
+# Get the 95% confidence interval over the random seeds 
+results_sumamry = np.array(result_summary(results, len(neighbour_finder_methods), len(random_seeds), len(X_test)))*100
+print(results_sumamry)
+```
+
+
 ## Visualizing Rule Sets
 
 You can visualize, inspect, and make predictions with an extracted rule set using `remix`, our interactive visualization and inspection tool. To do this, you will need to first serialize the rule set into a file which can be loaded into `remix`. You can do this by using
