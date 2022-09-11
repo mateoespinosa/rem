@@ -9,6 +9,8 @@ from dnn_rem.evaluate_rules.metrics import fidelity
 from sklearn.metrics import roc_auc_score
 from tensorflow.keras.utils import to_categorical
 from sklearn.utils import class_weight
+from dnn_rem.rules.cart import tree_to_ruleset
+from dnn_rem.rules.ruleset import Ruleset
 
 
 def class_based_instances(ruleset, X_train):
@@ -188,7 +190,6 @@ def evaluate_local_model(X_train,
             ),
             multi_class="ovr",
             average='micro',
-
         )
 
     return hit_score, fidelity_score
@@ -217,3 +218,100 @@ def result_summary(results, number_of_methods, number_of_seeds, num_of_test_samp
         methods_fid.append([round(mean_fid, 4), round(lo_fid, 4), round(hi_fid, 4)])
 
     return methods_hit, methods_fid
+
+
+def extracting_counterfactuals_from_trained_local_model(
+        original_ruleset,
+        original_data,
+        test_sample,
+        test_sample_neighbours,
+        trained_local_clf
+):
+    result_rules = set()
+    result_rules.update(
+        tree_to_ruleset(
+            trained_local_clf.tree_,
+            feature_names=original_data.columns[:-1]
+        )
+    )
+
+    print("Starting to find a factual and some counter-factuals for the test sample:")
+    test_sample_dict = Ruleset(result_rules, feature_names=original_data.columns[:-1])._get_named_dictionary(test_sample)
+    counter_factuals = {}
+    all_conclusions = []
+    for r in result_rules:
+        all_conclusions.append(r.conclusion)
+        for c in r.premise:
+            if c.evaluate(test_sample_dict):
+                factual = c
+                factual_class = r.conclusion
+    for r in result_rules:
+        if r.conclusion != factual_class:
+            class_counter_factuals = []
+            for c in r.premise:
+                class_counter_factuals.append(c)
+            counter_factuals[r.conclusion] = class_counter_factuals
+
+    print("Starting to find the differences between the factual branch and each counter_factual:")
+    diff_c = {}
+    for c_f in counter_factuals:
+        for c in counter_factuals[c_f]:
+            unsatisfied_terms = set()
+            for term in c.terms:
+                if not term.apply(test_sample_dict[term.variable]):
+                    unsatisfied_terms.add(term)
+            diff_c[c] = unsatisfied_terms
+
+    print("Starting to find the counter_factuals for each class that have minimal difference with the factual:")
+    min_counter_factuals = {}
+    for c_f in counter_factuals:
+        len_diff_c = []
+        for c in counter_factuals[c_f]:
+            len_diff_c.append(len(diff_c[c]))
+        min_len = min(len_diff_c)
+        min_counter_factual_per_class = []
+        for c in counter_factuals[c_f]:
+            if len(diff_c[c]) == min_len:
+                min_counter_factual_per_class.append(c)
+        min_counter_factuals[c_f] = min_counter_factual_per_class
+
+    print("Starting to find neighbouring insatnces that satisfy the minimal counter_factuals for each class:")
+    counter_instances = {}
+    for c_f in min_counter_factuals:
+        for c in min_counter_factuals[c_f]:
+            if len(c.terms) > 0:
+                for i in range(len(test_sample_neighbours)):
+                    if c.evaluate(original_ruleset._get_named_dictionary(test_sample_neighbours[i])):
+                        counter_instances[c]= i
+                        break
+
+    print("Starting to find the probability of each counter instance:")
+    counter_factual_probabilities={}
+    for c_f in min_counter_factuals:
+        c_probability=[]
+        for c in min_counter_factuals[c_f]:
+            i = counter_instances[c]
+            c_probability.append(np.max(trained_local_clf.predict_proba([test_sample_neighbours[i]]), axis=1)[0])
+        counter_factual_probabilities[c_f] = c_probability
+
+    print("Starting to find the highest probability for each class and the changes that brings that about:")
+    counter_factuals_max_probability = {}
+    counter_factuals_max_probability_id = {}
+    for c_f in counter_factual_probabilities:
+        counter_factuals_max_probability[c_f] = np.max(counter_factual_probabilities[c_f])
+        counter_factuals_max_probability_id[c_f] = (np.flatnonzero(counter_factual_probabilities[c_f] ==
+                                                                   counter_factuals_max_probability[c_f])).tolist()
+
+    list_of_suggestions = []
+    for c_f in counter_factuals_max_probability_id:
+        for i in counter_factuals_max_probability_id[c_f]:
+            c = min_counter_factuals[c_f][i]
+            min_changes = diff_c[c]
+            probability_of_changes = counter_factual_probabilities[c_f][i]
+            list_of_suggestions.append((min_changes, c_f, probability_of_changes))
+    for suggestion in list_of_suggestions:
+        print("The following changes:")
+        for t in suggestion[0]:
+            print(t)
+        print("changes the test sample class to {} with the probability of {}.".format(suggestion[1], suggestion[2]))
+

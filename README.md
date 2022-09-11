@@ -1,13 +1,6 @@
-# ECLAIRE: Efficient CLAuse-wIse Rule Extraction
-Main repository for work our work in ECLAIRE, a novel decompositional rule extraction method for DNNs. This repository will include reproduction steps for all experiments presented in  as well as packaged functions to use the described rule extraction algorithms in any custom Keras model.
-
-## Credits
-
-A lot of the code and structure of the project is based on the work by Shams et al. made publicly available at [https://github.com/ZohrehShams/IntegrativeRuleExtractionMethodology](https://github.com/ZohrehShams/IntegrativeRuleExtractionMethodology) as part of their publication ["REM: An Integrative Rule Extraction Methodology for Explainable Data Analysis in Healthcare
-"](https://www.biorxiv.org/content/10.1101/2021.01.22.427799v2.abstract).
-
-Furthermore, this project has been build extensively on top of TensorFlow open-source code as well as with extensive use of code open-sourced by Flexx.
-
+# REM: A rule extraction methodology for interpretable and actionable machine learning
+Main repository for work our work in REM (Rule Extraction Methodology) and in particular REM-E, where E stands for ECLAIRE (Efficient CLAuse-wIse Rule Extraction) 
+a novel decompositional rule extraction method for DNNs. 
 
 ## Setup
 For you to be able to run recreate the experiments and use the rule extraction algorithm, you will need the following requirements:
@@ -46,7 +39,7 @@ python run_experiment.py --help
 and you should see a clear help message without any errors and/or warnings.
 
 ## Running Experiments
-For our experiments we will use the data located in https://github.com/sumaiyah/DNN-RE-data. You can run recreate several of our cross-validation experiments using the provided executable `run_experiment.py` which offers the following options:
+You can run recreate several of our cross-validation experiments using the provided executable `run_experiment.py` which offers the following options:
 ```bash
 $python run_experiment.py --help
 usage: run_experiment.py [-h] [--config file.yaml] [--n_folds N]
@@ -104,7 +97,8 @@ optional arguments:
                         itself.
 ```
 
-One can run the tool by manually inputing the dataset information as command-line arguments or by providing a YAML config containing the experiment parameterization as the following example:
+One can run the tool by manually inputing the dataset information as command-line arguments or by providing a YAML config containing the 
+experiment parameterization as the following example: (Note that generating XOR data of your choosing can be done using `make_xor_data.py` script.)
 ```yaml
 # The directory of our training data. Can be a path relative to the caller or
 # an absolute path.
@@ -432,65 +426,10 @@ grid_search_params:
 
 ```
 
-In this example, we are indicating the path where we are we storing our `MB-1004-GE-ER` dataset and what hyper-parameters we want to use for our neural network.
-
 You can then use this to run the experiment as follows:
 ```bash
 python run_experiment.py --config experiment_config.yaml
 ```
-
-If run successfully, then you should see an output similar to this one:
-```bash
-$ python run_experiment.py --config experiment_config.yaml
-Test accuracy for fold 1/5 is 0.98, AUC is 0.979, and majority class accuracy is 0.607                                                                                                                                                        
-Test accuracy for fold 2/5 is 0.935, AUC is 0.935, and majority class accuracy is 0.598                                                                                                                                                       
-Test accuracy for fold 3/5 is 0.985, AUC is 0.986, and majority class accuracy is 0.576                                                                                                                                                       
-Test accuracy for fold 4/5 is 0.955, AUC is 0.955, and majority class accuracy is 0.58                                                                                                                                                        
-Test accuracy for fold 5/5 is 0.975, AUC is 0.973, and majority class accuracy is 0.567                                                                                                                                                       
-Training fold model 5/5: 100%|██████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████| 5/5 [00:35<00:00,  7.01s/it]
-Done extracting intermediate rulesets: 100%|████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████| 3/3 [00:00<00:00,  3.11it/s]
-Substituting rules for layer 3: 100%|███████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████| 3/3 [00:02<00:00,  1.50it/s]
-[INFO] Performing prediction over 200 test samples using 79 rules and 6 effective processes.
-[INFO] Rule set test accuracy for fold 1/5 is 0.875, AUC is 0.87, fidelity is 0.875, and size of rule set is 79
-Done extracting intermediate rulesets: 100%|████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████| 3/3 [00:01<00:00,  2.83it/s]
-Substituting rules for layer 3: 100%|███████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████| 3/3 [00:02<00:00,  1.42it/s]
-[INFO] Performing prediction over 200 test samples using 76 rules and 6 effective processes.
-[INFO] Rule set test accuracy for fold 2/5 is 0.93, AUC is 0.928, fidelity is 0.925, and size of rule set is 76
-Done extracting intermediate rulesets: 100%|████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████| 3/3 [00:01<00:00,  2.80it/s]
-Substituting rules for layer 3: 100%|███████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████| 3/3 [00:02<00:00,  1.30it/s]
-[INFO] Performing prediction over 200 test samples using 77 rules and 6 effective processes.
-[INFO] Rule set test accuracy for fold 3/5 is 0.955, AUC is 0.953, fidelity is 0.94, and size of rule set is 77
-Done extracting intermediate rulesets: 100%|████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████| 3/3 [00:01<00:00,  2.59it/s]
-Substituting rules for layer 3: 100%|███████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████| 3/3 [00:02<00:00,  1.10it/s]
-[INFO] Performing prediction over 200 test samples using 119 rules and 6 effective processes.
-[INFO] Rule set test accuracy for fold 4/5 is 0.915, AUC is 0.911, fidelity is 0.9, and size of rule set is 119
-Done extracting intermediate rulesets: 100%|████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████| 3/3 [00:01<00:00,  2.87it/s]
-Substituting rules for layer 3: 100%|███████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████| 3/3 [00:02<00:00,  1.15it/s]
-[INFO] Performing prediction over 200 test samples using 84 rules and 6 effective processes.
-[INFO] Rule set test accuracy for fold 5/5 is 0.915, AUC is 0.91, fidelity is 0.93, and size of rule set is 84
-+------+---------------+---------------+------------------+---------------+------------------+-----------------------+------------------------+---------------+---------------------+----------------+
-| Fold |  NN Accuracy  |     NN AUC    | ECLAIRE Accuracy |  ECLAIRE AUC  | ECLAIRE Fidelity | Extraction Time (sec) | Extraction Memory (MB) |  Ruleset Size | Average Rule Length |   # of Terms   |
-+------+---------------+---------------+------------------+---------------+------------------+-----------------------+------------------------+---------------+---------------------+----------------+
-|  1   |      0.98     |     0.979     |      0.875       |      0.87     |      0.875       |         3.189         |        598.283         |       79      |        3.063        |      174       |
-|  2   |     0.935     |     0.935     |       0.93       |     0.928     |      0.925       |         3.396         |        427.146         |       76      |         3.0         |      146       |
-|  3   |     0.985     |     0.986     |      0.955       |     0.953     |       0.94       |         3.619         |        255.616         |       77      |        2.766        |      152       |
-|  4   |     0.955     |     0.955     |      0.915       |     0.911     |       0.9        |         4.122         |        326.681         |      119      |        3.445        |      268       |
-|  5   |     0.975     |     0.973     |      0.915       |      0.91     |       0.93       |         3.899         |        719.342         |       84      |        2.893        |      178       |
-| avg  | 0.966 ± 0.019 | 0.966 ± 0.018 |  0.918 ± 0.026   | 0.914 ± 0.027 |  0.914 ± 0.024   |     3.645 ± 0.335     |   465.414 ± 171.383    | 87.0 ± 16.236 |    3.033 ± 0.229    | 183.6 ± 43.953 |
-+------+---------------+---------------+------------------+---------------+------------------+-----------------------+------------------------+---------------+---------------------+----------------+
-~~~~~~~~~~~~~~~~~~~~ Experiment successfully terminated after 58.47 seconds ~~~~~~~~~~~~~~~~~~~~
-```
-
-The default cross-validation experiment will do the following:
-  1. Split our dataset into training/test datasets and further split our training data into the number of requested folds.
-  2. Train one neural network for each fold of data.
-  3. Extract rules for each neural network we trained.
-  4. Compare the performance of the neural network and the extracted ruleset in our test data.
-  5. Dump all the results, statistics, and details of the experiment in the provided directory following the file hierarchy described below.
-
-If the output directory exists and contains data from a previous run, our runner will attempt to reuse it as much as possible to avoid recomputing things. If you do not want that behavior, please make sure to use different directories for different runs or call the script with the `-f` flag in it.
-
-Please note that if a configuration file is provided and command-line arguments are also provided, then the ones given in the command-line will always take precedence over their counterparts in the config file. The intent of this behavior is to speed up different iterations in experiments.
 
 ### Experiment Folder structure
 Once an experiment is instantiated, we will generate a file structure containing all the results of the experiment as follows:
@@ -527,17 +466,9 @@ At the end of the experiment, you should expect to find this file structure in t
 
 If no output directory is provided, then we will use the same directory as the one containing our dataset.
 
-## Recreating Results
-
-To recreate any of the results reported this dissertation, you can call
-```bash
-python run_experiment.py --config experiment_configs/<dataset_name>/<method_name>_best_config.yaml
-```
-and that should generate the results reported in our paper (up to possible some smallmarginal differences due to non-determinism).
-
 ## Using Custom Models
 
-You can use the ECLAIRE algorithm as described in the paper with any custom Keras model (REM-D can be used as well but only on sequential models). To do this, you can import the following method once you have installed this package as instructed in the setup:
+You can use the REM-E algorithm as described in the paper with any custom Keras model. To do this, you can import the following method once you have installed this package as instructed in the setup:
 
 ```python
 from dnn_rem import eclaire
@@ -564,7 +495,7 @@ print(ruleset)
 
 ## Extracting Counterfactuals
 
-You can extract counterfactuals for your test point of interest using various methods of neighbour finding.
+You can extract counterfactuals for your test points using various methods of neighbour finding mentioned in the paper.
 
 ```python
 from dnn_rem.counter_factuals.utils import (
@@ -624,11 +555,42 @@ results_sumamry = np.array(result_summary(results, len(neighbour_finder_methods)
 print(results_sumamry)
 ```
 
+Once the neighbour finding method of the choice is established based on the above results, counterfactuals for a test point of interest can be extracted.
+
+```python
+from dnn_rem.counter_factuals.utils import extracting_counterfactuals_from_trained_local_model
+
+# Load the extracted ruleset from Keras model trained on the data
+ruleset = ...
+
+# Read the input data 
+data = ...
+
+# Specify the test point of interest: 
+test_sample = ...
+
+# Load the test sample neighbours indicated by the neighbour finding method of choice and the local classifier trained based on them:
+test_sample_neighbours= ...
+trained_local_clf = ...
+
+# You can obtain the counterfactuals using this method.
+extracting_counterfactuals_from_trained_local_model(
+        ruleset,
+        data,
+        test_sample,
+        test_sample_neighbours,
+        trained_local_clf
+)
+```
+
 
 ## Visualizing Rule Sets
 
 You can visualize, inspect, and make predictions with an extracted rule set using `remix`, our interactive visualization and inspection tool. To do this, you will need to first serialize the rule set into a file which can be loaded into `remix`. You can do this by using
 ```python
+# Load the extracted ruleset from Keras model trained on the data
+ruleset = ...
+
 ruleset.to_file("path_to_file.rules")
 ```
 where a serialization path is provided. Note that by convention we use the `.rules` extension to serialize rule set files.
